@@ -20,7 +20,7 @@ public sealed class ProjectMediaSource : IMediaSource, IDisposable
     // メモリ上に置く画像の合計の上限（バイト）。超えたら捨てて、使うものだけ作り直す
     private const long ImageMemoryLimit = 512L * 1024 * 1024;
 
-    private readonly Project _project;
+    private Project _project;
     private readonly string _projectFolder;
     private readonly MediaCache _cache;
     private readonly ConversionQuality _quality;
@@ -70,9 +70,55 @@ public sealed class ProjectMediaSource : IMediaSource, IDisposable
             {
                 return new SourceImage(slot.Decoder.GetFrame(time).Image, slot.Decoder.SourceWidth, slot.Decoder.SourceHeight);
             }
-            catch (MediaException)
+            catch (Exception ex) when (ex is MediaException or ObjectDisposedException)
             {
+                // 読めない動画や、素材の差し替え（Update）で閉じたデコーダーは、描かずに飛ばす
                 return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 編集した後のプロジェクトにする。場所が変わった・なくなった素材は、デコーダーと画像を捨てて読み直す
+    /// </summary>
+    public void Update(Project project)
+    {
+        var previous = Interlocked.Exchange(ref _project, project);
+        foreach (var (id, asset) in previous.Assets)
+        {
+            if (project.Assets.TryGetValue(id, out var current) && current.Path == asset.Path)
+            {
+                continue;
+            }
+
+            foreach (var key in _images.Keys.Where(key => key.Asset == id))
+            {
+                _images.TryRemove(key, out _);
+            }
+
+            foreach (var key in _decoders.Keys.Where(key => key.Asset == id))
+            {
+                if (_decoders.TryRemove(key, out var slot) && slot is not null)
+                {
+                    lock (slot.Gate)
+                    {
+                        slot.Decoder.Dispose();
+                    }
+                }
+            }
+        }
+
+        // 素材がなかった ID に素材が加わったとき（見つからなかった記録を消す）
+        foreach (var id in project.Assets.Keys.Where(id => !previous.Assets.ContainsKey(id)))
+        {
+            foreach (var key in _images.Keys.Where(key => key.Asset == id))
+            {
+                _images.TryRemove(key, out _);
+            }
+
+            foreach (var key in _decoders.Keys.Where(key => key.Asset == id))
+            {
+                _decoders.TryRemove(key, out _);
             }
         }
     }
@@ -106,7 +152,7 @@ public sealed class ProjectMediaSource : IMediaSource, IDisposable
     }
 
     private string? PathOf(AssetId asset) =>
-        _project.Assets.TryGetValue(asset, out var entry) ? AssetLinks.Resolve(entry, _projectFolder) : null;
+        Volatile.Read(ref _project).Assets.TryGetValue(asset, out var entry) ? AssetLinks.Resolve(entry, _projectFolder) : null;
 
     private MediaInfo? Info(string path) =>
         _info.GetOrAdd(path, p =>

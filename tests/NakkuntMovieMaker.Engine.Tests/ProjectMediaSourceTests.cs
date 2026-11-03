@@ -79,6 +79,25 @@ public sealed class ProjectMediaSourceTests : IDisposable
     }
 
     [Fact]
+    public void ReloadsAssetsWhosePathChanged()
+    {
+        RequireFfmpeg();
+        var asset = new Asset(AssetId.New(), AssetKind.Image, Fixture("green-64x48.png"));
+        var project = Project.CreateNew("テスト", SceneFormat.Landscape1080p30);
+        project = project with { Assets = project.Assets.Add(asset.Id, asset) };
+        using var media = new ProjectMediaSource(project, _folder, new MediaCache(Path.Combine(_folder, ".nmm", "cache")));
+        Assert.NotNull(media.GetImage(asset.Id, 1));
+
+        // リンクが切れた素材は、覚えていた画像を捨てて描かない
+        media.Update(project with { Assets = project.Assets.SetItem(asset.Id, asset with { Path = "missing.png" }) });
+        Assert.Null(media.GetImage(asset.Id, 1));
+
+        // 再指定すると、また描ける
+        media.Update(project);
+        Assert.NotNull(media.GetImage(asset.Id, 1));
+    }
+
+    [Fact]
     public void ResolvesRelativePathsAgainstTheProjectFolder()
     {
         var (media, _) = Open("x.png", AssetKind.Image);
