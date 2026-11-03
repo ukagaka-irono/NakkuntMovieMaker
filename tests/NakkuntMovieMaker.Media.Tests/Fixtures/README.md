@@ -25,4 +25,31 @@ ffmpeg $G -f lavfi -i "sine=f=1000:sample_rate=48000:d=1" -c:a pcm_s16le $O tone
 ffmpeg $G -f lavfi -i "sine=f=1000:sample_rate=44100:d=1" -ac 2 -c:a libmp3lame -b:a 64k $O tone-1s.mp3
 ```
 
+## フレーム番号を色で埋め込んだ動画
+
+各フレームの色から、そのフレームの番号 N を読み取れるようにした動画です（128×96、60 フレーム、H.264・B フレームあり）。
+赤 = (N mod 8) × 32 + 16、緑 = floor(N ÷ 8) × 32 + 16、青 = 128。
+
+```bash
+IDX="format=rgb24,geq=r='mod(N\,8)*32+16':g='floor(N/8)*32+16':b='128'"
+
+# 29.97fps
+ffmpeg $G -f lavfi -i "color=c=black:s=128x96:r=30000/1001:d=3,$IDX" -frames:v 60 \
+  -c:v libx264 -preset veryfast -crf 16 -g 12 -bf 3 -pix_fmt yuv420p $O frames-2997.mp4
+
+# 可変フレームレート：30fps で 30 フレーム → 0.5 秒あけて → 30 フレーム
+ffmpeg $G -f lavfi -i "color=c=black:s=128x96:r=30:d=3,$IDX,setpts='(N+if(gte(N\,30)\,15\,0))/30/TB'" \
+  -frames:v 60 -fps_mode passthrough -c:v libx264 -preset veryfast -crf 16 -g 12 -bf 3 -pix_fmt yuv420p $O frames-vfr.mp4
+```
+
+## 色空間のタグ付きの動画
+
+RGB (200, 60, 40) の単色を、BT.709・リミテッドレンジとしてタグを付けて書き出した動画です。
+
+```bash
+ffmpeg $G -f lavfi -i "color=c=0xC83C28:s=128x96:r=30:d=0.2" -vf "scale=out_color_matrix=bt709:out_range=tv" \
+  -c:v libx264 -preset veryfast -crf 10 -pix_fmt yuv420p \
+  -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv $O color-c83c28-bt709.mp4
+```
+
 `not-media.txt` は、メディアではないファイルを開いたときのエラーを確かめるためのものです。
