@@ -7,5 +7,6 @@
 *.mp3 binary
 *.mp4 binary
 *.webm binary
+*.mkv binary
 *.ttf binary
 *.otf binary

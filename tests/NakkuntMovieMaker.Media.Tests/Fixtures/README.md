@@ -52,4 +52,14 @@ ffmpeg $G -f lavfi -i "color=c=0xC83C28:s=128x96:r=30:d=0.2" -vf "scale=out_colo
   -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv $O color-c83c28-bt709.mp4
 ```
 
+## 映像より遅れて始まる音声
+
+映像（64×48・30fps・1 秒）は 0 秒から、1000Hz の音（48kHz・モノラル・PCM）は 0.5 秒から 0.5 秒間です。
+PCM キャッシュが先頭に無音を入れて、映像と位置を合わせるかを確かめます。
+
+```bash
+ffmpeg $G -f lavfi -i "color=c=black:s=64x48:r=30:d=1" -itsoffset 0.5 -f lavfi -i "sine=f=1000:sample_rate=48000:d=0.5" \
+  -map 0 -map 1 -c:v libx264 -preset veryfast -crf 30 -pix_fmt yuv420p -c:a pcm_s16le $O late-audio.mkv
+```
+
 `not-media.txt` は、メディアではないファイルを開いたときのエラーを確かめるためのものです。
