@@ -10,8 +10,10 @@ BenchmarkDotNet.Artifacts/
 # IDE（Rider・IntelliJ）の設定
 .idea/
 
-# ネイティブライブラリ（tools/fetch-native で取得する）
+# ネイティブライブラリ（tools/fetch-native で取得し、tools/build-native でビルドする）
 native/bin/
+native/build/
+native/downloads/
 
 # 利用者が任意で導入する音声合成エンジン（AquesTalk など）
 engines/

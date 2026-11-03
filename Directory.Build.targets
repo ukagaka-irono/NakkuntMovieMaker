@@ -1,0 +1,10 @@
+<Project>
+  <!--
+    tools/fetch-native と tools/build-native が置くネイティブライブラリの場所。
+    NETCoreSdkRuntimeIdentifier は SDK の読み込み後に決まるので、props ではなくここで定義する
+  -->
+  <PropertyGroup>
+    <NmmNativeRid Condition="'$(NmmNativeRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</NmmNativeRid>
+    <NmmNativeDir>$(MSBuildThisFileDirectory)native/bin/$(NmmNativeRid)/</NmmNativeDir>
+  </PropertyGroup>
+</Project>

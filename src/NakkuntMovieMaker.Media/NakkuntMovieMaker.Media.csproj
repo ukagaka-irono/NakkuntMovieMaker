@@ -1,6 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="FFmpeg.AutoGen.Abstractions" />
+    <PackageReference Include="FFmpeg.AutoGen.Bindings.DynamicallyLoaded" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../NakkuntMovieMaker.Core/NakkuntMovieMaker.Core.csproj" />
+  </ItemGroup>
+
+  <!-- FFmpeg・nmm_audio とライセンス表記を、このプロジェクトを使うアプリの出力先にコピーする -->
+  <ItemGroup Condition="Exists('$(NmmNativeDir)')">
+    <None Include="$(NmmNativeDir)**/*"
+          Link="%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          Visible="false" />
   </ItemGroup>
 </Project>
