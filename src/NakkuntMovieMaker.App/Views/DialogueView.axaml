@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
+             xmlns:model="using:NakkuntMovieMaker.Core.Model"
+             x:Class="NakkuntMovieMaker.App.Views.DialogueView"
+             x:DataType="vm:DialogueViewModel">
+  <!-- セリフ入力欄：キャラクターを選んで文を入れ、Enter で再生位置に置く -->
+  <DockPanel>
+    <TextBlock DockPanel.Dock="Bottom" Classes="secondary" Text="{Binding Status}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="{StaticResource Space1}" Margin="4,0,0,0">
+      <Button Classes="toolbar" Content="置く" Command="{Binding AddCommand}" ToolTip.Tip="再生位置にセリフを置いて声を作る（Enter）" />
+      <Button Classes="toolbar" Content="試聴" Command="{Binding ListenCommand}" ToolTip.Tip="置かずに声を聴く" />
+      <Button Classes="toolbar" Content="声を作り直す" Command="{Binding ResynthesizeCommand}" ToolTip.Tip="選んだセリフの声を、本文と読みから作り直す" />
+      <Button Classes="toolbar" Content="台本の貼り付け…" Command="{Binding PasteScriptCommand}" ToolTip.Tip="複数のセリフをまとめて置く" />
+    </StackPanel>
+    <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding Characters}" SelectedItem="{Binding Character}" MinWidth="140" Margin="0,0,4,0"
+              PlaceholderText="キャラクター" ToolTip.Tip="話すキャラクター（キャラクターのタブで作れます）">
+      <ComboBox.ItemTemplate>
+        <DataTemplate x:DataType="model:Character">
+          <TextBlock Text="{Binding Name}" />
+        </DataTemplate>
+      </ComboBox.ItemTemplate>
+    </ComboBox>
+    <TextBox DockPanel.Dock="Right" Text="{Binding Reading}" Width="160" Margin="4,0,0,0" PlaceholderText="読み（空なら自動）" KeyDown="OnKeyDown"
+             ToolTip.Tip="読みを直したいときに入れる（AquesTalk の音声記号列など）" />
+    <TextBox x:Name="Input" Text="{Binding Text}" PlaceholderText="セリフを入れて Enter（Ctrl+Enter でここへ移る）" KeyDown="OnKeyDown" />
+  </DockPanel>
+</UserControl>

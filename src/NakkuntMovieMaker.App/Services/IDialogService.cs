@@ -27,8 +27,8 @@ public interface IDialogService
 
     Task<UnsavedChangesChoice> AskUnsavedChangesAsync(string projectName);
 
-    /// <summary>1 行の文字を入れてもらう。キャンセルなら null</summary>
-    Task<string?> PromptAsync(string title, string label, string initial);
+    /// <summary>文字を入れてもらう（multiline なら複数行）。キャンセルなら null</summary>
+    Task<string?> PromptAsync(string title, string label, string initial, bool multiline = false);
 
     Task<string?> PickOpenFileAsync(string title, IReadOnlyList<FileKind> kinds);
 

@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
+             xmlns:controls="using:NakkuntMovieMaker.App.Controls"
+             x:Class="NakkuntMovieMaker.App.Views.RecordingView"
+             x:DataType="vm:RecordingViewModel">
+  <DockPanel>
+    <controls:LevelMeter DockPanel.Dock="Right" Width="44" Margin="8,0,0,0" Level="{Binding Level}" ToolTip.Tip="入力レベル（dBFS）" />
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Spacing="{StaticResource Space2}">
+        <TextBlock Text="入力デバイス" />
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Classes="toolbar" Content="更新" Command="{Binding RefreshDevicesCommand}" Margin="4,0,0,0" />
+          <ComboBox ItemsSource="{Binding Devices}" SelectedItem="{Binding Device}" HorizontalAlignment="Stretch" IsEnabled="{Binding !IsRecording}" />
+        </DockPanel>
+
+        <TextBlock Classes="panel-header" Text="タイムラインへの録音" Margin="0,8,0,0" />
+        <TextBlock Classes="secondary" TextWrapping="Wrap" Text="再生位置から録り、空いているレイヤーに音声アイテムとして置きます" />
+        <CheckBox Content="再生しながら録る" IsChecked="{Binding RecordWhilePlaying}" IsEnabled="{Binding !IsRecording}" />
+        <Button Command="{Binding ToggleRecordCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip.Tip="録音の開始・停止（Ctrl+R）">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <PathIcon Data="{StaticResource IconRecord}" Width="12" Height="12" Foreground="{DynamicResource WarningBrush}" />
+            <TextBlock Text="録音を始める" IsVisible="{Binding !IsRecording}" />
+            <TextBlock Text="録音を止める" IsVisible="{Binding IsRecording}" />
+          </StackPanel>
+        </Button>
+
+        <TextBlock Classes="panel-header" Text="セリフごとの収録" Margin="0,8,0,0" />
+        <TextBlock Classes="secondary" TextWrapping="Wrap" Text="選んだセリフの声を録ります。止めると次のセリフを選ぶので、続けて録れます" />
+        <TextBlock Text="{Binding LineLabel}" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space1}">
+          <Button Command="{Binding RecordLineCommand}">
+            <Panel>
+              <TextBlock Text="このセリフを録る" IsVisible="{Binding !IsRecording}" />
+              <TextBlock Text="止めて次へ" IsVisible="{Binding IsRecording}" />
+            </Panel>
+          </Button>
+          <Button Content="録り直す" Command="{Binding RetakeCommand}" ToolTip.Tip="最後に録ったセリフをもう一度録る" />
+        </StackPanel>
+
+        <TextBlock Text="{Binding Elapsed}" FontFamily="monospace" FontSize="{StaticResource HeadingFontSize}" />
+        <TextBlock Classes="secondary" Text="{Binding Status}" TextWrapping="Wrap" />
+
+        <TextBlock Classes="panel-header" Text="入出力の遅れ" Margin="0,8,0,0" />
+        <TextBlock Text="{Binding LatencyText}" />
+        <Button Content="遅れを測る…" Command="{Binding MeasureLatencyCommand}" IsEnabled="{Binding !IsRecording}"
+                ToolTip.Tip="再生しながら録った音が、タイミングどおりの位置に置かれるように補正します" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

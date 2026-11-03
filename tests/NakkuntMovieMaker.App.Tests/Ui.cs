@@ -40,7 +40,8 @@ public sealed class TestEnvironment : IDisposable
 
     public string SettingsPath => Path.Combine(Folder, "settings.json");
 
-    public EditorSession CreateSession() => new(Settings, disableAudioDevice: true, settingsPath: SettingsPath);
+    public EditorSession CreateSession() =>
+        new(Settings, disableAudioDevice: true, settingsPath: SettingsPath, voiceEngines: () => new Voice.VoiceEngineRegistry([new TestVoiceEngine()]));
 
     public void Dispose()
     {
@@ -74,4 +75,68 @@ public static class Fixtures
         File.Copy(Path(name), target, overwrite: true);
         return target;
     }
+}
+
+/// <summary>テスト用の音声合成エンジン（ID "test"）。読み（なければ本文）の 1 文字を 0.1 秒の音にする</summary>
+public sealed class TestVoiceEngine : Voice.IVoiceEngine
+{
+    public string Id => "test";
+
+    public string Name => "テスト用";
+
+    public string Version => "1";
+
+    public Voice.VoiceEngineStatus Status => Voice.VoiceEngineStatus.Ready;
+
+    public IReadOnlyList<Voice.VoiceInfo> Voices { get; } = [new("a", "声 A")];
+
+    public string? MakeReading(string text) => text;
+
+    public Voice.VoiceAudio Synthesize(Voice.VoiceRequest request, CancellationToken cancellationToken)
+    {
+        var length = (request.Reading ?? request.Text).Length * 4800;
+        return new Voice.VoiceAudio([.. Enumerable.Range(0, length).Select(i => (float)(0.3 * Math.Sin(2 * Math.PI * 220 * i / 48000)))], 48000);
+    }
+
+    public void Dispose()
+    {
+    }
+}
+
+/// <summary>テスト用の録音の入力。始めてから経った時間の分だけ、振幅 0.3 の音を返す（本物のマイクは使わない）</summary>
+public sealed class FakeAudioInput : Audio.IAudioInput
+{
+    private readonly System.Diagnostics.Stopwatch _clock = new();
+    private long _read;
+
+    public int SampleRate => 48000;
+
+    public int Channels => 1;
+
+    public int LatencyFrames => 0;
+
+    public int PeriodFrames => 480;
+
+    public long OverrunFrames => 0;
+
+    public bool Disposed { get; private set; }
+
+    public void Start() => _clock.Start();
+
+    public void Stop() => _clock.Stop();
+
+    public int Read(Span<float> destination)
+    {
+        var available = (long)(_clock.Elapsed.TotalSeconds * SampleRate) - _read;
+        var frames = (int)Math.Clamp(available, 0, destination.Length);
+        for (var i = 0; i < frames; i++)
+        {
+            destination[i] = (float)(0.3 * Math.Sin(2 * Math.PI * 440 * (_read + i) / SampleRate));
+        }
+
+        _read += frames;
+        return frames;
+    }
+
+    public void Dispose() => Disposed = true;
 }

@@ -46,7 +46,7 @@ public sealed class FakeDialogs : IDialogService
     public Task<UnsavedChangesChoice> AskUnsavedChangesAsync(string projectName) =>
         Task.FromResult(UnsavedAnswers.Count > 0 ? UnsavedAnswers.Dequeue() : UnsavedChangesChoice.Cancel);
 
-    public Task<string?> PromptAsync(string title, string label, string initial) =>
+    public Task<string?> PromptAsync(string title, string label, string initial, bool multiline = false) =>
         Task.FromResult(Prompts.Count > 0 ? Prompts.Dequeue() : null);
 
     public Task<string?> PickOpenFileAsync(string title, IReadOnlyList<FileKind> kinds) =>

@@ -23,14 +23,17 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
 {
     private readonly AppSettings _settings;
     private readonly string _settingsPath;
+    private readonly Func<VoiceEngineRegistry>? _voiceEngines;
     private readonly ProjectStore _store = new();
     private Workspace? _workspace;
     private string? _untitledFolder;
 
     /// <param name="settingsPath">閉じるときに設定を書く場所（省略すると利用者の設定ファイル）</param>
-    public EditorSession(AppSettings settings, bool disableAudioDevice = false, string? settingsPath = null)
+    /// <param name="voiceEngines">音声合成エンジンの一覧を作る（テスト用。省略すると組み込みのエンジン）</param>
+    public EditorSession(AppSettings settings, bool disableAudioDevice = false, string? settingsPath = null, Func<VoiceEngineRegistry>? voiceEngines = null)
     {
         _settings = settings;
+        _voiceEngines = voiceEngines;
         _settingsPath = settingsPath ?? AppSettings.DefaultPath;
         DisableAudioDevice = disableAudioDevice;
         var project = Project.CreateNew("新しいプロジェクト", SceneFormat.Landscape1080p30);
@@ -366,8 +369,16 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
                 Media,
                 Frames,
                 new PlaybackOptions(DisableAudioDevice: session.DisableAudioDevice, OutputDevice: session.Settings.OutputDevice));
-            var aquesTalk = session.Settings.AquesTalkFolder is { Length: > 0 } aquesFolder ? AquesTalkOptions.Default with { Folder = aquesFolder } : null;
-            (Engines, ConverterError) = Engine.VoiceEngines.CreateDefault(aquesTalk);
+            if (session._voiceEngines is { } create)
+            {
+                Engines = create();
+            }
+            else
+            {
+                var aquesTalk = session.Settings.AquesTalkFolder is { Length: > 0 } aquesFolder ? AquesTalkOptions.Default with { Folder = aquesFolder } : null;
+                (Engines, ConverterError) = Engine.VoiceEngines.CreateDefault(aquesTalk);
+            }
+
             Voices = new VoiceService(Engines, new VoiceCache(folder));
         }
 

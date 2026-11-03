@@ -12,7 +12,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly IDialogService _dialogs;
 
-    public MainWindowViewModel(EditorSession session, ShortcutRegistry shortcuts, IDialogService dialogs)
+    /// <param name="openInput">録音の入力デバイスを開く（テストでは差し替える）</param>
+    public MainWindowViewModel(EditorSession session, ShortcutRegistry shortcuts, IDialogService dialogs, Func<string?, Audio.IAudioInput>? openInput = null)
     {
         Session = session;
         Shortcuts = shortcuts;
@@ -21,6 +22,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Preview = new PreviewViewModel(session);
         Timeline = new TimelineViewModel(session, dialogs);
         Properties = new PropertiesViewModel(session, dialogs);
+        VoicePlayer = new VoicePlayer(session.DisableAudioDevice, () => session.Settings.OutputDevice);
+        Dialogue = new DialogueViewModel(session, dialogs, VoicePlayer);
+        Recording = new RecordingViewModel(session, dialogs, Preview, openInput);
         session.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(EditorSession.Title))
@@ -69,6 +73,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         shortcuts.Bind("timeline.zoomIn", Timeline.ZoomInCommand);
         shortcuts.Bind("timeline.zoomOut", Timeline.ZoomOutCommand);
         shortcuts.Bind("timeline.snap", Timeline.ToggleSnapCommand);
+        shortcuts.Bind("dialogue.focus", Dialogue.FocusCommand);
+        shortcuts.Bind("record.toggle", Recording.ToggleRecordCommand);
     }
 
     public EditorSession Session { get; }
@@ -84,6 +90,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public TimelineViewModel Timeline { get; }
 
     public PropertiesViewModel Properties { get; }
+
+    public VoicePlayer VoicePlayer { get; }
+
+    public DialogueViewModel Dialogue { get; }
+
+    public RecordingViewModel Recording { get; }
 
     public string Title => Session.Title;
 
@@ -218,7 +230,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanRedo))]
     private void Redo() => Session.Document.Redo();
 
-    public void Dispose() => Session.Dispose();
+    public void Dispose()
+    {
+        Recording.Dispose();
+        VoicePlayer.Dispose();
+        Session.Dispose();
+    }
 
     private bool CanUndo() => Session.Document.CanUndo;
 
