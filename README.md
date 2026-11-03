@@ -58,3 +58,4 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 - [VOICEVOX Nemo](https://voicevox.hiroshiba.jp/nemo/)
 - [VoiSona Talk](https://voisona.com/talk/)
 - [唄詠２](https://shinta.coresv.com/software/utayomi2-ja-jp/)
+- [棒読みちゃん](https://chi.usamimi.info/Program/Application/BouyomiChan/)
