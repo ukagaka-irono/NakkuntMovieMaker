@@ -29,7 +29,8 @@
         <MenuItem Header="保存(_S)" Command="{Binding SaveCommand}" Tag="file.save" />
         <MenuItem Header="名前を付けて保存(_A)…" Command="{Binding SaveAsCommand}" Tag="file.saveAs" />
         <Separator />
-        <MenuItem x:Name="ExportMenu" Header="書き出し(_E)…" Tag="file.export" />
+        <MenuItem Header="書き出し(_E)…" Command="{Binding ExportCommand}" Tag="file.export" />
+        <MenuItem Header="静止画の書き出し…" Command="{Binding ExportStillCommand}" />
         <Separator />
         <MenuItem Header="プロジェクトの設定(_P)…" Command="{Binding ProjectSettingsCommand}" Tag="file.projectSettings" />
         <Separator />

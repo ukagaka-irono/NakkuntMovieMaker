@@ -1,0 +1,76 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
+        xmlns:export="using:NakkuntMovieMaker.Engine.Export"
+        x:Class="NakkuntMovieMaker.App.Views.Dialogs.ExportDialog"
+        x:DataType="vm:ExportViewModel"
+        Title="書き出し"
+        Width="620" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="{StaticResource DialogPadding}" Spacing="{StaticResource Space2}">
+    <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8" IsEnabled="{Binding CanEdit}">
+      <TextBlock Classes="field-label" Text="書き出し先" />
+      <DockPanel Grid.Column="1">
+        <Button DockPanel.Dock="Right" Content="参照…" Command="{Binding BrowseCommand}" Margin="4,0,0,0" />
+        <TextBox Text="{Binding OutputPath}" ToolTip.Tip="拡張子を .wav にすると、音声だけを書き出します" />
+      </DockPanel>
+
+      <TextBlock Grid.Row="1" Classes="field-label" Text="プリセット" IsVisible="{Binding !IsAudioOnly}" />
+      <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{x:Static vm:ExportViewModel.Presets}" SelectedItem="{Binding Preset}" HorizontalAlignment="Stretch" IsVisible="{Binding !IsAudioOnly}">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="export:ExportPreset">
+            <TextBlock Text="{Binding Name}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+
+      <TextBlock Grid.Row="2" Classes="field-label" Text="幅×高さ" IsVisible="{Binding !IsAudioOnly}" />
+      <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource Space2}" IsVisible="{Binding !IsAudioOnly}">
+        <NumericUpDown Value="{Binding Width}" Minimum="16" Maximum="8192" Increment="2" FormatString="0" Width="130" />
+        <TextBlock Text="×" VerticalAlignment="Center" />
+        <NumericUpDown Value="{Binding Height}" Minimum="16" Maximum="8192" Increment="2" FormatString="0" Width="130" />
+        <TextBlock Classes="warning" Text="{Binding SizeError}" VerticalAlignment="Center" />
+      </StackPanel>
+
+      <TextBlock Grid.Row="3" Classes="field-label" Text="映像" IsVisible="{Binding !IsAudioOnly}" />
+      <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource Space2}" IsVisible="{Binding !IsAudioOnly}">
+        <CheckBox Content="HEVC（H.265）" IsChecked="{Binding Hevc}" ToolTip.Tip="ファイルが小さくなる。古い機器では再生できないことがある" />
+        <NumericUpDown Value="{Binding VideoBitrate}" Minimum="200" Maximum="200000" Increment="500" FormatString="0" Width="140" />
+        <TextBlock Text="kbps" VerticalAlignment="Center" />
+      </StackPanel>
+
+      <TextBlock Grid.Row="4" Classes="field-label" Text="音声" />
+      <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource Space2}">
+        <NumericUpDown Value="{Binding AudioBitrate}" Minimum="64" Maximum="512" Increment="32" FormatString="0" Width="140" IsVisible="{Binding !IsAudioOnly}" />
+        <TextBlock Text="kbps（AAC）" VerticalAlignment="Center" IsVisible="{Binding !IsAudioOnly}" />
+        <ComboBox ItemsSource="{x:Static vm:ExportViewModel.LoudnessChoices}" SelectedItem="{Binding Loudness}" ToolTip.Tip="音全体の大きさをそろえる" />
+      </StackPanel>
+
+      <TextBlock Grid.Row="5" Classes="field-label" Text="範囲" />
+      <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource Space3}">
+        <RadioButton Content="全体" IsChecked="{Binding WholeScene}" GroupName="range" />
+        <RadioButton Content="タイムラインで指定した範囲" IsChecked="{Binding SelectedRange}" IsEnabled="{Binding HasRange}" GroupName="range" />
+      </StackPanel>
+
+      <TextBlock Grid.Row="6" Classes="field-label" Text="エンコーダー" IsVisible="{Binding !IsAudioOnly}" />
+      <StackPanel Grid.Row="6" Grid.Column="1" Spacing="2" IsVisible="{Binding !IsAudioOnly}">
+        <CheckBox Content="ハードウェアエンコーダーを使わない" IsChecked="{Binding SoftwareOnly}" />
+        <TextBlock Classes="secondary" Text="{Binding EncoderList}" TextWrapping="Wrap" />
+      </StackPanel>
+
+      <TextBlock Grid.Row="7" Classes="field-label" Text="字幕" />
+      <CheckBox Grid.Row="7" Grid.Column="1" Content="セリフの字幕を SRT にも書き出す（同じ名前で）" IsChecked="{Binding WriteSubtitles}" />
+    </Grid>
+
+    <ProgressBar Value="{Binding Progress}" Minimum="0" Maximum="1" Height="8" Margin="0,8,0,0" />
+    <TextBlock Classes="secondary" Text="{Binding Status}" />
+
+    <StackPanel Classes="dialog-buttons">
+      <Button Content="フォルダを開く" IsVisible="{Binding IsDone}" Click="OnOpenFolder" />
+      <Button Classes="accent" Content="書き出す" IsDefault="True" Command="{Binding StartCommand}" />
+      <Button Content="中止" Command="{Binding CancelCommand}" IsVisible="{Binding IsExporting}" />
+      <Button Content="閉じる" IsCancel="True" IsEnabled="{Binding CanEdit}" Click="OnClose" />
+    </StackPanel>
+  </StackPanel>
+</Window>

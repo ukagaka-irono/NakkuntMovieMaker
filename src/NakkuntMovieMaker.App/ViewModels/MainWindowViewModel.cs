@@ -46,6 +46,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         shortcuts.Bind("file.save", SaveCommand);
         shortcuts.Bind("file.saveAs", SaveAsCommand);
         shortcuts.Bind("file.projectSettings", ProjectSettingsCommand);
+        shortcuts.Bind("file.export", ExportCommand);
         shortcuts.Bind("edit.undo", UndoCommand);
         shortcuts.Bind("edit.redo", RedoCommand);
         shortcuts.Bind("play.toggle", Preview.TogglePlayCommand);
@@ -224,6 +225,40 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         if (operations.Count > 0 && Session.Execute(Operations.Combine("プロジェクトの設定", operations)) is { } error)
         {
             await _dialogs.ShowErrorAsync("設定を変えられません", error);
+        }
+    }
+
+    /// <summary>書き出しダイアログを開く</summary>
+    [RelayCommand]
+    private async Task ExportAsync()
+    {
+        if (Preview.IsPlaying)
+        {
+            Preview.StopCommand.Execute(null);
+        }
+
+        await _dialogs.ShowDialogAsync<object>(new Views.Dialogs.ExportDialog(), new ExportViewModel(Session, _dialogs));
+    }
+
+    /// <summary>再生位置のフレームを画像に書き出す</summary>
+    [RelayCommand]
+    private async Task ExportStillAsync()
+    {
+        var frame = Session.CurrentFrame;
+        if (await _dialogs.PickSaveFileAsync("静止画の書き出し", $"{Session.Project.Name}_{frame}.png", [FileKinds.Image]) is not { } path)
+        {
+            return;
+        }
+
+        try
+        {
+            using var pipeline = new Engine.Export.ExportPipeline(Session.Project, Session.SceneId, Session.ProjectFolder);
+            await pipeline.ExportStillAsync(path, frame);
+            Status = $"{path} に書き出しました";
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            await _dialogs.ShowErrorAsync("書き出せません", ex.Message);
         }
     }
 
