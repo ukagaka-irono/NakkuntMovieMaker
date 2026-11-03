@@ -255,6 +255,7 @@ AI の機能は、NVIDIA GPU（CUDA）と Apple Silicon（Core ML）では GPU �
 - セカンダリー補正（色の範囲の選択、範囲を囲むウィンドウ、トラッキング）
 - ノードでのグレーディング、レイヤーリスト
 - HDR グレーディング、広色域の色空間、32 ビット浮動小数点での処理
+- カラーマネジメント（OpenColorIO の設定ファイルによる色空間の変換。ACES などに対応）
 - グレードのバージョン管理（グループ化）
 - 出力先（SDR・HDR など）ごとの調整
 - フィルムグレイン、光学的なぼかし、シャープ（ピントの補正）
@@ -326,6 +327,7 @@ AI の機能は、NVIDIA GPU（CUDA）と Apple Silicon（Core ML）では GPU �
 - トラックのフォルダー分け
 - 音量レベルメーター、タイムラインでの音声波形の表示
 - 動画の音声の分離（別のアイテムに分ける）、複数の音声トラックを持つ動画の読み込み
+- MIDI 機器からの入力（演奏の録音）
 - アフレコ（ADR）、効果音の収録と配置（フォーリー）
 - 音声の伸縮（波形を伸び縮みさせてタイミングを合わせる）
 - サラウンド（ステレオ・5.1ch・7.1ch）、イマーシブオーディオ（アンビソニックス）
@@ -349,7 +351,7 @@ AI の機能は、NVIDIA GPU（CUDA）と Apple Silicon（Core ML）では GPU �
 - アニメーション画像
 - 連番画像（再生速度・ループの指定）
 - テキストファイル（台本・字幕）
-- MIDI（SoundFont で再生）
+- MIDI（SoundFont で再生。標準の MeltySynth と、SF3・DLS にも対応した FluidSynth を切り替え可能）
 - 連番 TIFF・マルチページ TIFF
 - Effekseer のエフェクト
 - カメラの RAW 画像（Canon・Fujifilm・Nikon・Sony）
@@ -394,6 +396,9 @@ NakkuntMovieMaker のプラグインを作るための資料とツールを用�
 | [AquesTalk10](https://www.a-quest.com/products/aquestalk10.html) | 音声合成エンジン | Windows / Linux / macOS |
 | [AqKanji2Koe-A](https://www.a-quest.com/products/aqkanji2koe.html) | 言語処理エンジン | Windows / Linux / macOS |
 | [FFmpeg](https://ffmpeg.org/) | 動画・音声処理 | — |
+| [OpenColorIO](https://opencolorio.org/) | カラーマネジメント | Windows / Linux / macOS |
+| [MeltySynth](https://github.com/sinshu/meltysynth) | MIDI の再生（標準） | Windows / Linux / macOS |
+| [FluidSynth](https://www.fluidsynth.org/) | MIDI の再生（SF3・DLS の音色、MIDI 機器からの入力） | Windows / Linux / macOS |
 
 ## 対応している音声合成ソフト・サービス
 
