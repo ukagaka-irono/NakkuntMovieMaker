@@ -33,6 +33,10 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
   - ファイルの読み込み：動画・画像・音声ファイルの対応形式
   - 動画の出力：出力形式・エンコーダー
   - ツール：編集を補助するツールやウィンドウ
+- 他ソフトのプラグインとの互換性（可能な限り対応）
+  - [ゆっくりMovieMaker4（YMM4）](https://manjubox.net/ymm4/)
+  - [AviUtl](https://spring-fragrance.mints.ne.jp/aviutl/)
+  - [AviUtl2（AviUtl ExEdit2）](https://spring-fragrance.mints.ne.jp/aviutl/)
 
 ## 使用しているエンジン・ライブラリ
 
