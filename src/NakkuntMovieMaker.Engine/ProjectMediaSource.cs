@@ -27,6 +27,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
     private readonly ConversionQuality _quality;
     private readonly ConcurrentDictionary<string, MediaInfo?> _info = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<(AssetId Asset, int Step), SourceImage?> _images = new();
+    private readonly ConcurrentDictionary<(string Path, int Step), SourceImage?> _files = new();
     private readonly ConcurrentDictionary<(AssetId Asset, int Step), DecoderSlot?> _decoders = new();
     private readonly ConcurrentDictionary<AssetId, Lazy<PcmAudio?>> _audio = new();
     private readonly ConcurrentDictionary<string, Lazy<PcmAudio?>> _voices = new(StringComparer.Ordinal);
@@ -57,6 +58,26 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         }
 
         return _images.GetOrAdd((asset, step), image);
+    }
+
+    /// <summary>ファイルの場所で指定した画像（立ち絵のパーツなど）。素材と同じく、段階ごとに縮小して覚えておく</summary>
+    public SourceImage? GetImageFile(string path, double scale)
+    {
+        var step = StepFor(scale);
+        if (_files.TryGetValue((path, step), out var cached))
+        {
+            return cached;
+        }
+
+        var image = LoadImageFile(path, step);
+        if (image is not null && Interlocked.Add(ref _imageBytes, image.Image.Pixels.Length) > ImageMemoryLimit)
+        {
+            _images.Clear();
+            _files.Clear();
+            Interlocked.Exchange(ref _imageBytes, image.Image.Pixels.Length);
+        }
+
+        return _files.GetOrAdd((path, step), image);
     }
 
     public SourceImage? GetVideoFrame(AssetId asset, Rational time, double scale)
@@ -178,6 +199,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
         _decoders.Clear();
         _images.Clear();
+        _files.Clear();
         foreach (var audio in _audio.Values.Concat(_voices.Values).Where(audio => audio.IsValueCreated))
         {
             audio.Value?.Dispose();
@@ -217,9 +239,11 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
             }
         });
 
-    private SourceImage? LoadImage(AssetId asset, int step)
+    private SourceImage? LoadImage(AssetId asset, int step) => PathOf(asset) is { } path ? LoadImageFile(path, step) : null;
+
+    private SourceImage? LoadImageFile(string path, int step)
     {
-        if (PathOf(asset) is not { } path || Info(path)?.Video is not { } video)
+        if (Info(path)?.Video is not { } video)
         {
             return null;
         }

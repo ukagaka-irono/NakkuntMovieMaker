@@ -190,6 +190,22 @@ public class SkiaCpuBackendTests
     }
 
     [Fact]
+    public void StacksTachieLayersFromTheBack()
+    {
+        // 奥は 40×40 の赤、手前は 20×20 の青（左上をそろえる）。立ち絵の大きさは 40×40 で、中心に置く（x・y は 140〜179・70〜109）
+        var body = _media.AddFile("立ち絵/体/body.png", TestImages.Solid(40, 40, Red));
+        var eyes = _media.AddFile("立ち絵/目/e.png", TestImages.Solid(20, 20, Blue));
+        var missing = "立ち絵/他/missing.png";
+        var node = new DrawNode(null, new TachieContent([body, eyes, missing]), Crop.None, TimelineEvaluator.Transform(Transform2D.Identity, 0, Small), 1, BlendMode.Normal);
+
+        var image = _backend.Render(new FramePlan(320, 180, RgbaColor.Black, [node]), _media, cancellationToken: TestContext.Current.CancellationToken);
+
+        AssertPixel(image, 145, 75, (0, 0, 255, 255), tolerance: 0);
+        AssertPixel(image, 170, 100, (255, 0, 0, 255), tolerance: 0);
+        AssertPixel(image, 139, 75, (0, 0, 0, 255), tolerance: 0);
+    }
+
+    [Fact]
     public void SkipsMissingMedia()
     {
         var missing = new ImageItem(ItemId.New(), Layer(Empty, 0), 0, 30, AssetId.New());

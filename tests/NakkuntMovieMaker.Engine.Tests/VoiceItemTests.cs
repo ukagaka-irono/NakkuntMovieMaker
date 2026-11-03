@@ -48,13 +48,13 @@ public sealed class VoiceItemTests : IDisposable
         var silent = Voice(empty, 40, 30, text: "");
         var project = CreateProject(voice, overridden, silent);
 
-        var nodes = TimelineEvaluator.Evaluate(project.Root, 0, characters: project.Characters).Nodes.Cast<DrawNode>().ToList();
+        var nodes = TimelineEvaluator.Evaluate(project.Root, 0, timeline: new TimelineContext(project.Characters)).Nodes.Cast<DrawNode>().ToList();
         Assert.Equal(new TextContent("こんにちは", ReimuStyle), nodes[0].Content);
         Assert.Equal(new TextContent("上書き", TextStyle.Default), nodes[1].Content);
 
         // キャラクターを渡さなければ既定のスタイル、本文が空なら字幕を出さない
         Assert.Equal(new TextContent("こんにちは", TextStyle.Default), ((DrawNode)TimelineEvaluator.Evaluate(project.Root, 0).Nodes[0]).Content);
-        Assert.Empty(TimelineEvaluator.Evaluate(project.Root, 50, characters: project.Characters).Nodes);
+        Assert.Empty(TimelineEvaluator.Evaluate(project.Root, 50, timeline: new TimelineContext(project.Characters)).Nodes);
     }
 
     [Fact]

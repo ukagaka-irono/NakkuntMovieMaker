@@ -52,3 +52,8 @@ public sealed record TextContent(string Text, TextStyle Style, int? VisibleChara
 
 /// <summary>図形</summary>
 public sealed record ShapeContent(ShapeStyle Shape) : DrawContent;
+
+/// <summary>
+/// 立ち絵。Layers は重ねる画像（ファイルの場所）を奥から順に並べたもの。左上をそろえて重ね、いちばん大きい画像の大きさを立ち絵の大きさにする
+/// </summary>
+public sealed record TachieContent(EquatableArray<string> Layers) : DrawContent;

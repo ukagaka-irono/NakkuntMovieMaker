@@ -42,21 +42,21 @@ public sealed class FrameScheduler : IDisposable
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Thread[] _threads;
     private Scene _scene;
-    private IReadOnlyDictionary<CharacterId, Character> _characters;
+    private TimelineContext _timeline;
     private double _scale = 1;
     private int _busy;
     private TaskCompletionSource _idle = CompletedSource();
 
-    /// <param name="characters">プロジェクトのキャラクター（セリフの字幕のスタイルに使う）</param>
+    /// <param name="timeline">キャラクター・立ち絵・口パク（セリフの字幕と立ち絵に使う）</param>
     public FrameScheduler(
         Scene scene,
         IRenderBackend backend,
         IMediaSource media,
         FrameSchedulerOptions? options = null,
-        IReadOnlyDictionary<CharacterId, Character>? characters = null)
+        TimelineContext? timeline = null)
     {
         _scene = scene;
-        _characters = characters ?? new Dictionary<CharacterId, Character>();
+        _timeline = timeline ?? TimelineContext.Empty;
         _backend = backend;
         _media = media;
         _options = options ?? FrameSchedulerOptions.Default;
@@ -123,7 +123,7 @@ public sealed class FrameScheduler : IDisposable
         ArgumentNullException.ThrowIfNull(characters);
         lock (_gate)
         {
-            _characters = characters;
+            _timeline = _timeline with { Characters = characters };
         }
     }
 
@@ -290,13 +290,13 @@ public sealed class FrameScheduler : IDisposable
 
     private FramePlan Evaluate(Scene scene, long frame)
     {
-        IReadOnlyDictionary<CharacterId, Character> characters;
+        TimelineContext timeline;
         lock (_gate)
         {
-            characters = _characters;
+            timeline = _timeline;
         }
 
-        return TimelineEvaluator.Evaluate(scene, frame, _options.Background, characters: characters);
+        return TimelineEvaluator.Evaluate(scene, frame, _options.Background, timeline: timeline);
     }
 
     private void Work()

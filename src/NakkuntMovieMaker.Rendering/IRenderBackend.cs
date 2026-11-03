@@ -33,6 +33,9 @@ public interface IMediaSource
     /// プロジェクトのフォルダを基準にする。既定では、そのまま返す
     /// </summary>
     string ResolvePath(string reference) => reference;
+
+    /// <summary>ファイルの場所で指定した画像（立ち絵のパーツなど）。読めなければ null</summary>
+    SourceImage? GetImageFile(string path, double scale) => null;
 }
 
 /// <summary>

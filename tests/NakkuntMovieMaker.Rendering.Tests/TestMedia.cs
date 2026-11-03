@@ -10,6 +10,7 @@ internal sealed class TestMedia : IMediaSource
 {
     private readonly ConcurrentDictionary<AssetId, SourceImage> _images = new();
     private readonly ConcurrentDictionary<AssetId, Func<Rational, SourceImage>> _videos = new();
+    private readonly ConcurrentDictionary<string, SourceImage> _files = new();
 
     /// <summary>素材を求められたときの倍率（最後のもの）</summary>
     public double LastScale { get; private set; }
@@ -41,6 +42,15 @@ internal sealed class TestMedia : IMediaSource
         LastScale = scale;
         return _images.GetValueOrDefault(asset);
     }
+
+    /// <summary>ファイルの場所 path で読める画像として置く（立ち絵のパーツなど）</summary>
+    public string AddFile(string path, BgraImage image)
+    {
+        _files[path] = new SourceImage(image);
+        return path;
+    }
+
+    public SourceImage? GetImageFile(string path, double scale) => _files.GetValueOrDefault(path);
 }
 
 /// <summary>テスト用の画像を作る。色は (R, G, B, A) の straight alpha で指定し、premultiplied にして持つ</summary>

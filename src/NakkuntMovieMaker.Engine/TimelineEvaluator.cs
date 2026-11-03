@@ -6,6 +6,7 @@ using NakkuntMovieMaker.Core.Time;
 using NakkuntMovieMaker.Rendering;
 using NakkuntMovieMaker.Rendering.Effects;
 using NakkuntMovieMaker.Rendering.Transitions;
+using NakkuntMovieMaker.Engine.Tachie;
 
 namespace NakkuntMovieMaker.Engine;
 
@@ -21,7 +22,7 @@ public static class TimelineEvaluator
     /// ソロのレイヤーが 1 つでもあれば、ソロのレイヤーだけを描く。
     /// エフェクトとトランジションは、effects・transitions（省略すると組み込みのもの）に登録された種類だけを評価し、
     /// 知らない種類は飛ばす（トランジションは、かけずにそのまま切り替える）。
-    /// セリフの字幕は、characters（プロジェクトのキャラクター）の字幕のスタイルで描く
+    /// セリフの字幕と立ち絵は、timeline（プロジェクトのキャラクター・立ち絵の読み込み・口パク用の声の大きさ）を使って描く
     /// </summary>
     public static FramePlan Evaluate(
         Scene scene,
@@ -29,10 +30,10 @@ public static class TimelineEvaluator
         RgbaColor? background = null,
         EffectRegistry? effects = null,
         TransitionRegistry? transitions = null,
-        IReadOnlyDictionary<CharacterId, Character>? characters = null)
+        TimelineContext? timeline = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var context = new Context(scene, effects ?? EffectRegistry.Default, characters ?? NoCharacters);
+        var context = new Context(scene, effects ?? EffectRegistry.Default, timeline ?? TimelineContext.Empty);
         transitions ??= TransitionRegistry.Default;
 
         var anySolo = scene.Layers.Any(layer => layer.Solo);
@@ -108,7 +109,7 @@ public static class TimelineEvaluator
 
     private static DrawNode? EvaluateItem(Context context, Item item, long frame)
     {
-        var (scene, effects, characters) = context;
+        var (scene, effects, timeline) = context;
         if (item is not VisualItem visual)
         {
             return null;
@@ -121,9 +122,8 @@ public static class TimelineEvaluator
             ImageItem image => new ImageContent(image.Asset),
             TextItem text => new TextContent(text.Text, text.Style, VisibleCharacters(text.Text, text.Style, local, scene.Fps)),
             ShapeItem shape => new ShapeContent(shape.Shape),
-            VoiceItem voice => Subtitle(voice, characters, local, scene.Fps),
-
-            // 立ち絵は、立ち絵の手順で加える
+            VoiceItem voice => Subtitle(voice, timeline.Characters, local, scene.Fps),
+            TachieItem tachie => Tachie(scene, tachie, frame, timeline),
             _ => null,
         };
         if (content is null)
@@ -228,8 +228,6 @@ public static class TimelineEvaluator
     }
 
     // 一文字ずつ表示するときに見えている文字の数。サロゲートペアなどの組み合わせ文字は 1 文字と数える
-    private static readonly IReadOnlyDictionary<CharacterId, Character> NoCharacters = new Dictionary<CharacterId, Character>();
-
     private static int? VisibleCharacters(string text, TextStyle style, long local, Rational fps)
     {
         if (style.RevealCharsPerSecond <= 0)
@@ -244,6 +242,54 @@ public static class TimelineEvaluator
         return (int)Math.Clamp(Math.Floor(seconds * style.RevealCharsPerSecond + 1e-9), 0, total);
     }
 
-    // 評価に使うもの（シーン・エフェクトの種類・キャラクター）
-    private sealed record Context(Scene Scene, EffectRegistry Effects, IReadOnlyDictionary<CharacterId, Character> Characters);
+    // 立ち絵：キャラクターの立ち絵のパーツを重ねる。目は目パチ、口は同じキャラクターのセリフの声の大きさで口パクする
+    private static TachieContent? Tachie(Scene scene, TachieItem item, long frame, TimelineContext timeline)
+    {
+        if (!timeline.Characters.TryGetValue(item.Character, out var character)
+            || character.Tachie is not { } spec
+            || timeline.Tachie?.Load(spec) is not { Parts.IsEmpty: false } model)
+        {
+            return null;
+        }
+
+        var local = item.ToLocalFrame(frame);
+        var mouth = MouthLevel(scene, item.Character, frame, timeline.LipSync);
+        var seed = TachieAnimation.Seed(item.Id);
+        var layers = model.Parts.Select(part => part.Kind switch
+        {
+            TachiePartKind.Mouth => part.Frames[TachieAnimation.MouthFrame(part.Frames.Length, mouth)],
+            TachiePartKind.Eyes => part.Frames[TachieAnimation.EyeFrame(part.Frames.Length, local, scene.Fps, seed)],
+            _ => part.Frames[0],
+        });
+        return new TachieContent([.. layers]);
+    }
+
+    // 同じキャラクターの、frame に鳴っているセリフの声の大きさ（いくつかあれば大きいほう）。ミュートのレイヤーのセリフは数えない
+    private static float MouthLevel(Scene scene, CharacterId character, long frame, ILipSyncSource? lipSync)
+    {
+        if (lipSync is null)
+        {
+            return 0;
+        }
+
+        var level = 0f;
+        foreach (var voice in scene.Items.Values.OfType<VoiceItem>())
+        {
+            if (voice.Character != character || !voice.Contains(frame) || scene.FindLayer(voice.Layer) is not { Muted: false })
+            {
+                continue;
+            }
+
+            var local = voice.ToLocalFrame(frame);
+            if (lipSync.Envelope(voice, scene.Fps) is { } envelope && local < envelope.Length)
+            {
+                level = Math.Max(level, envelope[local]);
+            }
+        }
+
+        return level;
+    }
+
+    // 評価に使うもの（シーン・エフェクトの種類・キャラクターと立ち絵）
+    private sealed record Context(Scene Scene, EffectRegistry Effects, TimelineContext Timeline);
 }

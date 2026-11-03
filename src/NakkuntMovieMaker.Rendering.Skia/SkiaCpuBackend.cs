@@ -138,6 +138,7 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
             ImageContent image => media.GetImage(image.Asset, hint) is { } picture ? ImageContent(node.Crop, picture) : null,
             TextContent text => TextContent(node.Crop, text),
             ShapeContent shape => ShapeContent(node.Crop, shape.Shape, plan),
+            TachieContent tachie => TachieContent(node.Crop, tachie, media, hint),
             _ => null,
         };
         if (content is null)
@@ -226,6 +227,40 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
             ? (plan.Width, plan.Height)
             : ((float)shape.Width, (float)shape.Height);
         return VectorContent(crop, width, height, ShapePainter.InkBounds(shape, width, height), canvas => ShapePainter.Draw(canvas, shape, width, height));
+    }
+
+    // 立ち絵：パーツの画像を、左上をそろえて奥から順に重ねる（読めないパーツは飛ばす）
+    private static Content? TachieContent(Crop crop, TachieContent tachie, IMediaSource media, double hint)
+    {
+        var layers = tachie.Layers.Select(path => media.GetImageFile(path, hint)).OfType<SourceImage>().ToList();
+        if (layers.Count == 0)
+        {
+            return null;
+        }
+
+        var width = layers.Max(layer => layer.Width);
+        var height = layers.Max(layer => layer.Height);
+        return VectorContent(crop, width, height, new SKRect(0, 0, width, height), canvas =>
+        {
+            foreach (var layer in layers)
+            {
+                DrawSource(canvas, layer, new SKRect(0, 0, layer.Width, layer.Height), null);
+            }
+        });
+    }
+
+    // 素材の画像を、画素を写さずに destination へ描く
+    private static void DrawSource(SKCanvas canvas, SourceImage source, SKRect destination, SKPaint? paint)
+    {
+        var image = source.Image;
+        fixed (byte* pixels = image.Pixels)
+        {
+            var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using var pixmap = new SKPixmap(info, (nint)pixels, image.Stride);
+            using var skImage = SKImage.FromPixels(pixmap);
+            using var plain = paint is null ? new SKPaint { IsAntialias = true } : null;
+            canvas.DrawImage(skImage, destination, Sampling, paint ?? plain);
+        }
     }
 
     // 文字・図形のように、幅 × 高さの箱（左上が原点）に描くもの。切り抜いた残りの中心をローカル座標の原点に置く。
