@@ -20,6 +20,8 @@ public sealed class FakeDialogs : IDialogService
 
     public Queue<UnsavedChangesChoice> UnsavedAnswers { get; } = [];
 
+    public Queue<string?> Prompts { get; } = [];
+
     /// <summary>プロジェクトの設定のダイアログで行うこと。false を返すとキャンセル</summary>
     public Func<ProjectSettingsViewModel, bool>? ProjectSettings { get; set; }
 
@@ -43,6 +45,9 @@ public sealed class FakeDialogs : IDialogService
 
     public Task<UnsavedChangesChoice> AskUnsavedChangesAsync(string projectName) =>
         Task.FromResult(UnsavedAnswers.Count > 0 ? UnsavedAnswers.Dequeue() : UnsavedChangesChoice.Cancel);
+
+    public Task<string?> PromptAsync(string title, string label, string initial) =>
+        Task.FromResult(Prompts.Count > 0 ? Prompts.Dequeue() : null);
 
     public Task<string?> PickOpenFileAsync(string title, IReadOnlyList<FileKind> kinds) =>
         Task.FromResult(FilesToOpen.Count > 0 ? FilesToOpen.Dequeue() : null);

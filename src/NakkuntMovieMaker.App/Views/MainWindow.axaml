@@ -38,6 +38,30 @@
       <MenuItem x:Name="EditMenu" Header="編集(_E)">
         <MenuItem Header="{Binding UndoHeader}" Command="{Binding UndoCommand}" Tag="edit.undo" />
         <MenuItem Header="{Binding RedoHeader}" Command="{Binding RedoCommand}" Tag="edit.redo" />
+        <Separator />
+        <MenuItem Header="切り取り" Command="{Binding Timeline.CutCommand}" Tag="edit.cut" />
+        <MenuItem Header="コピー" Command="{Binding Timeline.CopyCommand}" Tag="edit.copy" />
+        <MenuItem Header="貼り付け" Command="{Binding Timeline.PasteCommand}" Tag="edit.paste" />
+        <MenuItem Header="複製" Command="{Binding Timeline.DuplicateCommand}" Tag="edit.duplicate" />
+        <Separator />
+        <MenuItem Header="削除" Command="{Binding Timeline.DeleteCommand}" Tag="edit.delete" />
+        <MenuItem Header="削除して詰める" Command="{Binding Timeline.RippleDeleteCommand}" Tag="edit.rippleDelete" />
+        <MenuItem Header="分割" Command="{Binding Timeline.SplitCommand}" Tag="edit.split" />
+        <Separator />
+        <MenuItem Header="グループ化" Command="{Binding Timeline.GroupCommand}" Tag="edit.group" />
+        <MenuItem Header="グループ解除" Command="{Binding Timeline.UngroupCommand}" Tag="edit.ungroup" />
+        <MenuItem Header="すべて選択" Command="{Binding Timeline.SelectAllCommand}" Tag="edit.selectAll" />
+      </MenuItem>
+      <MenuItem Header="タイムライン(_L)">
+        <MenuItem Header="マーカーを置く" Command="{Binding Timeline.AddMarkerCommand}" Tag="timeline.marker" />
+        <MenuItem Header="範囲の始まり" Command="{Binding Timeline.SetRangeStartCommand}" Tag="timeline.rangeIn" />
+        <MenuItem Header="範囲の終わり" Command="{Binding Timeline.SetRangeEndCommand}" Tag="timeline.rangeOut" />
+        <MenuItem Header="範囲を解除" Command="{Binding Timeline.ClearRangeCommand}" Tag="timeline.clearRange" />
+        <Separator />
+        <MenuItem Header="拡大" Command="{Binding Timeline.ZoomInCommand}" Tag="timeline.zoomIn" />
+        <MenuItem Header="縮小" Command="{Binding Timeline.ZoomOutCommand}" Tag="timeline.zoomOut" />
+        <MenuItem Header="全体を表示" Command="{Binding Timeline.ZoomToFitCommand}" />
+        <MenuItem Header="スナップ" ToggleType="CheckBox" IsChecked="{Binding Timeline.Snap}" Tag="timeline.snap" />
       </MenuItem>
       <MenuItem x:Name="ViewMenu" Header="表示(_V)">
         <MenuItem Header="全画面プレビュー" Command="{Binding Preview.ToggleFullScreenCommand}" Tag="view.fullScreenPreview" />
@@ -80,7 +104,7 @@
       </Border>
       <GridSplitter Grid.Row="1" Grid.ColumnSpan="5" ResizeDirection="Rows" Background="Transparent" />
       <Border x:Name="BottomPanel" Grid.Row="2" Grid.ColumnSpan="5" Classes="panel">
-        <TextBlock Classes="empty-hint" Text="タイムライン" />
+        <views:TimelineView DataContext="{Binding Timeline}" />
       </Border>
     </Grid>
   </DockPanel>

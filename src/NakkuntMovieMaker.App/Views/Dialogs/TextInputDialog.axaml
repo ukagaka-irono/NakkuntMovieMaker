@@ -1,0 +1,15 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="NakkuntMovieMaker.App.Views.Dialogs.TextInputDialog"
+        SizeToContent="WidthAndHeight"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="{StaticResource DialogPadding}" MinWidth="360" Spacing="{StaticResource Space2}">
+    <TextBlock x:Name="LabelText" />
+    <TextBox x:Name="Input" />
+    <StackPanel Classes="dialog-buttons">
+      <Button Classes="accent" Content="OK" IsDefault="True" Click="OnOk" />
+      <Button Content="キャンセル" IsCancel="True" Click="OnCancel" />
+    </StackPanel>
+  </StackPanel>
+</Window>

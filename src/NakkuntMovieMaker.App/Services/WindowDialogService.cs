@@ -28,6 +28,9 @@ public sealed class WindowDialogService(Window owner) : IDialogService
         };
     }
 
+    public async Task<string?> PromptAsync(string title, string label, string initial) =>
+        await new TextInputDialog(title, label, initial).ShowDialog<string?>(owner);
+
     public async Task<string?> PickOpenFileAsync(string title, IReadOnlyList<FileKind> kinds) =>
         (await PickOpenAsync(title, kinds, allowMultiple: false)).FirstOrDefault();
 

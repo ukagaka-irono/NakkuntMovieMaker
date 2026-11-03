@@ -19,6 +19,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _dialogs = dialogs;
         MediaPool = new MediaPoolViewModel(session, dialogs);
         Preview = new PreviewViewModel(session);
+        Timeline = new TimelineViewModel(session, dialogs);
         session.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(EditorSession.Title))
@@ -50,6 +51,23 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         shortcuts.Bind("play.start", Preview.GoToStartCommand);
         shortcuts.Bind("play.end", Preview.GoToEndCommand);
         shortcuts.Bind("view.fullScreenPreview", Preview.ToggleFullScreenCommand);
+        shortcuts.Bind("edit.cut", Timeline.CutCommand);
+        shortcuts.Bind("edit.copy", Timeline.CopyCommand);
+        shortcuts.Bind("edit.paste", Timeline.PasteCommand);
+        shortcuts.Bind("edit.delete", Timeline.DeleteCommand);
+        shortcuts.Bind("edit.rippleDelete", Timeline.RippleDeleteCommand);
+        shortcuts.Bind("edit.split", Timeline.SplitCommand);
+        shortcuts.Bind("edit.duplicate", Timeline.DuplicateCommand);
+        shortcuts.Bind("edit.group", Timeline.GroupCommand);
+        shortcuts.Bind("edit.ungroup", Timeline.UngroupCommand);
+        shortcuts.Bind("edit.selectAll", Timeline.SelectAllCommand);
+        shortcuts.Bind("timeline.marker", Timeline.AddMarkerCommand);
+        shortcuts.Bind("timeline.rangeIn", Timeline.SetRangeStartCommand);
+        shortcuts.Bind("timeline.rangeOut", Timeline.SetRangeEndCommand);
+        shortcuts.Bind("timeline.clearRange", Timeline.ClearRangeCommand);
+        shortcuts.Bind("timeline.zoomIn", Timeline.ZoomInCommand);
+        shortcuts.Bind("timeline.zoomOut", Timeline.ZoomOutCommand);
+        shortcuts.Bind("timeline.snap", Timeline.ToggleSnapCommand);
     }
 
     public EditorSession Session { get; }
@@ -61,6 +79,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public MediaPoolViewModel MediaPool { get; }
 
     public PreviewViewModel Preview { get; }
+
+    public TimelineViewModel Timeline { get; }
 
     public string Title => Session.Title;
 

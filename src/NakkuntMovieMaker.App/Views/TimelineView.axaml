@@ -1,0 +1,27 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
+             xmlns:controls="using:NakkuntMovieMaker.App.Controls"
+             x:Class="NakkuntMovieMaker.App.Views.TimelineView"
+             x:DataType="vm:TimelineViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="{StaticResource Space1}" Margin="0,0,0,4">
+      <Button Classes="toolbar" Content="分割" Command="{Binding SplitCommand}" ToolTip.Tip="再生位置で分割（S）" />
+      <Button Classes="toolbar" Content="削除" Command="{Binding DeleteCommand}" ToolTip.Tip="選んだアイテムを削除（Delete）" />
+      <Button Classes="toolbar" Content="詰めて削除" Command="{Binding RippleDeleteCommand}" ToolTip.Tip="削除して後ろを詰める（Shift+Delete）" />
+      <Border Width="8" />
+      <Button Classes="toolbar" Content="マーカー" Command="{Binding AddMarkerCommand}" ToolTip.Tip="再生位置にマーカーを置く（M）" />
+      <Button Classes="toolbar" Content="範囲の始まり" Command="{Binding SetRangeStartCommand}" ToolTip.Tip="再生位置を範囲の始まりにする（I）" />
+      <Button Classes="toolbar" Content="範囲の終わり" Command="{Binding SetRangeEndCommand}" ToolTip.Tip="再生位置を範囲の終わりにする（O）" />
+      <Button Classes="toolbar" Content="範囲を解除" Command="{Binding ClearRangeCommand}" />
+      <Border Width="8" />
+      <ToggleButton Classes="toolbar" IsChecked="{Binding Snap}" ToolTip.Tip="スナップ（N）"><PathIcon Data="{StaticResource IconMagnet}" /></ToggleButton>
+      <Button Classes="toolbar" Content="−" Command="{Binding ZoomOutCommand}" ToolTip.Tip="縮小（Ctrl+マウスホイール）" />
+      <Button Classes="toolbar" Content="＋" Command="{Binding ZoomInCommand}" ToolTip.Tip="拡大（Ctrl+マウスホイール）" />
+      <Button Classes="toolbar" Content="全体" Command="{Binding ZoomToFitCommand}" ToolTip.Tip="シーン全体を表示" />
+    </StackPanel>
+    <ScrollBar DockPanel.Dock="Bottom" Orientation="Horizontal" Minimum="0" Maximum="{Binding MaxScrollX}" ViewportSize="{Binding ViewportWidth}" Value="{Binding ScrollX}" Margin="176,0,14,0" />
+    <ScrollBar DockPanel.Dock="Right" Orientation="Vertical" Minimum="0" Maximum="{Binding MaxScrollY}" ViewportSize="{Binding ViewportHeight}" Value="{Binding ScrollY}" Margin="0,28,0,0" />
+    <controls:TimelineControl ViewModel="{Binding}" />
+  </DockPanel>
+</UserControl>
