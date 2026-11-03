@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using NakkuntMovieMaker.Core.Collections;
 using NakkuntMovieMaker.Core.Time;
 
 namespace NakkuntMovieMaker.Core.Model;
@@ -51,6 +52,25 @@ public sealed record Scene(
             .Where(item => item.Contains(frame))
             .OrderBy(item => LayerIndex(item.Layer))
             .ThenBy(item => item.Start);
+
+    public Item GetItem(ItemId id) =>
+        Items.TryGetValue(id, out var item) ? item : throw new KeyNotFoundException($"アイテムが見つかりません: {id}");
+
+    public Layer GetLayer(LayerId id) =>
+        FindLayer(id) ?? throw new KeyNotFoundException($"レイヤーが見つかりません: {id}");
+
+    // コレクションは中身で比較する（ImmutableList・ImmutableDictionary は参照で比較されるため）
+    public bool Equals(Scene? other) =>
+        ReferenceEquals(this, other)
+        || (other is not null
+            && Id == other.Id
+            && Name == other.Name
+            && Format == other.Format
+            && CollectionEquality.ListEquals(Layers, other.Layers)
+            && CollectionEquality.DictionaryEquals(Items, other.Items)
+            && CollectionEquality.ListEquals(Markers, other.Markers));
+
+    public override int GetHashCode() => HashCode.Combine(Id, Name, Format, Layers.Count, Items.Count);
 }
 
 /// <summary>レイヤー</summary>

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using NakkuntMovieMaker.Core.Collections;
 using NakkuntMovieMaker.Core.Time;
 
 namespace NakkuntMovieMaker.Core.Model;
@@ -32,6 +33,24 @@ public sealed record Project(
     }
 
     public Scene Root => Scenes[RootScene];
+
+    public Scene GetScene(SceneId id) =>
+        Scenes.TryGetValue(id, out var scene) ? scene : throw new KeyNotFoundException($"シーンが見つかりません: {id}");
+
+    public Project WithScene(Scene scene) => this with { Scenes = Scenes.SetItem(scene.Id, scene) };
+
+    // コレクションは中身で比較する（ImmutableDictionary は参照で比較されるため）
+    public bool Equals(Project? other) =>
+        ReferenceEquals(this, other)
+        || (other is not null
+            && SchemaVersion == other.SchemaVersion
+            && Name == other.Name
+            && RootScene == other.RootScene
+            && CollectionEquality.DictionaryEquals(Scenes, other.Scenes)
+            && CollectionEquality.DictionaryEquals(Characters, other.Characters)
+            && CollectionEquality.DictionaryEquals(Assets, other.Assets));
+
+    public override int GetHashCode() => HashCode.Combine(SchemaVersion, Name, RootScene, Scenes.Count);
 }
 
 /// <summary>シーンの解像度・フレームレート・サンプルレート</summary>

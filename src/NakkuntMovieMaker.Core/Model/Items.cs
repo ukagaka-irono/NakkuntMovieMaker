@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using NakkuntMovieMaker.Core.Animation;
+using NakkuntMovieMaker.Core.Collections;
 using NakkuntMovieMaker.Core.Time;
 
 namespace NakkuntMovieMaker.Core.Model;
@@ -23,6 +24,20 @@ public abstract record Item(ItemId Id, LayerId Layer, long Start, long Length)
 
     /// <summary>シーンのフレームを、アイテムの先頭からの相対フレームにする</summary>
     public long ToLocalFrame(long frame) => frame - Start;
+
+    // Effects は中身で比較する（ImmutableList は参照で比較されるため）。派生 record の項目は、派生側の Equals が比較する
+    public virtual bool Equals(Item? other) =>
+        ReferenceEquals(this, other)
+        || (other is not null
+            && EqualityContract == other.EqualityContract
+            && Id == other.Id
+            && Layer == other.Layer
+            && Start == other.Start
+            && Length == other.Length
+            && Group == other.Group
+            && CollectionEquality.ListEquals(Effects, other.Effects));
+
+    public override int GetHashCode() => HashCode.Combine(EqualityContract, Id, Layer, Start, Length, Group);
 }
 
 /// <summary>映像として描かれるアイテム</summary>
@@ -143,12 +158,12 @@ public enum BlendMode
 }
 
 /// <summary>
-/// 動画・音声の再生のしかた。SourceOffset はアイテムの先頭で再生する素材の位置（秒）、
-/// Speed は再生速度（1 が等速）、Reverse は逆再生
+/// 動画・音声の再生のしかた。アイテムは素材の [SourceOffset, SourceOffset + 長さ × Speed) 秒の範囲を使い、
+/// Reverse なら その範囲を後ろから再生する。Speed は再生速度（1 が等速）で、トリムで位置がずれないよう有理数で持つ
 /// </summary>
-public sealed record MediaPlayback(Rational SourceOffset, double Speed = 1.0, bool Reverse = false)
+public sealed record MediaPlayback(Rational SourceOffset, Rational Speed, bool Reverse = false)
 {
-    public static readonly MediaPlayback Normal = new(Rational.Zero);
+    public static readonly MediaPlayback Normal = new(Rational.Zero, Rational.One);
 }
 
 /// <summary>

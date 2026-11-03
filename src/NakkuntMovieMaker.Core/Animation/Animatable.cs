@@ -71,6 +71,12 @@ public sealed record Animatable<T>
         return remaining.Count == 0 ? Constant(Keys[0].Value) : FromKeys(remaining);
     }
 
+    /// <summary>すべてのキーフレームを delta フレームずらす（アイテムの先頭をトリムしたときなど）</summary>
+    public Animatable<T> ShiftKeys(long delta) =>
+        Keys.IsEmpty || delta == 0
+            ? this
+            : new Animatable<T>(Value, Keys.Select(key => key with { Frame = key.Frame + delta }).ToEquatableArray());
+
     /// <summary>アイテムの先頭からの相対フレームでの値。小数のフレーム（モーションブラーなど）も扱える</summary>
     public T Evaluate(double frame)
     {

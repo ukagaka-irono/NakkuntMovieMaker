@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using NakkuntMovieMaker.Core.Animation;
+using NakkuntMovieMaker.Core.Collections;
 
 namespace NakkuntMovieMaker.Core.Model;
 
@@ -11,7 +12,19 @@ public sealed record EffectInstance(
     EffectId Id,
     string Type,
     ImmutableDictionary<string, ParameterValue> Parameters,
-    bool Enabled = true);
+    bool Enabled = true)
+{
+    // Parameters は中身で比較する（ImmutableDictionary は参照で比較されるため）
+    public bool Equals(EffectInstance? other) =>
+        ReferenceEquals(this, other)
+        || (other is not null
+            && Id == other.Id
+            && Type == other.Type
+            && Enabled == other.Enabled
+            && CollectionEquality.DictionaryEquals(Parameters, other.Parameters));
+
+    public override int GetHashCode() => HashCode.Combine(Id, Type, Enabled, Parameters.Count);
+}
 
 /// <summary>エフェクトのパラメーターの値</summary>
 public abstract record ParameterValue;
