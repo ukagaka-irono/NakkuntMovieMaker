@@ -8,6 +8,8 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 
 ## 目次
 
+- [開発状況](#開発状況)
+- [ビルドと実行](#ビルドと実行)
 - [動作環境](#動作環境)
   - [基準となる環境](#基準となる環境)
 - [主な機能](#主な機能)
@@ -35,6 +37,66 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
   - [プラグイン開発者向け](#プラグイン開発者向け)
 - [使用しているエンジン・ライブラリ](#使用しているエンジンライブラリ)
 - [対応している音声合成ソフト・サービス](#対応している音声合成ソフトサービス)
+- [ライセンス](#ライセンス)
+
+## 開発状況
+
+最初の段階（M1）として、一般的な動画編集ソフトに必要な機能と、ゆっくり解説動画を最初から最後まで作るための機能を作りました。
+描画は CPU（Skia）で行います。GPU での描画（Vulkan）は次の段階（M2）で入れます。
+
+| 項目 | 状況 |
+| --- | --- |
+| Windows | 画面（Avalonia）を含めて使えます |
+| Linux・macOS | エンジンとコマンドライン（`nmm`）での書き出しまでを対象にしています。CI でのビルドとテストを用意していますが、まだ実機では確かめていません |
+| 編集 | タイムライン（レイヤー・移動・トリム・分割・リップル・ロール・コピーと貼り付け・グループ化・元に戻す）、キーフレーム、合成モード、速度変更と逆再生 |
+| 映像 | 映像エフェクト 15 種類、トランジション 7 種類、テキスト（縁取り・影・背景・縦書き・一文字ずつの表示）、図形 |
+| 音声 | ミキサー（音量・パン・フェード・キーフレーム）、音の高さを保った速度変更、ラウドネスの正規化、ダッキング、レベルメーター、録音 |
+| セリフ | キャラクター、セリフ入力欄、台本の一括貼り付け、SAPI、AquesTalk（任意で導入）、セリフごとの収録、立ち絵（口パク・目パチ）、字幕（SRT） |
+| 書き出し | MP4（H.264・HEVC、ハードウェアエンコード）、プリセット、範囲、WAV、静止画 |
+
+まだ確かめていないこと：
+
+- AquesTalk は、手元に導入していないため、実際の合成を確かめていません（導入していない場合の案内と、読み込みの仕組みはテストしています）。
+- 本物のマイクでの録音は確かめていません（仮の入力デバイスでテストしています）。
+- 立ち絵は、YMM4 の「動く立ち絵」と同じフォルダ構成を想定していますが、実際の素材では確かめていません。
+
+性能の記録は [docs/performance.md](docs/performance.md) にあります。
+
+## ビルドと実行
+
+必要なもの：
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/)（`global.json` の版）
+- PowerShell 7（Windows）または bash（Linux・macOS）
+- CMake と C コンパイラ（`nmm_audio` のビルドに使います。Windows は Visual Studio の C++ ビルドツール）
+
+```bash
+# FFmpeg（LGPL 版）・フォントの取得（版とハッシュは tools/native-deps.json で固定）と、nmm_audio のビルド
+pwsh tools/fetch-native.ps1      # Linux・macOS は ./tools/fetch-native.sh
+pwsh tools/build-native.ps1      # Linux・macOS は ./tools/build-native.sh
+
+dotnet build NakkuntMovieMaker.slnx
+dotnet test --solution NakkuntMovieMaker.slnx
+```
+
+アプリ（Windows）：
+
+```bash
+dotnet run --project src/NakkuntMovieMaker.App
+```
+
+コマンドライン（`nmm`）：
+
+```bash
+# 書き出し（拡張子が .wav なら音声だけ）
+dotnet run --project src/NakkuntMovieMaker.Cli -- export samples/general/general.nmmproj -o general.mp4 --preset youtube-1080p
+# 1 フレームを画像に
+dotnet run --project src/NakkuntMovieMaker.Cli -- render-frame samples/yukkuri/yukkuri.nmmproj -f 1.5s -o frame.png
+# 性能の計測
+dotnet run --project src/NakkuntMovieMaker.Cli -c Release -- bench --project samples/general/general.nmmproj
+```
+
+`samples/` に、一般的な動画編集とゆっくり解説のサンプルプロジェクトがあります（[samples/README.md](samples/README.md)）。
 
 ## 動作環境
 
@@ -410,11 +472,16 @@ NakkuntMovieMaker のプラグインを作るための資料とツールを用�
 
 | 名称 | 用途 | 対応 OS |
 | --- | --- | --- |
+| [Avalonia](https://avaloniaui.net/) | 画面 | Windows（M1）/ Linux / macOS |
+| [SkiaSharp](https://github.com/mono/SkiaSharp) | 描画（CPU） | Windows / Linux / macOS |
+| [HarfBuzzSharp](https://github.com/mono/SkiaSharp) | 文字の配置 | Windows / Linux / macOS |
+| [miniaudio](https://miniaud.io/) | 音の再生と録音 | Windows / Linux / macOS |
+| [BIZ UDPゴシック](https://github.com/googlefonts/morisawa-biz-ud-gothic) | 既定のフォント（同梱） | Windows / Linux / macOS |
 | [AquesTalk1](https://www.a-quest.com/products/aquestalk_1.html) | 音声合成エンジン（任意で導入） | Windows / Linux / macOS |
 | [AquesTalk2](https://www.a-quest.com/products/aquestalk_2.html) | 音声合成エンジン（任意で導入） | Windows / Linux / macOS |
 | [AquesTalk10](https://www.a-quest.com/products/aquestalk10.html) | 音声合成エンジン（任意で導入） | Windows / Linux / macOS |
 | [AqKanji2Koe-A](https://www.a-quest.com/products/aqkanji2koe.html) | 言語処理エンジン（任意で導入） | Windows / Linux / macOS |
-| [FFmpeg](https://ffmpeg.org/) | 動画・音声処理 | — |
+| [FFmpeg](https://ffmpeg.org/) | 動画・音声処理（LGPL 版の共有ライブラリを同梱） | Windows / Linux / macOS |
 | [OpenColorIO](https://opencolorio.org/) | カラーマネジメント | Windows / Linux / macOS |
 | [MeltySynth](https://github.com/sinshu/meltysynth) | MIDI の再生（標準） | Windows / Linux / macOS |
 | [FluidSynth](https://www.fluidsynth.org/) | MIDI の再生（SF3・DLS の音色、MIDI 機器からの入力） | Windows / Linux / macOS |
@@ -457,3 +524,12 @@ AquesTalk と AqKanji2Koe はソフトに同梱しません。使う場合は、
 - [VoiSona Talk](https://voisona.com/talk/)
 - [唄詠２](https://shinta.coresv.com/software/utayomi2-ja-jp/)
 - [棒読みちゃん](https://chi.usamimi.info/Program/Application/BouyomiChan/)
+
+## ライセンス
+
+NakkuntMovieMaker は [MIT ライセンス](LICENSE)です。
+
+同梱しているもの（FFmpeg は LGPL-3.0、miniaudio は Unlicense または MIT-0、BIZ UDPゴシックは SIL Open Font License 1.1 など）のライセンスは、
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) にまとめています。FFmpeg は GPL の部品と x264 を含まない構成のものだけを同梱します。
+
+AquesTalk と AqKanji2Koe は同梱しません。営利目的で利用する場合は、利用者自身が AquesTalk の使用ライセンスを購入する必要があります。
