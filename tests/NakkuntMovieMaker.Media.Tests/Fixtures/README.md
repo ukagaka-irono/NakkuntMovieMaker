@@ -37,6 +37,10 @@ IDX="format=rgb24,geq=r='mod(N\,8)*32+16':g='floor(N/8)*32+16':b='128'"
 ffmpeg $G -f lavfi -i "color=c=black:s=128x96:r=30000/1001:d=3,$IDX" -frames:v 60 \
   -c:v libx264 -preset veryfast -crf 16 -g 12 -bf 3 -pix_fmt yuv420p $O frames-2997.mp4
 
+# 10 秒・300 フレーム（30fps、キーフレームは 2 秒ごと）。番号が 64 以上になるので、青 = floor(N ÷ 64) × 32 + 16 も使う
+ffmpeg $G -f lavfi -i "color=c=black:s=128x96:r=30:d=10,format=rgb24,geq=r='mod(N\,8)*32+16':g='mod(floor(N/8)\,8)*32+16':b='floor(N/64)*32+16'" \
+  -frames:v 300 -c:v libx264 -preset veryfast -crf 16 -g 60 -bf 3 -pix_fmt yuv420p $O frames-long.mp4
+
 # 可変フレームレート：30fps で 30 フレーム → 0.5 秒あけて → 30 フレーム
 ffmpeg $G -f lavfi -i "color=c=black:s=128x96:r=30:d=3,$IDX,setpts='(N+if(gte(N\,30)\,15\,0))/30/TB'" \
   -frames:v 60 -fps_mode passthrough -c:v libx264 -preset veryfast -crf 16 -g 12 -bf 3 -pix_fmt yuv420p $O frames-vfr.mp4

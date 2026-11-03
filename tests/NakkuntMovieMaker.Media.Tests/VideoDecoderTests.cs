@@ -16,9 +16,24 @@ public class VideoDecoderTests(ITestOutputHelper output)
         return (int)Math.Round((r - 16) / 32.0) + 8 * (int)Math.Round((g - 16) / 32.0);
     }
 
-    private VideoDecoder Open(string fixture, HardwareDecoding hardware, int? maxWidth = null)
+    // 長い動画（frames-long.mp4）は、青にも番号を埋め込む（青 = (N÷64)×32+16）
+    private static int LongFrameIndex(DecodedFrame frame)
     {
-        var decoder = VideoDecoder.Open(Ffmpeg.Fixture(fixture), new VideoDecoderOptions(maxWidth, null, hardware));
+        var (b, _, _, _) = frame.Image.GetPixel(frame.Image.Width / 2, frame.Image.Height / 2);
+        return FrameIndex(frame) % 64 + 64 * (int)Math.Round((b - 16) / 32.0);
+    }
+
+    public static TheoryData<HardwareDecoding, ConversionQuality> AllModes => new()
+    {
+        { HardwareDecoding.Disabled, ConversionQuality.Accurate },
+        { HardwareDecoding.Disabled, ConversionQuality.Fast },
+        { HardwareDecoding.Auto, ConversionQuality.Accurate },
+        { HardwareDecoding.Auto, ConversionQuality.Fast },
+    };
+
+    private VideoDecoder Open(string fixture, HardwareDecoding hardware, int? maxWidth = null, ConversionQuality quality = ConversionQuality.Accurate)
+    {
+        var decoder = VideoDecoder.Open(Ffmpeg.Fixture(fixture), new VideoDecoderOptions(maxWidth, null, hardware, Quality: quality));
         output.WriteLine($"ハードウェアデコード: {decoder.HardwareDevice ?? "なし"}");
         return decoder;
     }
@@ -70,6 +85,35 @@ public class VideoDecoderTests(ITestOutputHelper output)
         }
     }
 
+    [Theory]
+    [MemberData(nameof(AllModes))]
+    public void ReturnsTheRightFrameAfterLongJumps(HardwareDecoding hardware, ConversionQuality quality)
+    {
+        // 2 秒より先へ進むときはシークし、目的のフレームの手前までは参照されないフレームを飛ばしてデコードする
+        Ffmpeg.RequireOrSkip();
+        using var decoder = Open("frames-long.mp4", hardware, quality: quality);
+        var random = new Random(42);
+
+        foreach (var k in Enumerable.Range(0, 40).Select(_ => random.Next(0, 300)).Append(299).Append(0).Append(150))
+        {
+            Assert.Equal(k, LongFrameIndex(decoder.GetFrame(TimeMath.FrameToSeconds(k, 30))));
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(HardwareModes))]
+    public void HandlesNearbyRequestsOutOfOrder(HardwareDecoding hardware)
+    {
+        // 複数のスレッドが近くのフレームを少し前後して求めても、正しいフレームを返す
+        Ffmpeg.RequireOrSkip();
+        using var decoder = Open("frames-long.mp4", hardware, quality: ConversionQuality.Fast);
+
+        foreach (var k in new[] { 100, 103, 101, 102, 106, 104, 105, 109, 107, 108 })
+        {
+            Assert.Equal(k, LongFrameIndex(decoder.GetFrame(TimeMath.FrameToSeconds(k, 30))));
+        }
+    }
+
     [Fact]
     public void UsesTimestampsForVariableFrameRate()
     {
@@ -111,11 +155,11 @@ public class VideoDecoderTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [MemberData(nameof(HardwareModes))]
-    public void ConvertsBt709ColorsCorrectly(HardwareDecoding hardware)
+    [MemberData(nameof(AllModes))]
+    public void ConvertsBt709ColorsCorrectly(HardwareDecoding hardware, ConversionQuality quality)
     {
         Ffmpeg.RequireOrSkip();
-        using var decoder = Open("color-c83c28-bt709.mp4", hardware);
+        using var decoder = Open("color-c83c28-bt709.mp4", hardware, quality: quality);
 
         var (b, g, r, a) = decoder.GetFrame(Rational.Zero).Image.GetPixel(64, 48);
 

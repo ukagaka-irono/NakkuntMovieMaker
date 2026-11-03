@@ -14,6 +14,16 @@ public enum HardwareDecoding
     Disabled,
 }
 
+/// <summary>RGB への変換と縮小の質</summary>
+public enum ConversionQuality
+{
+    /// <summary>色の丸めと色差の補間を丁寧に行う（書き出し用。1080p で 1 フレームあたり数ミリ秒遅い）</summary>
+    Accurate,
+
+    /// <summary>速さを優先する（プレビュー用）</summary>
+    Fast,
+}
+
 /// <summary>
 /// デコーダーの設定。MaxWidth・MaxHeight を指定すると、縦横比を保ってその枠に収まる大きさに縮小する（拡大はしない）。
 /// CacheCapacity は覚えておくフレームの数（逆再生や行ったり来たりのシークを速くする）
@@ -22,7 +32,8 @@ public sealed record VideoDecoderOptions(
     int? MaxWidth = null,
     int? MaxHeight = null,
     HardwareDecoding Hardware = HardwareDecoding.Auto,
-    int CacheCapacity = 32);
+    int CacheCapacity = 32,
+    ConversionQuality Quality = ConversionQuality.Accurate);
 
 /// <summary>デコードしたフレーム。Time は素材の先頭からの表示時刻（秒）、Duration は次のフレームまでの長さ</summary>
 public sealed record DecodedFrame(BgraImage Image, Rational Time, Rational? Duration);
@@ -38,6 +49,13 @@ public sealed unsafe class VideoDecoder : IDisposable
 {
     // これより先へ進むときは、デコードを続けるよりシークしたほうが速い
     private static readonly Rational ForwardDecodeLimit = new(2, 1);
+
+    // 前へ進むとき、目的のフレームの手前これだけのフレームは覚えておく。
+    // 複数のスレッドが少しずつ順番を前後して近くのフレームを求めても、戻ってデコードし直さずに済む
+    private const int NearbyFrames = 8;
+
+    // シークした後、目的のフレームのこれだけ手前までは、ほかのフレームが参照しないフレーム（B フレームなど）をデコードしない
+    private const int SkipMarginFrames = 4;
 
     private readonly string _path;
     private readonly VideoDecoderOptions _options;
@@ -61,6 +79,7 @@ public sealed unsafe class VideoDecoder : IDisposable
     private bool _drainStarted;
     private bool _endOfStream;
     private long? _lastRequested;
+    private long? _skipBefore;
 
     private VideoDecoder(string path, VideoDecoderOptions options)
     {
@@ -182,7 +201,9 @@ public sealed unsafe class VideoDecoder : IDisposable
                 return CacheAndConvert(_held, _heldTimestamp, long.MaxValue);
             }
 
-            if (DecodeUntil(target, backward, acceptLateStart: true) is { } continued)
+            // 手前のフレームを覚えるのは、ほぼ順番どおりに求められているとき（遠くへ進むときは変換の手間が無駄になる）
+            var sequential = target - _heldTimestamp <= _nominalFrameDuration * NearbyFrames;
+            if (DecodeUntil(target, backward, acceptLateStart: true, cacheNearby: sequential) is { } continued)
             {
                 return continued;
             }
@@ -194,8 +215,14 @@ public sealed unsafe class VideoDecoder : IDisposable
         for (var attempt = 0; ; attempt++)
         {
             Seek(seekTo);
+
+            // 前へのシークでは、目的のフレームの近くまで参照されないフレームを飛ばして速くする
+            // （後ろへ戻るときは、逆再生のためにすべてのフレームを覚えるので飛ばさない）
+            _skipBefore = backward ? null : target - _nominalFrameDuration * SkipMarginFrames;
             var atStart = seekTo <= _startTimestamp || attempt >= 5;
-            if (DecodeUntil(target, backward, acceptLateStart: atStart) is { } frame)
+            var frame = DecodeUntil(target, backward, acceptLateStart: atStart, cacheNearby: false);
+            _skipBefore = null;
+            if (frame is not null)
             {
                 return frame;
             }
@@ -206,8 +233,9 @@ public sealed unsafe class VideoDecoder : IDisposable
     }
 
     // 目的の時刻を含むフレームまでデコードする。シーク直後の最初のフレームが目的の時刻より後ろで、
-    // acceptLateStart でなければ null を返す（もっと前からシークし直す）
-    private DecodedFrame? DecodeUntil(long target, bool cacheAll, bool acceptLateStart)
+    // acceptLateStart でなければ null を返す（もっと前からシークし直す）。
+    // cacheNearby なら、目的のフレームの少し手前のフレームも覚えておく
+    private DecodedFrame? DecodeUntil(long target, bool cacheAll, bool acceptLateStart, bool cacheNearby)
     {
         while (true)
         {
@@ -249,7 +277,8 @@ public sealed unsafe class VideoDecoder : IDisposable
 
             DecodedFrame? answer = null;
             var contains = _heldTimestamp <= target && target < timestamp;
-            if (contains || cacheAll)
+            var nearby = cacheNearby && _heldTimestamp < target && target - _heldTimestamp <= _nominalFrameDuration * NearbyFrames;
+            if (contains || cacheAll || nearby)
             {
                 var converted = CacheAndConvert(_held, _heldTimestamp, timestamp);
                 if (contains)
@@ -305,6 +334,9 @@ public sealed unsafe class VideoDecoder : IDisposable
 
             if (_packet->stream_index == _streamIndex)
             {
+                _codec->skip_frame = _skipBefore is { } limit && _packet->pts != ffmpeg.AV_NOPTS_VALUE && _packet->pts < limit
+                    ? AVDiscard.AVDISCARD_NONREF
+                    : AVDiscard.AVDISCARD_DEFAULT;
                 var sent = ffmpeg.avcodec_send_packet(_codec, _packet);
                 if (sent < 0 && sent != FfmpegErrors.TryAgain)
                 {
@@ -412,7 +444,9 @@ public sealed unsafe class VideoDecoder : IDisposable
             _scaler,
             source->width, source->height, format,
             OutputWidth, OutputHeight, AVPixelFormat.AV_PIX_FMT_BGRA,
-            (int)(SwsFlags.SWS_BILINEAR | SwsFlags.SWS_ACCURATE_RND | SwsFlags.SWS_FULL_CHR_H_INT),
+            (int)(_options.Quality == ConversionQuality.Accurate
+                ? SwsFlags.SWS_BILINEAR | SwsFlags.SWS_ACCURATE_RND | SwsFlags.SWS_FULL_CHR_H_INT
+                : SwsFlags.SWS_BILINEAR),
             null, null, null);
         if (_scaler is null)
         {

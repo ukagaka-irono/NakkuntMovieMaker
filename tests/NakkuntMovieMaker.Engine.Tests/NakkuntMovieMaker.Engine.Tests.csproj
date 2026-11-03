@@ -2,4 +2,11 @@
   <ItemGroup>
     <ProjectReference Include="../../src/NakkuntMovieMaker.Engine/NakkuntMovieMaker.Engine.csproj" />
   </ItemGroup>
+
+  <!-- Media のテスト用の素材を使い回す -->
+  <ItemGroup>
+    <None Include="../NakkuntMovieMaker.Media.Tests/Fixtures/frames-2997.mp4;../NakkuntMovieMaker.Media.Tests/Fixtures/green-64x48.png"
+          Link="Fixtures/%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
