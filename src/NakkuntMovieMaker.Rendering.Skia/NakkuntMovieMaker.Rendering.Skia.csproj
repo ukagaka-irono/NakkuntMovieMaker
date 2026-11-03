@@ -10,5 +10,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../NakkuntMovieMaker.Rendering/NakkuntMovieMaker.Rendering.csproj" />
+    <ProjectReference Include="../NakkuntMovieMaker.Text/NakkuntMovieMaker.Text.csproj" />
   </ItemGroup>
 </Project>

@@ -15,5 +15,28 @@
         "libDir": "lib"
       }
     }
+  },
+  "fonts": {
+    "name": "BIZ UDPGothic",
+    "license": "OFL-1.1",
+    "source": "https://github.com/google/fonts/tree/6ce172f74aa355ea43eb964fa4a91570a4d3064d/ofl/bizudpgothic",
+    "files": [
+      {
+        "url": "https://raw.githubusercontent.com/google/fonts/6ce172f74aa355ea43eb964fa4a91570a4d3064d/ofl/bizudpgothic/BIZUDPGothic-Regular.ttf",
+        "sha256": "258d7156c165f2ff774b6efee637c22c3b950de0d8a10e501137061bc8085d01",
+        "dir": "fonts"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/google/fonts/6ce172f74aa355ea43eb964fa4a91570a4d3064d/ofl/bizudpgothic/BIZUDPGothic-Bold.ttf",
+        "sha256": "30eba52fc837e8b62c97d4b82e6706583149fb7294e3712dd71a655eaea80a90",
+        "dir": "fonts"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/google/fonts/6ce172f74aa355ea43eb964fa4a91570a4d3064d/ofl/bizudpgothic/OFL.txt",
+        "sha256": "e753d7155d53c747d037a445e584c8ecfca6dd79846db610417e282a736b28bc",
+        "dir": "licenses",
+        "name": "BIZUDPGothic-OFL.txt"
+      }
+    ]
   }
 }

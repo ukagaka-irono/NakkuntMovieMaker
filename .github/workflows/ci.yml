@@ -46,3 +46,4 @@ jobs:
           # macOS 用の LGPL 版 FFmpeg はまだ用意していないので、macOS だけは必須にしない
           NMM_REQUIRE_FFMPEG: ${{ runner.os != 'macOS' && '1' || '0' }}
           NMM_REQUIRE_NMM_AUDIO: '1'
+          NMM_REQUIRE_FONTS: '1'

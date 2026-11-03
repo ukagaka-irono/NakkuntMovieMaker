@@ -34,13 +34,8 @@ public class SkiaCpuBackendTests
         return _backend.Render(TimelineEvaluator.Evaluate(scene, frame, background), _media, scale, TestContext.Current.CancellationToken);
     }
 
-    private static void AssertPixel(BgraImage image, int x, int y, (int R, int G, int B, int A) expected, int tolerance = 1)
-    {
-        var (b, g, r, a) = image.GetPixel(x, y);
-        var ok = Math.Abs(r - expected.R) <= tolerance && Math.Abs(g - expected.G) <= tolerance
-            && Math.Abs(b - expected.B) <= tolerance && Math.Abs(a - expected.A) <= tolerance;
-        Assert.True(ok, $"({x}, {y}) の色: 期待 {expected}、実際 ({r}, {g}, {b}, {a})");
-    }
+    private static void AssertPixel(BgraImage image, int x, int y, (int R, int G, int B, int A) expected, int tolerance = 1) =>
+        Pixels.AssertColor(image, x, y, expected, tolerance);
 
     [Fact]
     public void FillsTheBackground()
