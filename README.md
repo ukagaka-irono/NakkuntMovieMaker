@@ -9,6 +9,7 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 ## 目次
 
 - [動作環境](#動作環境)
+  - [基準となる環境](#基準となる環境)
 - [主な機能](#主な機能)
 - [機能一覧](#機能一覧)
   - [編集](#編集)
@@ -43,13 +44,25 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 | フレームワーク | .NET 10.0 |
 | GPU（Windows・Linux） | Vulkan 1.2 以上に対応した GPU（NVIDIA GeForce GTX 900 以降・AMD Radeon RX 400 以降・Intel 第 6 世代 Core の内蔵 GPU 以降・Intel Arc） |
 | GPU（macOS） | Apple Silicon（M1 以降・Metal 3） |
-| VRAM | 4GB 以上を推奨 |
+| VRAM | 内蔵 GPU（メインメモリと共有）でも動作。専用の VRAM を持つ GPU では 4GB 以上を推奨 |
 
 基本的には LTS 版の .NET を使用しますが、将来的に LTS 版以外の .NET を使用する可能性があります。
 
 上の表より古い GPU（GeForce GTX 700 以前・Radeon HD シリーズなど）や GPU がない環境では、CPU だけで処理します。
 
-AI の機能は、NVIDIA GPU（CUDA）と Apple Silicon（Core ML）では GPU で処理し、それ以外の環境では CPU で処理します（処理に時間がかかります）。
+AI の機能は、NVIDIA GPU（CUDA）、Intel GPU（OpenVINO。内蔵 GPU・Arc）、Apple Silicon（Core ML）では GPU で処理し、それ以外の環境では CPU で処理します（処理に時間がかかります）。
+
+### 基準となる環境
+
+このソフトは、開発者の PC で実用的に快適に動くことを前提に開発します。
+
+| 項目 | 内容 |
+| --- | --- |
+| CPU | Intel Core i5-1145G7（4 コア 8 スレッド） |
+| GPU | Intel Iris Xe Graphics（内蔵 GPU） |
+| メモリ | 16GB |
+| ストレージ | SSD 256GB |
+| OS | Windows 11 Pro |
 
 ## 主な機能
 
