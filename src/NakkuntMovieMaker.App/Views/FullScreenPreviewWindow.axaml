@@ -1,0 +1,12 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
+        xmlns:controls="using:NakkuntMovieMaker.App.Controls"
+        x:Class="NakkuntMovieMaker.App.Views.FullScreenPreviewWindow"
+        x:DataType="vm:PreviewViewModel"
+        Title="全画面プレビュー"
+        WindowState="FullScreen"
+        Background="{DynamicResource PreviewBackgroundBrush}">
+  <!-- 操作は元のウィンドウのプレビューが行う。ここは表示だけ（Esc か F11 で閉じる。Space で再生・停止） -->
+  <controls:PreviewSurface ViewModel="{Binding}" Interactive="False" />
+</Window>

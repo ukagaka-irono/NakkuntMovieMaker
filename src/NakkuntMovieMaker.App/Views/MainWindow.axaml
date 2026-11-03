@@ -39,8 +39,22 @@
         <MenuItem Header="{Binding UndoHeader}" Command="{Binding UndoCommand}" Tag="edit.undo" />
         <MenuItem Header="{Binding RedoHeader}" Command="{Binding RedoCommand}" Tag="edit.redo" />
       </MenuItem>
-      <MenuItem x:Name="ViewMenu" Header="表示(_V)" />
-      <MenuItem x:Name="PlayMenu" Header="再生(_P)" />
+      <MenuItem x:Name="ViewMenu" Header="表示(_V)">
+        <MenuItem Header="全画面プレビュー" Command="{Binding Preview.ToggleFullScreenCommand}" Tag="view.fullScreenPreview" />
+        <MenuItem Header="グリッド" ToggleType="CheckBox" IsChecked="{Binding Preview.ShowGrid}" />
+        <MenuItem Header="セーフエリア" ToggleType="CheckBox" IsChecked="{Binding Preview.ShowSafeArea}" />
+      </MenuItem>
+      <MenuItem x:Name="PlayMenu" Header="再生(_P)">
+        <MenuItem Header="再生・停止" Command="{Binding Preview.TogglePlayCommand}" Tag="play.toggle" />
+        <MenuItem Header="逆方向に再生" Command="{Binding Preview.BackwardCommand}" Tag="play.backward" />
+        <MenuItem Header="停止" Command="{Binding Preview.StopCommand}" Tag="play.pause" />
+        <MenuItem Header="再生・速める" Command="{Binding Preview.ForwardCommand}" Tag="play.forward" />
+        <Separator />
+        <MenuItem Header="1 フレーム戻る" Command="{Binding Preview.PreviousFrameCommand}" Tag="play.previousFrame" />
+        <MenuItem Header="1 フレーム進む" Command="{Binding Preview.NextFrameCommand}" Tag="play.nextFrame" />
+        <MenuItem Header="先頭へ" Command="{Binding Preview.GoToStartCommand}" Tag="play.start" />
+        <MenuItem Header="末尾へ" Command="{Binding Preview.GoToEndCommand}" Tag="play.end" />
+      </MenuItem>
       <MenuItem x:Name="ToolsMenu" Header="ツール(_T)" />
     </Menu>
 
@@ -58,7 +72,7 @@
       </Border>
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
       <Border x:Name="CenterPanel" Grid.Column="2" Classes="panel">
-        <TextBlock Classes="empty-hint" Text="プレビュー" />
+        <views:PreviewView DataContext="{Binding Preview}" />
       </Border>
       <GridSplitter Grid.Column="3" ResizeDirection="Columns" Background="Transparent" />
       <Border x:Name="RightPanel" Grid.Column="4" Classes="panel">

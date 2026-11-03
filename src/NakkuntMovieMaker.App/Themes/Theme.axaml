@@ -79,6 +79,21 @@
   <Thickness x:Key="DialogPadding">16</Thickness>
   <CornerRadius x:Key="PanelCornerRadius">4</CornerRadius>
 
+  <!-- アイコン（16×16 の枠で描く図形） -->
+  <StreamGeometry x:Key="IconPlay">M4,2 L14,8 L4,14 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconPause">M3,2 H7 V14 H3 Z M9,2 H13 V14 H9 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconToStart">M2,2 H4 V14 H2 Z M14,2 L5,8 L14,14 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconToEnd">M12,2 H14 V14 H12 Z M2,2 L11,8 L2,14 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconStepBack">M3,3 H5 V13 H3 Z M13,3 L6,8 L13,13 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconStepForward">M11,3 H13 V13 H11 Z M3,3 L10,8 L3,13 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconRewind">M8,3 L1,8 L8,13 Z M15,3 L8,8 L15,13 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconFastForward">M1,3 L8,8 L1,13 Z M8,3 L15,8 L8,13 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconGrid">M1,1 H15 V15 H1 Z M2,2 V14 H14 V2 Z M5.5,2 H6.5 V14 H5.5 Z M9.5,2 H10.5 V14 H9.5 Z M2,5.5 H14 V6.5 H2 Z M2,9.5 H14 V10.5 H2 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconSafeArea">M1,2 H15 V14 H1 Z M2,3 V13 H14 V3 Z M4,5 H12 V11 H4 Z M5,6 V10 H11 V6 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconFullScreen">M1,1 H6 V3 H3 V6 H1 Z M10,1 H15 V6 H13 V3 H10 Z M1,10 H3 V13 H6 V15 H1 Z M13,10 H15 V15 H10 V13 H13 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconRecord">M8,2 A6,6 0 1 1 7.99,2 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconMagnet">M2,2 H6 V9 A2,2 0 0 0 10,9 V2 H14 V9 A6,6 0 0 1 2,9 Z</StreamGeometry>
+
   <x:Double x:Key="SmallFontSize">11</x:Double>
   <x:Double x:Key="BodyFontSize">13</x:Double>
   <x:Double x:Key="HeadingFontSize">15</x:Double>

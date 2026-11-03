@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
+             xmlns:controls="using:NakkuntMovieMaker.App.Controls"
+             x:Class="NakkuntMovieMaker.App.Views.PreviewView"
+             x:DataType="vm:PreviewViewModel">
+  <DockPanel>
+    <!-- 再生の操作 -->
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto,*" Margin="0,8,0,0">
+      <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space2}" VerticalAlignment="Center">
+        <TextBlock Text="{Binding Timecode}" FontFamily="monospace" VerticalAlignment="Center" />
+        <TextBlock Classes="secondary" Text="{Binding SpeedText}" VerticalAlignment="Center" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource Space1}">
+        <Button Classes="toolbar" Command="{Binding GoToStartCommand}" ToolTip.Tip="先頭へ（Home）"><PathIcon Data="{StaticResource IconToStart}" /></Button>
+        <Button Classes="toolbar" Command="{Binding PreviousFrameCommand}" ToolTip.Tip="1 フレーム戻る（←）"><PathIcon Data="{StaticResource IconStepBack}" /></Button>
+        <Button Classes="toolbar" Command="{Binding BackwardCommand}" ToolTip.Tip="逆方向に再生（J）"><PathIcon Data="{StaticResource IconRewind}" /></Button>
+        <Button Classes="toolbar" Command="{Binding TogglePlayCommand}" ToolTip.Tip="再生・停止（Space）" MinWidth="48">
+          <Panel>
+            <PathIcon Data="{StaticResource IconPlay}" IsVisible="{Binding !IsPlaying}" />
+            <PathIcon Data="{StaticResource IconPause}" IsVisible="{Binding IsPlaying}" />
+          </Panel>
+        </Button>
+        <Button Classes="toolbar" Command="{Binding ForwardCommand}" ToolTip.Tip="再生・速める（L）"><PathIcon Data="{StaticResource IconFastForward}" /></Button>
+        <Button Classes="toolbar" Command="{Binding NextFrameCommand}" ToolTip.Tip="1 フレーム進む（→）"><PathIcon Data="{StaticResource IconStepForward}" /></Button>
+        <Button Classes="toolbar" Command="{Binding GoToEndCommand}" ToolTip.Tip="末尾へ（End）"><PathIcon Data="{StaticResource IconToEnd}" /></Button>
+      </StackPanel>
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="{StaticResource Space1}" HorizontalAlignment="Right">
+        <ComboBox ItemsSource="{x:Static vm:PreviewViewModel.ScaleChoices}" SelectedItem="{Binding ScaleChoice}" ToolTip.Tip="プレビューの解像度" />
+        <ToggleButton Classes="toolbar" IsChecked="{Binding ShowGrid}" ToolTip.Tip="グリッド（三分割）"><PathIcon Data="{StaticResource IconGrid}" /></ToggleButton>
+        <ToggleButton Classes="toolbar" IsChecked="{Binding ShowSafeArea}" ToolTip.Tip="セーフエリア"><PathIcon Data="{StaticResource IconSafeArea}" /></ToggleButton>
+        <Button Classes="toolbar" Command="{Binding ToggleFullScreenCommand}" ToolTip.Tip="全画面プレビュー（F11）"><PathIcon Data="{StaticResource IconFullScreen}" /></Button>
+      </StackPanel>
+    </Grid>
+    <controls:PreviewSurface x:Name="Surface" ViewModel="{Binding}" ClipToBounds="True" />
+  </DockPanel>
+</UserControl>

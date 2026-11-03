@@ -18,6 +18,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Shortcuts = shortcuts;
         _dialogs = dialogs;
         MediaPool = new MediaPoolViewModel(session, dialogs);
+        Preview = new PreviewViewModel(session);
         session.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(EditorSession.Title))
@@ -40,6 +41,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         shortcuts.Bind("file.projectSettings", ProjectSettingsCommand);
         shortcuts.Bind("edit.undo", UndoCommand);
         shortcuts.Bind("edit.redo", RedoCommand);
+        shortcuts.Bind("play.toggle", Preview.TogglePlayCommand);
+        shortcuts.Bind("play.backward", Preview.BackwardCommand);
+        shortcuts.Bind("play.pause", Preview.StopCommand);
+        shortcuts.Bind("play.forward", Preview.ForwardCommand);
+        shortcuts.Bind("play.previousFrame", Preview.PreviousFrameCommand);
+        shortcuts.Bind("play.nextFrame", Preview.NextFrameCommand);
+        shortcuts.Bind("play.start", Preview.GoToStartCommand);
+        shortcuts.Bind("play.end", Preview.GoToEndCommand);
+        shortcuts.Bind("view.fullScreenPreview", Preview.ToggleFullScreenCommand);
     }
 
     public EditorSession Session { get; }
@@ -49,6 +59,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public IDialogService Dialogs => _dialogs;
 
     public MediaPoolViewModel MediaPool { get; }
+
+    public PreviewViewModel Preview { get; }
 
     public string Title => Session.Title;
 

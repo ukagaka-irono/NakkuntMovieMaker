@@ -67,11 +67,17 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
 
     public bool IsUntitled => EntryPath is null;
 
+    /// <summary>閉じた（Dispose した）後なら true</summary>
+    public bool IsClosed => _workspace is null;
+
     public ProjectMediaSource Media => _workspace!.Media;
 
     public MediaCache Cache => _workspace!.Cache;
 
     public FrameScheduler Frames => _workspace!.Frames;
+
+    /// <summary>プレビューの描画（素材の大きさを測るのにも使う）</summary>
+    public SkiaCpuBackend Backend => _workspace!.Backend;
 
     public PlaybackController Playback => _workspace!.Playback;
 
@@ -353,7 +359,7 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
             Cache = new MediaCache(Path.Combine(folder, ".nmm", "cache"));
             Media = new ProjectMediaSource(project, folder, Cache);
             var timeline = new TimelineContext(project.Characters, new TachieLoader(folder), new ProjectLipSync(Media));
-            Frames = new FrameScheduler(session.Scene, new SkiaCpuBackend(), Media, timeline: timeline) { Scale = session.Settings.PreviewScale };
+            Frames = new FrameScheduler(session.Scene, Backend, Media, timeline: timeline) { Scale = session.Settings.PreviewScale };
             _connection = Frames.Connect(session.Document, session.SceneId);
             Playback = new PlaybackController(
                 session.Scene,
@@ -366,6 +372,8 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
         }
 
         public MediaCache Cache { get; }
+
+        public SkiaCpuBackend Backend { get; } = new();
 
         public ProjectMediaSource Media { get; }
 

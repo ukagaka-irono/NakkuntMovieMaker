@@ -5,13 +5,12 @@
              x:DataType="vm:MediaPoolViewModel"
              DragDrop.AllowDrop="True">
   <DockPanel>
-    <DockPanel DockPanel.Dock="Top">
-      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="{StaticResource Space1}">
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+      <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space1}">
         <Button Classes="toolbar" Content="追加" Command="{Binding ImportCommand}" ToolTip.Tip="動画・画像・音声のファイルを素材に加えます（ファイルをここにドロップしても加えられます）" />
         <Button Classes="toolbar" Content="リンク切れを探す" Command="{Binding SearchMissingCommand}" IsVisible="{Binding HasMissing}"
                 ToolTip.Tip="見つからない素材を、選んだフォルダの中から同じ名前で探します" />
       </StackPanel>
-      <TextBlock Classes="panel-header" Text="素材" />
     </DockPanel>
 
     <Grid>

@@ -250,4 +250,22 @@ public class SkiaCpuBackendTests
     {
         Golden.AssertMatches(Render(Composition(), new RgbaColor(40, 40, 48), scale: 0.5), "composition-half");
     }
+
+    [Fact]
+    public void MeasuresContentAfterCropping()
+    {
+        Fonts.RequireOrSkip();
+        var backend = new SkiaCpuBackend();
+        // 縮小して読んだ画像でも、元の大きさで測る
+        var image = _media.AddImage(new SourceImage(new BgraImage(10, 5, new byte[200]), 400, 200));
+        var shape = new ShapeStyle(ShapeKind.Rectangle, 120, 80, new SolidPaint(RgbaColor.White));
+
+        DrawNode Node(DrawContent content, Crop? crop = null) => new(null, content, crop ?? Crop.None, System.Numerics.Matrix3x2.Identity, 1, BlendMode.Normal);
+
+        Assert.Equal((400f, 200f), backend.MeasureContent(Node(new ImageContent(image), new Crop(10, 20, 30, 40)), _media, 1920, 1080) is var (w, h) ? (w + 40, h + 60) : default);
+        Assert.Equal((120f, 80f), backend.MeasureContent(Node(new ShapeContent(shape)), _media, 1920, 1080));
+        Assert.Equal((1920f, 1080f), backend.MeasureContent(Node(new ShapeContent(shape with { Kind = ShapeKind.Background })), _media, 1920, 1080));
+        Assert.True(backend.MeasureContent(Node(new TextContent("あいう", TextStyle.Default)), _media, 1920, 1080) is ({ } textWidth, { } textHeight) && textWidth > 100 && textHeight > 50);
+        Assert.Null(backend.MeasureContent(Node(new ImageContent(AssetId.New())), _media, 1920, 1080));
+    }
 }
