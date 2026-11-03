@@ -131,8 +131,9 @@ public sealed class Recorder : IDisposable
             {
                 Drain();
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
+                // 書き込みや入力デバイスの失敗でアプリを止めない（Stop で知らせる）
                 _error = ex;
                 return;
             }

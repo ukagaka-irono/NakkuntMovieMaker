@@ -54,7 +54,9 @@ public sealed partial class RecordingViewModel : ObservableObject, IDisposable
                 RecordLineCommand.NotifyCanExecuteChanged();
             }
         };
-        RefreshDevices();
+        Devices.Add(new InputDeviceChoice(null, "既定のデバイス"));
+        Device = Devices[0];
+        _ = LoadDevicesAsync();
     }
 
     public ObservableCollection<InputDeviceChoice> Devices { get; } = [];
@@ -90,21 +92,31 @@ public sealed partial class RecordingViewModel : ObservableObject, IDisposable
     /// <summary>セリフごとの収録で録るセリフ</summary>
     public string LineLabel => SelectedLine() is { } line ? $"「{line.Text}」" : "（セリフを選んでください）";
 
+    /// <summary>入力デバイスを調べ終えるまで待つ（テスト用）</summary>
+    public Task DevicesReady { get; private set; } = Task.CompletedTask;
+
     [RelayCommand]
-    private void RefreshDevices()
+    private Task RefreshDevicesAsync() => DevicesReady = LoadDevicesAsync();
+
+    // 入力デバイスの一覧（調べるのに時間がかかることがあるので裏で調べる）
+    private async Task LoadDevicesAsync()
     {
-        Devices.Clear();
-        Devices.Add(new InputDeviceChoice(null, "既定のデバイス"));
+        IReadOnlyList<AudioDevice> devices;
         try
         {
-            foreach (var device in AudioDevices.List(capture: true))
-            {
-                Devices.Add(new InputDeviceChoice(device.Name, device.Name));
-            }
+            devices = await Task.Run(() => AudioDevices.List(capture: true));
         }
         catch (Exception ex) when (ex is AudioDeviceException or DllNotFoundException or EntryPointNotFoundException)
         {
             Status = $"入力デバイスを調べられません：{ex.Message}";
+            devices = [];
+        }
+
+        Devices.Clear();
+        Devices.Add(new InputDeviceChoice(null, "既定のデバイス"));
+        foreach (var device in devices)
+        {
+            Devices.Add(new InputDeviceChoice(device.Name, device.Name));
         }
 
         Device = Devices.FirstOrDefault(choice => choice.Name == _session.Settings.InputDevice) ?? Devices[0];

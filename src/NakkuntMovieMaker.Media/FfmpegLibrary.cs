@@ -47,6 +47,9 @@ public static class FfmpegLibrary
                 DynamicallyLoadedBindings.LibrariesPath = directory;
                 DynamicallyLoadedBindings.Initialize();
 
+                // 進み具合などの情報は出さず、エラーだけを標準エラーに出す
+                ffmpeg.av_log_set_level(ffmpeg.AV_LOG_ERROR);
+
                 _info = new FfmpegInfo(
                     ffmpeg.av_version_info(),
                     FormatVersion(ffmpeg.avcodec_version()),

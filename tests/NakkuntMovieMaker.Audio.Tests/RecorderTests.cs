@@ -128,9 +128,10 @@ public sealed class RecorderTests : IDisposable
 
         public int Read(Span<float> destination)
         {
-            // 遅れの分を引いて、届いたまとまりの分だけ読める
+            // 遅れの分を引いて、届いたまとまりの分だけ読める（periodFrames が 0 なら、すぐに届く）
             var arrived = (long)((time.Elapsed.TotalSeconds - StartedAt) * SampleRate) - latencyFrames;
-            var available = Math.Max(0, arrived / periodFrames * periodFrames) - _read;
+            var delivered = periodFrames > 0 ? arrived / periodFrames * periodFrames : arrived;
+            var available = Math.Max(0, delivered) - _read;
             var count = (int)Math.Clamp(available, 0, destination.Length);
             for (var i = 0; i < count; i++)
             {

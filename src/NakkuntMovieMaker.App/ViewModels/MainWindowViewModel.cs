@@ -35,11 +35,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         MediaPool = new MediaPoolViewModel(session, dialogs);
         Preview = new PreviewViewModel(session);
         Timeline = new TimelineViewModel(session, dialogs);
-        Properties = new PropertiesViewModel(session, dialogs);
+        var fonts = PropertiesViewModel.SystemFonts();
+        Properties = new PropertiesViewModel(session, dialogs, fonts);
         VoicePlayer = new VoicePlayer(session.DisableAudioDevice, () => session.Settings.OutputDevice);
         Dialogue = new DialogueViewModel(session, dialogs, VoicePlayer);
         Recording = new RecordingViewModel(session, dialogs, Preview, openInput);
-        Characters = new CharactersViewModel(session, dialogs, VoicePlayer, PropertiesViewModel.SystemFonts());
+        Characters = new CharactersViewModel(session, dialogs, VoicePlayer, fonts);
         session.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(EditorSession.Title))

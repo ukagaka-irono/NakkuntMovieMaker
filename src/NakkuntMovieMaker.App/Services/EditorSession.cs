@@ -30,17 +30,29 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
 
     /// <param name="settingsPath">閉じるときに設定を書く場所（省略すると利用者の設定ファイル）</param>
     /// <param name="voiceEngines">音声合成エンジンの一覧を作る（テスト用。省略すると組み込みのエンジン）</param>
-    public EditorSession(AppSettings settings, bool disableAudioDevice = false, string? settingsPath = null, Func<VoiceEngineRegistry>? voiceEngines = null)
+    /// <param name="openPath">最初に開くプロジェクト（開けなければ新しいプロジェクトにする）</param>
+    public EditorSession(
+        AppSettings settings, bool disableAudioDevice = false, string? settingsPath = null, Func<VoiceEngineRegistry>? voiceEngines = null, string? openPath = null)
     {
         _settings = settings;
         _voiceEngines = voiceEngines;
         _settingsPath = settingsPath ?? AppSettings.DefaultPath;
         DisableAudioDevice = disableAudioDevice;
-        var project = Project.CreateNew("新しいプロジェクト", SceneFormat.Landscape1080p30);
-        Document = new ProjectDocument(project);
-        ProjectFolder = CreateUntitledFolder();
-        _untitledFolder = ProjectFolder;
-        SceneId = project.RootScene;
+        if (openPath is not null && TryLoad(openPath) is { } opened)
+        {
+            Document = new ProjectDocument(opened);
+            EntryPath = Path.GetFullPath(openPath);
+            ProjectFolder = Path.GetDirectoryName(EntryPath)!;
+            settings.AddRecent(EntryPath);
+        }
+        else
+        {
+            Document = new ProjectDocument(Project.CreateNew("新しいプロジェクト", SceneFormat.Landscape1080p30));
+            ProjectFolder = CreateUntitledFolder();
+            _untitledFolder = ProjectFolder;
+        }
+
+        SceneId = Document.Current.RootScene;
         Attach();
     }
 
@@ -255,6 +267,18 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
         _workspace = null;
         DeleteUntitled(_untitledFolder);
         _settings.Save(_settingsPath);
+    }
+
+    private Project? TryLoad(string path)
+    {
+        try
+        {
+            return _store.Load(Path.GetFullPath(path));
+        }
+        catch (Exception ex) when (ex is ProjectFormatException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private void Replace(ProjectDocument document, string folder, string? entryPath)

@@ -12,7 +12,7 @@ public sealed record RenderedFrame(long Frame, BgraImage Image, FramePlan Plan);
 /// FrameScheduler の設定。Workers は並列に描くスレッドの数、CacheBytes は描いたフレームを覚えておく大きさ、
 /// Background はシーンの背景の色
 /// </summary>
-public sealed record FrameSchedulerOptions(int Workers = 3, long CacheBytes = 1L << 30, RgbaColor? Background = null)
+public sealed record FrameSchedulerOptions(int Workers = 3, long CacheBytes = 512L << 20, RgbaColor? Background = null)
 {
     /// <summary>CPU のコア数に合わせた既定の設定（描くスレッドは 1〜3 個。デコードや画面のためにコアを残す）</summary>
     public static FrameSchedulerOptions Default { get; } = new(Math.Clamp(Environment.ProcessorCount / 2 - 1, 1, 3));

@@ -22,20 +22,10 @@ public partial class App : Application
             var shortcuts = new ShortcutRegistry();
             shortcuts.Load(settings.Shortcuts);
             var window = new MainWindow();
-            var session = new EditorSession(settings);
+            // 起動時の引数にプロジェクトがあれば、それを開く
+            var path = desktop.Args is [var argument, ..] && File.Exists(argument) ? argument : null;
+            var session = new EditorSession(settings, openPath: path);
             window.DataContext = new MainWindowViewModel(session, shortcuts, new WindowDialogService(window));
-
-            // 起動時の引数にプロジェクトがあれば開く
-            if (desktop.Args is [var path, ..] && File.Exists(path))
-            {
-                try
-                {
-                    session.Open(path);
-                }
-                catch (Exception ex) when (ex is Core.Serialization.ProjectFormatException or IOException or UnauthorizedAccessException)
-                {
-                }
-            }
 
             desktop.MainWindow = window;
         }

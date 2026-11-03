@@ -29,6 +29,8 @@ public sealed class TimelineControl : Control
     private static readonly string[] ToggleLabels = ["V", "L", "M", "S"];
     private static readonly string[] ToggleTips = ["表示", "ロック", "ミュート", "ソロ"];
 
+    private readonly Dictionary<string, IBrush> _brushes = [];
+    private readonly Dictionary<(string Text, double Size, IBrush Brush), FormattedText> _texts = [];
     private TimelineViewModel? _attached;
     private DragKind _drag;
     private Point _pressPoint;
@@ -49,6 +51,13 @@ public sealed class TimelineControl : Control
     public TimelineControl()
     {
         DragDrop.SetAllowDrop(this, true);
+        ActualThemeVariantChanged += (_, _) =>
+        {
+            // テーマが変わったら、色を読み直す
+            _brushes.Clear();
+            _texts.Clear();
+            InvalidateVisual();
+        };
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDrop);
     }
@@ -94,6 +103,7 @@ public sealed class TimelineControl : Control
         {
             UpdateViewport();
         }
+
     }
 
     public override void Render(DrawingContext context)
@@ -530,7 +540,7 @@ public sealed class TimelineControl : Control
                     DrawWaveform(context, vm, item, audio, rect);
                 }
 
-                var title = new FormattedText(vm.Label(item), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Typeface.Default, 11, label);
+                var title = Text(vm.Label(item), 11, label);
                 context.DrawText(title, new Point(Math.Max(textLeft, area.Left + 4), rect.Y + 3));
 
                 // トランジション（先頭の三角）とグループ（右上の点）
@@ -627,7 +637,7 @@ public sealed class TimelineControl : Control
                 // 表示はオンが普通なので、オフのときに目立たせる
                 var active = i == 0 ? !states[i] : states[i];
                 context.DrawRectangle(active ? on : null, grid, box, 3, 3);
-                var glyph = new FormattedText(ToggleLabels[i], CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, 10, active ? Brushes.Black : secondary);
+                var glyph = Text(ToggleLabels[i], 10, active ? Brushes.Black : secondary, CultureInfo.InvariantCulture);
                 context.DrawText(glyph, new Point(box.X + (box.Width - glyph.Width) / 2, box.Y + (box.Height - glyph.Height) / 2));
             }
 
@@ -656,7 +666,7 @@ public sealed class TimelineControl : Control
                 context.DrawLine(tick, new Point(x, TimelineViewModel.RulerHeight - (major ? 10 : 4)), new Point(x, TimelineViewModel.RulerHeight));
                 if (major)
                 {
-                    var label = new FormattedText(RulerLabel(frame, fps, step < rate), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, 10, text);
+                    var label = Text(RulerLabel(frame, fps, step < rate), 10, text, CultureInfo.InvariantCulture);
                     context.DrawText(label, new Point(x + 3, 3));
                 }
             }
@@ -813,7 +823,36 @@ public sealed class TimelineControl : Control
     private Color ResourceColor(string key) =>
         this.TryFindResource(key, ActualThemeVariant, out var value) && value is Color color ? color : Colors.Gray;
 
-    private IBrush Brush(string key) => new SolidColorBrush(ResourceColor(key));
+    // 色のブラシは、テーマが変わるまで使い回す
+    private IBrush Brush(string key)
+    {
+        if (!_brushes.TryGetValue(key, out var brush))
+        {
+            brush = new SolidColorBrush(ResourceColor(key));
+            _brushes[key] = brush;
+        }
+
+        return brush;
+    }
+
+    // 文字の配置は時間がかかるので、同じ文字・大きさ・色のものを使い回す（増えすぎたら捨てる）
+    private FormattedText Text(string text, double size, IBrush brush, CultureInfo? culture = null)
+    {
+        var key = (text, size, brush);
+        if (!_texts.TryGetValue(key, out var formatted))
+        {
+            if (_texts.Count > 4000)
+            {
+                _texts.Clear();
+            }
+
+            formatted = new FormattedText(text, culture ?? CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Typeface.Default, size, brush);
+            _texts[key] = formatted;
+        }
+
+        return formatted;
+    }
+
 
     private void UpdateViewport()
     {

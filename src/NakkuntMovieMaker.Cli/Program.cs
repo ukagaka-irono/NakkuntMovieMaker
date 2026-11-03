@@ -63,9 +63,11 @@ internal static class Program
         var folderOption = new Option<DirectoryInfo?>("--folder") { Description = "素材とキャッシュを置く作業フォルダ（省略すると一時フォルダ）" };
         var onlyOption = new Option<string[]>("--only")
         {
-            Description = $"測る場面だけを指定する（{string.Join("・", RenderBenchmark.Scenarios.Select(scenario => scenario.Name))}・seek）",
+            Description = $"測る場面だけを指定する（{string.Join("・", RenderBenchmark.Scenarios.Select(scenario => scenario.Name))}・seek。--project のときは playback・export・voice・recording）",
             AllowMultipleArgumentsPerToken = true,
         };
+        var projectOption = new Option<FileInfo?>("--project") { Description = "このプロジェクトで、再生・書き出し・声の合成・録音の速さを測る" };
+        var repeatOption = new Option<int>("--repeat") { Description = "書き出しを測るとき、シーンを何回つなげるか（10 秒のシーンを 60 回で 10 分）", DefaultValueFactory = _ => 60 };
 
         var command = new Command("bench", "描画の速さを測る（1080p・30fps・8 レイヤーのシーン）");
         command.Options.Add(videoOption);
@@ -73,8 +75,16 @@ internal static class Program
         command.Options.Add(workersOption);
         command.Options.Add(folderOption);
         command.Options.Add(onlyOption);
+        command.Options.Add(projectOption);
+        command.Options.Add(repeatOption);
         command.SetAction(parseResult =>
         {
+            if (parseResult.GetValue(projectOption) is { } project)
+            {
+                var selectedNames = parseResult.GetValue(onlyOption) is { Length: > 0 } selected ? selected.ToHashSet(StringComparer.Ordinal) : null;
+                return RunProjectBench(project, Math.Max(1, parseResult.GetValue(repeatOption)), selectedNames);
+            }
+
             var folder = parseResult.GetValue(folderOption)?.FullName ?? Path.Combine(Path.GetTempPath(), "nmm-bench");
             var video = parseResult.GetValue(videoOption);
             if (video is { Exists: false })
@@ -108,6 +118,64 @@ internal static class Program
             return 0;
         });
         return command;
+    }
+
+    // プロジェクトを使った測定（I-39）：再生のドロップ、長い書き出しの速さ、セリフの合成、録音を止めてから置くまで
+    private static int RunProjectBench(FileInfo entry, int repeat, HashSet<string>? only)
+    {
+        bool Selected(string name) => only is null || only.Contains(name);
+        var project = new Core.Serialization.ProjectStore().Load(entry.FullName);
+        var folder = entry.DirectoryName!;
+        var benchmark = new ProjectBenchmark(project, folder);
+        Console.WriteLine($"{project.Name}（{project.Root.Duration} フレーム）、CPU の論理コア数 {Environment.ProcessorCount}");
+
+        foreach (var (name, scale) in new[] { ("playback-half", 0.5), ("playback-full", 1.0) })
+        {
+            if (Selected("playback") || Selected(name))
+            {
+                var result = benchmark.MeasurePlayback(scale);
+                Console.WriteLine($"再生（{(scale == 1 ? "フル" : "1/2")} 解像度）：表示 {result.Shown}、飛ばした {result.Dropped}（{result.DroppedPercent:0.0}%）、{result.Elapsed.TotalSeconds:0.0} 秒、メモリの最大 {result.PeakWorkingSetBytes / 1024 / 1024} MB");
+            }
+        }
+
+        if (Selected("export"))
+        {
+            var output = Path.Combine(Path.GetTempPath(), $"nmm-bench-{Guid.NewGuid():N}.mp4");
+            try
+            {
+                var result = benchmark.MeasureExport(repeat, output);
+                Console.WriteLine($"書き出し（{result.Duration:mm\\:ss}、{result.Encoder}）：{result.Elapsed.TotalSeconds:0.0} 秒、実時間の {result.RealtimeFactor:0.00} 倍");
+            }
+            finally
+            {
+                File.Delete(output);
+            }
+        }
+
+        if (Selected("voice"))
+        {
+            var cache = Path.Combine(Path.GetTempPath(), $"nmm-bench-voice-{Guid.NewGuid():N}");
+            try
+            {
+                Console.WriteLine(ProjectBenchmark.MeasureVoice(cache) is var (engine, first, average)
+                    ? $"セリフ 1 行の合成（{engine}）：1 回目 {first:0} ms、2 回目から平均 {average:0} ms"
+                    : "セリフの合成：使える音声合成エンジンがありません");
+            }
+            finally
+            {
+                if (Directory.Exists(cache))
+                {
+                    Directory.Delete(cache, recursive: true);
+                }
+            }
+        }
+
+        if (Selected("recording"))
+        {
+            Console.WriteLine($"録音（3 秒）を止めてからタイムラインに置くまで：{benchmark.MeasureRecordingStop(3):0.0} ms");
+        }
+
+        return 0;
     }
 
     private static int PrintMediaInfo(string path)

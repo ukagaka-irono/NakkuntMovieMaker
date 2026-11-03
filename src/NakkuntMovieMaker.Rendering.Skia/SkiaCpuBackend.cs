@@ -37,8 +37,12 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         return effect.ToBlender();
     });
 
+    // エフェクトをかけた結果を覚えておく量
+    private const long EffectCacheBytes = 128L << 20;
+
     private readonly FontProvider _fonts;
     private readonly ConcurrentDictionary<(string Text, TextStyle Style), TextLayout> _layouts = new();
+    private readonly EffectResultCache _effects = new(EffectCacheBytes);
 
     public SkiaCpuBackend(FontProvider? fonts = null)
     {
@@ -164,10 +168,11 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
             Math.Sqrt(matrix.ScaleX * matrix.ScaleX + matrix.SkewY * matrix.SkewY),
             Math.Sqrt(matrix.SkewX * matrix.SkewX + matrix.ScaleY * matrix.ScaleY));
 
+        SourceImage? source = null;
         var content = node.Content switch
         {
             VideoFrameContent video => media.GetVideoFrame(video.Asset, video.SourceTime, hint) is { } frame ? ImageContent(node.Crop, frame) : null,
-            ImageContent image => media.GetImage(image.Asset, hint) is { } picture ? ImageContent(node.Crop, picture) : null,
+            ImageContent image => (source = media.GetImage(image.Asset, hint)) is { } picture ? ImageContent(node.Crop, picture) : null,
             TextContent text => TextContent(node.Crop, text),
             ShapeContent shape => ShapeContent(node.Crop, shape.Shape, plan),
             TachieContent tachie => TachieContent(node.Crop, tachie, media, hint),
@@ -188,15 +193,45 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         }
         else
         {
-            using var result = ApplyEffects(content, node, media, (float)hint);
-            if (result is not null)
+            using var plain = composite is null ? new SKPaint { IsAntialias = true } : null;
+            if (CachedEffects(content, node, source, media, (float)hint) is ({ } result, var owned))
             {
-                using var plain = composite is null ? new SKPaint { IsAntialias = true } : null;
-                result.DrawLocal(canvas, composite ?? plain);
+                canvas.DrawImage(result.Image, result.LocalBounds, Sampling, composite ?? plain);
+                if (owned)
+                {
+                    result.Image.Dispose();
+                }
             }
         }
 
         canvas.Restore();
+    }
+
+    // エフェクトをかけた結果。動画（毎フレーム中身が変わる）以外は、同じ素材・エフェクト・細かさの結果を使い回す。
+    // Owned が true なら覚えていないので、描いたら破棄する
+    private (EffectResult Result, bool Owned)? CachedEffects(Content content, DrawNode node, SourceImage? source, IMediaSource media, float hint)
+    {
+        var key = node.Content is VideoFrameContent ? null : new EffectKey(source ?? (object)node.Content, node.Crop, node.Effects, hint);
+        if (key is not null && _effects.TryGet(key, out var cached))
+        {
+            return (cached, false);
+        }
+
+        using var image = ApplyEffects(content, node, media, hint);
+        if (image is null)
+        {
+            return null;
+        }
+
+        // 描いている途中で変わらないよう、画素を写した変わらない画像にする
+        var result = new EffectResult(SKImage.FromBitmap(image.Bitmap), image.LocalBounds);
+        if (key is null)
+        {
+            return (result, true);
+        }
+
+        _effects.Add(key, result);
+        return (result, false);
     }
 
     // 中身を、出力と同じくらいの細かさ（ローカル座標 1 あたり scale ピクセル）の画像にしてから、エフェクトを順にかける

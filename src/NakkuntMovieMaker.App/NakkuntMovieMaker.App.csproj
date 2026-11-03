@@ -3,7 +3,14 @@
     <OutputType>WinExe</OutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>NakkuntMovieMaker</AssemblyName>
+    <!-- 配布するとき（dotnet publish）は、起動を速くするため前もってコンパイルしておく -->
+    <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
+
+  <!-- 大きな画像（フレーム）を何度も作り捨てるので、使わなくなったメモリを早めに返すようにする -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" />

@@ -4,6 +4,11 @@
     <AssemblyName>nmm</AssemblyName>
   </PropertyGroup>
 
+  <!-- 大きな画像（フレーム）を何度も作り捨てるので、使わなくなったメモリを早めに返すようにする -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="NakkuntMovieMaker.Cli.Tests" />
     <InternalsVisibleTo Include="NakkuntMovieMaker.E2E.Tests" />
