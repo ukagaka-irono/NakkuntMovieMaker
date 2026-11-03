@@ -167,31 +167,7 @@ public sealed partial class TimelineViewModel : ObservableObject
     }
 
     /// <summary>アイテムの表示名</summary>
-    public string Label(Item item) => item switch
-    {
-        VideoItem video => AssetName(video.Asset),
-        ImageItem image => AssetName(image.Asset),
-        AudioItem audio => AssetName(audio.Asset),
-        TextItem text => text.Text.ReplaceLineEndings(" "),
-        ShapeItem shape => ShapeName(shape.Shape.Kind),
-        VoiceItem voice => $"{CharacterName(voice.Character)}「{voice.Text.ReplaceLineEndings(" ")}」",
-        TachieItem tachie => $"立ち絵（{CharacterName(tachie.Character)}）",
-        UnknownItem unknown => unknown.TypeId,
-        _ => "",
-    };
-
-    public static string ShapeName(ShapeKind kind) => kind switch
-    {
-        ShapeKind.Rectangle => "四角形",
-        ShapeKind.Ellipse => "円",
-        ShapeKind.Triangle => "三角形",
-        ShapeKind.Polygon => "多角形",
-        ShapeKind.Star => "星形",
-        ShapeKind.Line => "線",
-        ShapeKind.Arrow => "矢印",
-        ShapeKind.Background => "背景",
-        _ => "図形",
-    };
+    public string Label(Item item) => ItemLabels.Label(item, _session.Project);
 
     /// <summary>素材の波形（読み込み中・音声がなければ null。読み終えたら描き直す）</summary>
     public AudioPeaks? GetPeaks(string path)
@@ -587,12 +563,6 @@ public sealed partial class TimelineViewModel : ObservableObject
 
         return true;
     }
-
-    private string AssetName(AssetId id) =>
-        _session.Project.Assets.TryGetValue(id, out var asset) ? Path.GetFileName(asset.Path) : "（素材なし）";
-
-    private string CharacterName(CharacterId id) =>
-        _session.Project.Characters.TryGetValue(id, out var character) ? character.Name : "キャラクターなし";
 
     private void Invalidate()
     {

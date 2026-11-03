@@ -20,6 +20,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         MediaPool = new MediaPoolViewModel(session, dialogs);
         Preview = new PreviewViewModel(session);
         Timeline = new TimelineViewModel(session, dialogs);
+        Properties = new PropertiesViewModel(session, dialogs);
         session.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(EditorSession.Title))
@@ -81,6 +82,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public PreviewViewModel Preview { get; }
 
     public TimelineViewModel Timeline { get; }
+
+    public PropertiesViewModel Properties { get; }
 
     public string Title => Session.Title;
 

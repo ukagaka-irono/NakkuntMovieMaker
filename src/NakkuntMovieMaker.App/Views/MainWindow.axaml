@@ -100,7 +100,7 @@
       </Border>
       <GridSplitter Grid.Column="3" ResizeDirection="Columns" Background="Transparent" />
       <Border x:Name="RightPanel" Grid.Column="4" Classes="panel">
-        <TextBlock Classes="empty-hint" Text="プロパティ" />
+        <views:PropertiesView DataContext="{Binding Properties}" />
       </Border>
       <GridSplitter Grid.Row="1" Grid.ColumnSpan="5" ResizeDirection="Rows" Background="Transparent" />
       <Border x:Name="BottomPanel" Grid.Row="2" Grid.ColumnSpan="5" Classes="panel">
