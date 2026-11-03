@@ -1,0 +1,90 @@
+using System.Collections.Concurrent;
+using NakkuntMovieMaker.Core.Model;
+using NakkuntMovieMaker.Core.Time;
+using NakkuntMovieMaker.Media;
+
+namespace NakkuntMovieMaker.Rendering.Tests;
+
+/// <summary>テスト用の素材。画像はメモリ上に作り、動画は時刻から画像を作る関数で表す</summary>
+internal sealed class TestMedia : IMediaSource
+{
+    private readonly ConcurrentDictionary<AssetId, SourceImage> _images = new();
+    private readonly ConcurrentDictionary<AssetId, Func<Rational, SourceImage>> _videos = new();
+
+    /// <summary>素材を求められたときの倍率（最後のもの）</summary>
+    public double LastScale { get; private set; }
+
+    public AssetId AddImage(SourceImage image)
+    {
+        var id = AssetId.New();
+        _images[id] = image;
+        return id;
+    }
+
+    public AssetId AddImage(BgraImage image) => AddImage(new SourceImage(image));
+
+    public AssetId AddVideo(Func<Rational, BgraImage> frameAt)
+    {
+        var id = AssetId.New();
+        _videos[id] = time => new SourceImage(frameAt(time));
+        return id;
+    }
+
+    public SourceImage? GetVideoFrame(AssetId asset, Rational time, double scale)
+    {
+        LastScale = scale;
+        return _videos.TryGetValue(asset, out var frameAt) ? frameAt(time) : null;
+    }
+
+    public SourceImage? GetImage(AssetId asset, double scale)
+    {
+        LastScale = scale;
+        return _images.GetValueOrDefault(asset);
+    }
+}
+
+/// <summary>テスト用の画像を作る。色は (R, G, B, A) の straight alpha で指定し、premultiplied にして持つ</summary>
+internal static class TestImages
+{
+    public static BgraImage Solid(int width, int height, (byte R, byte G, byte B, byte A) color) =>
+        Create(width, height, (_, _) => color);
+
+    /// <summary>左半分が left、右半分が right</summary>
+    public static BgraImage Halves(int width, int height, (byte R, byte G, byte B, byte A) left, (byte R, byte G, byte B, byte A) right) =>
+        Create(width, height, (x, _) => x < width / 2 ? left : right);
+
+    /// <summary>赤が右へ、緑が下へ増えるグラデーション（青は 128）</summary>
+    public static BgraImage Gradient(int width, int height) =>
+        Create(width, height, (x, y) => ((byte)(x * 255 / (width - 1)), (byte)(y * 255 / (height - 1)), 128, 255));
+
+    /// <summary>左上・右上・左下・右下で色が違う画像。右下は半透明</summary>
+    public static BgraImage Quadrants(int width, int height) =>
+        Create(width, height, (x, y) => (x < width / 2, y < height / 2) switch
+        {
+            (true, true) => (255, 255, 255, 255),
+            (false, true) => (255, 200, 0, 255),
+            (true, false) => (0, 160, 255, 255),
+            (false, false) => (255, 0, 160, 128),
+        });
+
+    public static BgraImage Create(int width, int height, Func<int, int, (byte R, byte G, byte B, byte A)> colorAt)
+    {
+        var pixels = new byte[width * height * 4];
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var (r, g, b, a) = colorAt(x, y);
+                var offset = (y * width + x) * 4;
+                pixels[offset] = Premultiply(b, a);
+                pixels[offset + 1] = Premultiply(g, a);
+                pixels[offset + 2] = Premultiply(r, a);
+                pixels[offset + 3] = a;
+            }
+        }
+
+        return new BgraImage(width, height, pixels);
+    }
+
+    private static byte Premultiply(byte value, byte alpha) => (byte)((value * alpha + 127) / 255);
+}
