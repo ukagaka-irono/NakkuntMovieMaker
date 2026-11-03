@@ -17,6 +17,7 @@
     <Project Path="src/NakkuntMovieMaker.Voice/NakkuntMovieMaker.Voice.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/NakkuntMovieMaker.Core.Tests/NakkuntMovieMaker.Core.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Engine.Tests/NakkuntMovieMaker.Engine.Tests.csproj" />
   </Folder>
 </Solution>
