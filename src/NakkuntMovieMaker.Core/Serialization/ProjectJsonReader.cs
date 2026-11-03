@@ -130,6 +130,7 @@ internal sealed class ProjectJsonReader(string file)
         {
             Group = TryGet(element, "group", out var group) ? new GroupId(ParseGuid(group, "group")) : null,
             Effects = [.. GetArray(element, "effects").Select(ReadEffect)],
+            Transition = TryGet(element, "transition", out var transition) ? ReadTransition(transition) : null,
         };
 
         if (item is VisualItem visual && item is not UnknownItem)
@@ -142,7 +143,7 @@ internal sealed class ProjectJsonReader(string file)
 
     /// <summary>アイテムに共通の項目（record で持つもの）</summary>
     internal static readonly ImmutableHashSet<string> CommonItemProperties =
-        ["$type", "id", "layer", "start", "length", "group", "effects"];
+        ["$type", "id", "layer", "start", "length", "group", "effects", "transition"];
 
     // 知らない種類のアイテムは、共通の項目を除いた残りだけを Data に持つ（共通の項目は編集で変わるため）
     private static JsonElement WithoutCommonItemProperties(JsonElement element)
@@ -286,7 +287,18 @@ internal sealed class ProjectJsonReader(string file)
             GetDouble(element, "innerRadiusRatio"));
     }
 
-    private EffectInstance ReadEffect(JsonElement element)
+    private EffectInstance ReadEffect(JsonElement element) =>
+        new(
+            new EffectId(GetGuid(element, "id")),
+            GetString(element, "type"),
+            ReadParameters(element),
+            GetBool(element, "enabled"));
+
+    private TransitionInstance ReadTransition(JsonElement element) =>
+        new(GetString(element, "type"), GetLong(element, "duration"), ReadParameters(element));
+
+    // エフェクト・トランジションのパラメーター。知らない種類の値は、JSON のまま持つ
+    private ImmutableDictionary<string, ParameterValue> ReadParameters(JsonElement element)
     {
         var parameters = ImmutableDictionary.CreateBuilder<string, ParameterValue>();
         foreach (var property in Get(element, "parameters").EnumerateObject())
@@ -302,11 +314,7 @@ internal sealed class ProjectJsonReader(string file)
             };
         }
 
-        return new EffectInstance(
-            new EffectId(GetGuid(element, "id")),
-            GetString(element, "type"),
-            parameters.ToImmutable(),
-            GetBool(element, "enabled"));
+        return parameters.ToImmutable();
     }
 
     private Animatable<double> GetAnimatableNumber(JsonElement element, string name)

@@ -100,6 +100,17 @@ public class EditCommandsTests
     }
 
     [Fact]
+    public void SplitKeepsTheTransitionOnTheLeftPartOnly()
+    {
+        var withTransition = _t.Video with { Transition = new TransitionInstance("nmm.crossfade", 10) };
+        var item = ItemTiming.Split(withTransition, 45, ItemId.New(), 30);
+
+        Assert.Equal(withTransition.Transition, item.Left.Transition);
+        Assert.Null(item.Right.Transition);
+        Assert.NotEqual(_t.Video, withTransition); // トランジションも比較に含める
+    }
+
+    [Fact]
     public void SplitRejectsVoicesAndEmptySelections()
     {
         var unlocked = _t.Apply(EditCommands.UpdateLayer(_t.Project, _t.SceneId, _t.Scene(_t.Project).Layers[4] with { Locked = false }));

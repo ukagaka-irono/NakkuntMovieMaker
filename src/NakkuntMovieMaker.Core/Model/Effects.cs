@@ -27,6 +27,30 @@ public sealed record EffectInstance(
     public override int GetHashCode() => HashCode.Combine(Id, Type, Enabled, Parameters.Count);
 }
 
+/// <summary>
+/// アイテムの始まりにかけるトランジション。同じレイヤーで直前に隣り合うアイテム（終わりがこのアイテムの始まりと同じもの）から、
+/// このアイテムへ切り替える。直前に隣り合うアイテムがなければ、何もないところから切り替える。
+/// Type はトランジションの種類の ID（"nmm.crossfade" など）、Duration はかける長さ（フレーム数）で、切れ目を中心にかける。
+/// パラメーターのキーフレームは、トランジションの始まりからの相対フレーム
+/// </summary>
+public sealed record TransitionInstance(string Type, long Duration, ImmutableDictionary<string, ParameterValue> Parameters)
+{
+    public TransitionInstance(string type, long duration)
+        : this(type, duration, ImmutableDictionary<string, ParameterValue>.Empty)
+    {
+    }
+
+    // Parameters は中身で比較する（ImmutableDictionary は参照で比較されるため）
+    public bool Equals(TransitionInstance? other) =>
+        ReferenceEquals(this, other)
+        || (other is not null
+            && Type == other.Type
+            && Duration == other.Duration
+            && CollectionEquality.DictionaryEquals(Parameters, other.Parameters));
+
+    public override int GetHashCode() => HashCode.Combine(Type, Duration, Parameters.Count);
+}
+
 /// <summary>エフェクトのパラメーターの値</summary>
 public abstract record ParameterValue;
 

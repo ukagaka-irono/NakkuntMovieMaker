@@ -18,6 +18,9 @@ public abstract record Item(ItemId Id, LayerId Layer, long Start, long Length)
     /// <summary>エフェクト。上から順に適用する</summary>
     public ImmutableList<EffectInstance> Effects { get; init; } = [];
 
+    /// <summary>このアイテムの始まりにかけるトランジション（なければ null）</summary>
+    public TransitionInstance? Transition { get; init; }
+
     /// <summary>アイテムの終わり（この直前のフレームまでが表示される）</summary>
     public long End => Start + Length;
 
@@ -36,7 +39,8 @@ public abstract record Item(ItemId Id, LayerId Layer, long Start, long Length)
             && Start == other.Start
             && Length == other.Length
             && Group == other.Group
-            && CollectionEquality.ListEquals(Effects, other.Effects));
+            && CollectionEquality.ListEquals(Effects, other.Effects)
+            && Equals(Transition, other.Transition));
 
     public override int GetHashCode() => HashCode.Combine(EqualityContract, Id, Layer, Start, Length, Group);
 }

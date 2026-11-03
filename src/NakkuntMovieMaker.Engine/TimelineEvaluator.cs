@@ -5,6 +5,7 @@ using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Core.Time;
 using NakkuntMovieMaker.Rendering;
 using NakkuntMovieMaker.Rendering.Effects;
+using NakkuntMovieMaker.Rendering.Transitions;
 
 namespace NakkuntMovieMaker.Engine;
 
@@ -18,29 +19,84 @@ public static class TimelineEvaluator
     /// <summary>
     /// frame（シーンのフレーム番号）の FramePlan を作る。非表示のレイヤーは描かず、
     /// ソロのレイヤーが 1 つでもあれば、ソロのレイヤーだけを描く。
-    /// エフェクトは effects（省略すると組み込みのエフェクト）に登録された種類だけを評価し、知らない種類は飛ばす
+    /// エフェクトとトランジションは、effects・transitions（省略すると組み込みのもの）に登録された種類だけを評価し、
+    /// 知らない種類は飛ばす（トランジションは、かけずにそのまま切り替える）
     /// </summary>
-    public static FramePlan Evaluate(Scene scene, long frame, RgbaColor? background = null, EffectRegistry? effects = null)
+    public static FramePlan Evaluate(
+        Scene scene, long frame, RgbaColor? background = null, EffectRegistry? effects = null, TransitionRegistry? transitions = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         effects ??= EffectRegistry.Default;
+        transitions ??= TransitionRegistry.Default;
 
         var anySolo = scene.Layers.Any(layer => layer.Solo);
-        var shown = scene.Layers
-            .Select((layer, index) => (layer, index))
-            .Where(entry => entry.layer.Visible && (!anySolo || entry.layer.Solo))
-            .ToDictionary(entry => entry.layer.Id, entry => entry.index);
+        var nodes = ImmutableArray.CreateBuilder<RenderNode>();
+        foreach (var layer in scene.Layers.Where(layer => layer.Visible && (!anySolo || layer.Solo)))
+        {
+            nodes.AddRange(EvaluateLayer(scene, layer, frame, effects, transitions));
+        }
 
-        var nodes = scene.Items.Values
-            .Where(item => item.Contains(frame) && shown.ContainsKey(item.Layer))
-            .OrderBy(item => shown[item.Layer])
-            .ThenBy(item => item.Start)
-            .ThenBy(item => item.Id.Value)
-            .Select(item => EvaluateItem(scene, item, frame, effects))
-            .OfType<RenderNode>()
-            .ToImmutableArray();
+        return new FramePlan(scene.Format.Width, scene.Format.Height, background ?? RgbaColor.Black, new EquatableArray<RenderNode>(nodes.ToImmutable()));
+    }
 
-        return new FramePlan(scene.Format.Width, scene.Format.Height, background ?? RgbaColor.Black, new EquatableArray<RenderNode>(nodes));
+    /// <summary>
+    /// トランジションをかける範囲（シーンのフレーム、[Start, Start + Duration)）と、切り替える元のアイテム。
+    /// 長さは、前後のアイテムの長さを超えないように縮める（隣のトランジションと重ならないように）。
+    /// 前に隣り合うアイテムがあれば切れ目を中心に、なければアイテムの始まりからかける
+    /// </summary>
+    public static (long Start, long Duration, Item? From)? TransitionWindow(Scene scene, Item item)
+    {
+        if (item.Transition is not { } transition)
+        {
+            return null;
+        }
+
+        var from = scene.ItemsOnLayer(item.Layer).FirstOrDefault(other => other.Id != item.Id && other.End == item.Start);
+        var duration = Math.Min(transition.Duration, Math.Min(item.Length, from?.Length ?? long.MaxValue));
+        if (duration <= 0)
+        {
+            return null;
+        }
+
+        var start = from is null ? item.Start : item.Start - duration / 2;
+        return (start, duration, from);
+    }
+
+    // 1 つのレイヤーのノード。トランジションの範囲では、前後のアイテムを 1 つの TransitionNode にまとめる
+    private static IEnumerable<RenderNode> EvaluateLayer(Scene scene, Layer layer, long frame, EffectRegistry effects, TransitionRegistry transitions)
+    {
+        var items = scene.ItemsOnLayer(layer.Id).ToList();
+        var replaced = new HashSet<ItemId>();
+        var transitionNodes = new List<(long Start, RenderNode Node)>();
+        foreach (var item in items)
+        {
+            if (TransitionWindow(scene, item) is not { } window
+                || frame < window.Start || frame >= window.Start + window.Duration
+                || transitions.Find(item.Transition!.Type) is not { } definition)
+            {
+                continue;
+            }
+
+            var local = frame - window.Start;
+            var parameters = EvaluateParameters(definition.Parameters, item.Transition.Parameters, local);
+            var progress = local / (double)window.Duration;
+            var from = window.From is null ? null : EvaluateItem(scene, window.From, frame, effects);
+            var to = EvaluateItem(scene, item, frame, effects);
+            transitionNodes.Add((item.Start, new TransitionNode(definition.Type, progress, parameters, from, to)));
+            replaced.Add(item.Id);
+            if (window.From is not null)
+            {
+                replaced.Add(window.From.Id);
+            }
+        }
+
+        return items
+            .Where(item => item.Contains(frame) && !replaced.Contains(item.Id))
+            .Select(item => (item.Start, Node: (RenderNode?)EvaluateItem(scene, item, frame, effects)))
+            .Concat(transitionNodes.Select(entry => (entry.Start, Node: (RenderNode?)entry.Node)))
+            .Where(entry => entry.Node is not null)
+            .OrderBy(entry => entry.Start)
+            .Select(entry => entry.Node!);
     }
 
     private static DrawNode? EvaluateItem(Scene scene, Item item, long frame, EffectRegistry effects)
@@ -91,20 +147,25 @@ public static class TimelineEvaluator
                 continue;
             }
 
-            var values = ImmutableSortedDictionary.CreateBuilder<string, object>(StringComparer.Ordinal);
-            foreach (var parameter in definition.Parameters)
-            {
-                var value = instance.Parameters.TryGetValue(parameter.Name, out var stored)
-                    ? EvaluateParameter(stored, parameter, time.LocalFrame)
-                    : null;
-                values[parameter.Name] = value ?? parameter.Default;
-            }
-
-            var resolved = definition.Resolve(new EffectParameters(values.ToImmutable()), time);
+            var resolved = definition.Resolve(EvaluateParameters(definition.Parameters, instance.Parameters, time.LocalFrame), time);
             result.Add(new EvaluatedEffect(definition.Type, resolved));
         }
 
         return new EquatableArray<EvaluatedEffect>(result.ToImmutable());
+    }
+
+    // 定義のパラメーターを、保存された値（なければ既定値）から local フレームの値にする
+    private static EffectParameters EvaluateParameters(
+        IEnumerable<ParameterDefinition> definitions, IReadOnlyDictionary<string, ParameterValue> stored, long local)
+    {
+        var values = ImmutableSortedDictionary.CreateBuilder<string, object>(StringComparer.Ordinal);
+        foreach (var parameter in definitions)
+        {
+            var value = stored.TryGetValue(parameter.Name, out var saved) ? EvaluateParameter(saved, parameter, local) : null;
+            values[parameter.Name] = value ?? parameter.Default;
+        }
+
+        return new EffectParameters(values.ToImmutable());
     }
 
     private static object? EvaluateParameter(ParameterValue stored, ParameterDefinition parameter, long local) => (stored, parameter.Kind) switch
@@ -155,6 +216,8 @@ public static class TimelineEvaluator
 
         var seconds = TimeMath.FrameToSeconds(local, fps).ToDouble();
         var total = new System.Globalization.StringInfo(text).LengthInTextElements;
-        return (int)Math.Min(total, Math.Floor(seconds * style.RevealCharsPerSecond + 1e-9));
+
+        // トランジションでアイテムの始まりより前を描くときは、まだ 1 文字も見えない
+        return (int)Math.Clamp(Math.Floor(seconds * style.RevealCharsPerSecond + 1e-9), 0, total);
     }
 }

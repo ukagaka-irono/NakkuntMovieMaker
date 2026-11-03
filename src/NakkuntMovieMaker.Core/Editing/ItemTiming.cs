@@ -53,7 +53,8 @@ public static class ItemTiming
         }
 
         var left = TrimEnd(item, frame, fps);
-        var right = TrimStart(item, frame, fps) with { Id = rightId };
+        // トランジションは始まりにかけるものなので、後ろ側には引き継がない
+        var right = TrimStart(item, frame, fps) with { Id = rightId, Transition = null };
         return (left, right);
     }
 

@@ -3,6 +3,7 @@ using System.Numerics;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Media;
 using NakkuntMovieMaker.Rendering.Skia.Effects;
+using NakkuntMovieMaker.Rendering.Skia.Transitions;
 using NakkuntMovieMaker.Text;
 using SkiaSharp;
 
@@ -71,16 +72,57 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
             foreach (var node in plan.Nodes)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (node is DrawNode draw)
-                {
-                    Draw(canvas, draw, media, outputScale, plan);
-                }
+                DrawNode(canvas, node, media, outputScale, plan, info);
             }
 
             canvas.Flush();
         }
 
         return new BgraImage(width, height, pixels);
+    }
+
+    private void DrawNode(SKCanvas canvas, RenderNode node, IMediaSource media, SKMatrix outputScale, FramePlan plan, SKImageInfo output)
+    {
+        switch (node)
+        {
+            case DrawNode draw:
+                Draw(canvas, draw, media, outputScale, plan);
+                break;
+            case TransitionNode transition:
+                DrawTransition(canvas, transition, media, outputScale, plan, output);
+                break;
+        }
+    }
+
+    // 前後のアイテムを、それぞれ出力と同じ大きさの透明な画像に描いてから、トランジションで重ねる。
+    // 知らない種類のトランジションは、半分のところで切り替える
+    private void DrawTransition(SKCanvas canvas, TransitionNode node, IMediaSource media, SKMatrix outputScale, FramePlan plan, SKImageInfo output)
+    {
+        using var from = RenderAlone(node.From, media, outputScale, plan, output);
+        using var to = RenderAlone(node.To, media, outputScale, plan, output);
+        var frames = new TransitionFrames(from, to, output.Width, output.Height);
+        var progress = (float)Math.Clamp(node.Progress, 0, 1);
+        if (CpuTransitions.Find(node.Type) is { } processor)
+        {
+            processor.Draw(canvas, frames, progress, node.Parameters);
+        }
+        else
+        {
+            TransitionFrames.Draw(canvas, progress < 0.5f ? from : to, SKMatrix.Identity);
+        }
+    }
+
+    private SKImage? RenderAlone(RenderNode? node, IMediaSource media, SKMatrix outputScale, FramePlan plan, SKImageInfo output)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        using var surface = SKSurface.Create(output) ?? throw new InvalidOperationException("描画先を準備できませんでした");
+        surface.Canvas.Clear(SKColors.Transparent);
+        DrawNode(surface.Canvas, node, media, outputScale, plan, output);
+        return surface.Snapshot();
     }
 
     private void Draw(SKCanvas canvas, DrawNode node, IMediaSource media, SKMatrix outputScale, FramePlan plan)

@@ -56,7 +56,12 @@ public class ProjectStoreTests : IDisposable
             Effects = [effect],
         };
         var gradient = new ShapeItem(ItemId.New(), t.Layers[3], 300, 10,
-            new ShapeStyle(ShapeKind.Star, 200, 180, new LinearGradientPaint(RgbaColor.White, RgbaColor.Black, 45), RgbaColor.Black, 2, 0, 7, 0.4));
+            new ShapeStyle(ShapeKind.Star, 200, 180, new LinearGradientPaint(RgbaColor.White, RgbaColor.Black, 45), RgbaColor.Black, 2, 0, 7, 0.4))
+        {
+            Transition = new TransitionInstance("nmm.wipe", 12, ImmutableDictionary<string, ParameterValue>.Empty
+                .Add("direction", new TextParameter("fromTop"))
+                .Add("softness", new NumberParameter(Animatable.FromKeys(new Keyframe<double>(0, 0), new Keyframe<double>(12, 30))))),
+        };
         var recorded = new AudioItem(ItemId.New(), t.Layers[3], 400, 50, AssetId.New())
         {
             Playback = new MediaPlayback(new(1001, 30000), new(3, 2), Reverse: true),

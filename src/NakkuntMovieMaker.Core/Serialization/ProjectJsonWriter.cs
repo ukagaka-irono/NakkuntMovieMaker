@@ -182,6 +182,15 @@ internal static class ProjectJsonWriter
 
         writer.WriteEndArray();
 
+        if (item.Transition is { } transition)
+        {
+            writer.WriteStartObject("transition");
+            writer.WriteString("type", transition.Type);
+            writer.WriteNumber("duration", transition.Duration);
+            WriteParameters(writer, transition.Parameters);
+            writer.WriteEndObject();
+        }
+
         if (item is VisualItem visual)
         {
             WriteVisual(writer, visual);
@@ -421,8 +430,15 @@ internal static class ProjectJsonWriter
         writer.WriteString("id", effect.Id.ToString());
         writer.WriteString("type", effect.Type);
         writer.WriteBoolean("enabled", effect.Enabled);
+        WriteParameters(writer, effect.Parameters);
+        writer.WriteEndObject();
+    }
+
+    // エフェクト・トランジションのパラメーター（キーの順に並べる）
+    private static void WriteParameters(Utf8JsonWriter writer, IReadOnlyDictionary<string, ParameterValue> parameters)
+    {
         writer.WriteStartObject("parameters");
-        foreach (var (name, value) in effect.Parameters.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        foreach (var (name, value) in parameters.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
             writer.WritePropertyName(name);
             switch (value)
@@ -459,7 +475,6 @@ internal static class ProjectJsonWriter
             }
         }
 
-        writer.WriteEndObject();
         writer.WriteEndObject();
     }
 

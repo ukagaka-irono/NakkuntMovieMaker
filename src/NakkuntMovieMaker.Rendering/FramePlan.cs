@@ -32,6 +32,12 @@ public sealed record DrawNode(
     BlendMode Blend,
     EquatableArray<EvaluatedEffect> Effects = default) : RenderNode;
 
+/// <summary>
+/// トランジション。From（前のアイテム）から To（後のアイテム）へ切り替える途中の絵を描く。
+/// Progress は 0（すべて From）〜 1（すべて To）。From・To はないこともある（何もないところからの切り替えなど）
+/// </summary>
+public sealed record TransitionNode(string Type, double Progress, EffectParameters Parameters, RenderNode? From, RenderNode? To) : RenderNode;
+
 /// <summary>描く素材の中身</summary>
 public abstract record DrawContent;
 
