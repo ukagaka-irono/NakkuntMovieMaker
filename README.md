@@ -36,21 +36,21 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 - A.I.VOICE
 - AivisProject（AivisSpeech / AivisCloudAPI）
 - Amazon Polly
-- AquesTalk1 / AquesTalk2 / AquesTalk10
+- AquesTalk1 / AquesTalk2 / AquesTalk10（営利目的での利用には使用ライセンスが必要）
 - CeVIO AI / CeVIO Creative Studio 7
-- CoeFont
+- CoeFont（一部の音声は無料。それ以外は Enterprise 以上のプランが必要）
 - COEIROINK
 - ElevenLabs
-- Google Cloud Text-to-Speech
-- Gemini Text-to-Speech
-- Grok Text-to-Speech
-- Irodori-TTS
+- Google Cloud Text-to-Speech（別途 API キーが必要）
+- Gemini Text-to-Speech（別途 API キーが必要）
+- Grok Text-to-Speech（別途 API キーが必要）
+- Irodori-TTS（CUDA 対応 GPU とローカルへのインストールが必要）
 - ITVOICE
 - Kotodama
 - LMROID（配布・サポート終了）
 - Microsoft Azure Text-to-Speech
-- OpenAI Text-to-Speech
-- SAPI
+- OpenAI Text-to-Speech（別途 API キーが必要）
+- SAPI（Windows 標準搭載）
 - SHAREVOX
 - Style-Bert-VITS2
 - TALQu3
@@ -58,5 +58,5 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 - VOICEVOX
 - VOICEVOX Nemo
 - VoiSona Talk
-- よみてのれゐ
+- よみてのれゐ（配布・サポート終了）
 - 唄詠２
