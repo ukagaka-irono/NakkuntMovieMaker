@@ -4,6 +4,7 @@ using NakkuntMovieMaker.Core.Collections;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Core.Time;
 using NakkuntMovieMaker.Rendering;
+using NakkuntMovieMaker.Rendering.Effects;
 
 namespace NakkuntMovieMaker.Engine;
 
@@ -16,11 +17,13 @@ public static class TimelineEvaluator
 {
     /// <summary>
     /// frame（シーンのフレーム番号）の FramePlan を作る。非表示のレイヤーは描かず、
-    /// ソロのレイヤーが 1 つでもあれば、ソロのレイヤーだけを描く
+    /// ソロのレイヤーが 1 つでもあれば、ソロのレイヤーだけを描く。
+    /// エフェクトは effects（省略すると組み込みのエフェクト）に登録された種類だけを評価し、知らない種類は飛ばす
     /// </summary>
-    public static FramePlan Evaluate(Scene scene, long frame, RgbaColor? background = null)
+    public static FramePlan Evaluate(Scene scene, long frame, RgbaColor? background = null, EffectRegistry? effects = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        effects ??= EffectRegistry.Default;
 
         var anySolo = scene.Layers.Any(layer => layer.Solo);
         var shown = scene.Layers
@@ -33,14 +36,14 @@ public static class TimelineEvaluator
             .OrderBy(item => shown[item.Layer])
             .ThenBy(item => item.Start)
             .ThenBy(item => item.Id.Value)
-            .Select(item => EvaluateItem(scene, item, frame))
+            .Select(item => EvaluateItem(scene, item, frame, effects))
             .OfType<RenderNode>()
             .ToImmutableArray();
 
         return new FramePlan(scene.Format.Width, scene.Format.Height, background ?? RgbaColor.Black, new EquatableArray<RenderNode>(nodes));
     }
 
-    private static DrawNode? EvaluateItem(Scene scene, Item item, long frame)
+    private static DrawNode? EvaluateItem(Scene scene, Item item, long frame, EffectRegistry effects)
     {
         if (item is not VisualItem visual)
         {
@@ -70,8 +73,49 @@ public static class TimelineEvaluator
             return null;
         }
 
-        return new DrawNode(item.Id, content, visual.Crop, transform, opacity, visual.Blend);
+        var evaluated = EvaluateEffects(item.Effects, new EffectTime(local, item.Length, scene.Fps), effects);
+        return new DrawNode(item.Id, content, visual.Crop, transform, opacity, visual.Blend, evaluated);
     }
+
+    /// <summary>
+    /// アイテムのエフェクトを、ある時点の値に評価する。オフのエフェクトと知らない種類のエフェクトは飛ばす。
+    /// 指定のないパラメーターと型の合わないパラメーターは既定値にし、数値は定義の範囲に収める
+    /// </summary>
+    public static EquatableArray<EvaluatedEffect> EvaluateEffects(IEnumerable<EffectInstance> instances, EffectTime time, EffectRegistry effects)
+    {
+        var result = ImmutableArray.CreateBuilder<EvaluatedEffect>();
+        foreach (var instance in instances)
+        {
+            if (!instance.Enabled || effects.Find(instance.Type) is not { } definition)
+            {
+                continue;
+            }
+
+            var values = ImmutableSortedDictionary.CreateBuilder<string, object>(StringComparer.Ordinal);
+            foreach (var parameter in definition.Parameters)
+            {
+                var value = instance.Parameters.TryGetValue(parameter.Name, out var stored)
+                    ? EvaluateParameter(stored, parameter, time.LocalFrame)
+                    : null;
+                values[parameter.Name] = value ?? parameter.Default;
+            }
+
+            var resolved = definition.Resolve(new EffectParameters(values.ToImmutable()), time);
+            result.Add(new EvaluatedEffect(definition.Type, resolved));
+        }
+
+        return new EquatableArray<EvaluatedEffect>(result.ToImmutable());
+    }
+
+    private static object? EvaluateParameter(ParameterValue stored, ParameterDefinition parameter, long local) => (stored, parameter.Kind) switch
+    {
+        (NumberParameter number, ParameterKind.Number) => Math.Clamp(number.Value.Evaluate(local), parameter.Min, parameter.Max),
+        (ColorParameter color, ParameterKind.Color) => color.Value.Evaluate(local),
+        (BoolParameter flag, ParameterKind.Bool) => flag.Value,
+        (TextParameter text, ParameterKind.Choice) when parameter.Choices.Contains(text.Value) => text.Value,
+        (TextParameter text, ParameterKind.File) => text.Value,
+        _ => null,
+    };
 
     /// <summary>
     /// アイテムの先頭から local フレーム目に表示する、素材の時刻（秒）。

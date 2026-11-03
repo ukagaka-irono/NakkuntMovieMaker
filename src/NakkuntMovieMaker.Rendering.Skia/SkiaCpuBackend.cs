@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Numerics;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Media;
+using NakkuntMovieMaker.Rendering.Skia.Effects;
 using NakkuntMovieMaker.Text;
 using SkiaSharp;
 
@@ -20,10 +21,13 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         }
         """;
 
-    private static readonly SKSamplingOptions Sampling = new(SKFilterMode.Linear, SKMipmapMode.None);
-
     // 文字の配置は時間がかかるので、同じ文字とスタイルの配置は使い回す（増えすぎたら捨てる）
     private const int LayoutCacheCapacity = 512;
+
+    // エフェクトをかける画像の一辺の上限（ピクセル）
+    private const float MaxEffectSize = 8192;
+
+    private static readonly SKSamplingOptions Sampling = new(SKFilterMode.Linear, SKMipmapMode.None);
 
     private static readonly Lazy<SKBlender> SubtractBlender = new(() =>
     {
@@ -86,26 +90,75 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
             Math.Sqrt(matrix.ScaleX * matrix.ScaleX + matrix.SkewY * matrix.SkewY),
             Math.Sqrt(matrix.SkewX * matrix.SkewX + matrix.ScaleY * matrix.ScaleY));
 
-        switch (node.Content)
+        var content = node.Content switch
         {
-            case VideoFrameContent video when media.GetVideoFrame(video.Asset, video.SourceTime, hint) is { } frame:
-                DrawImage(canvas, node, frame, matrix);
-                break;
-            case ImageContent image when media.GetImage(image.Asset, hint) is { } picture:
-                DrawImage(canvas, node, picture, matrix);
-                break;
-            case TextContent text:
-                var layout = GetLayout(text.Text, text.Style);
-                DrawVector(canvas, node, matrix, layout.Width, layout.Height, layout.InkBounds, c => layout.Draw(c, text.VisibleCharacters));
-                break;
-            case ShapeContent { Shape: var shape }:
-                // 背景はシーン全体の大きさの四角形
-                var (width, height) = shape.Kind == ShapeKind.Background
-                    ? (plan.Width, plan.Height)
-                    : ((float)shape.Width, (float)shape.Height);
-                DrawVector(canvas, node, matrix, width, height, ShapePainter.InkBounds(shape, width, height), c => ShapePainter.Draw(c, shape, width, height));
-                break;
+            VideoFrameContent video => media.GetVideoFrame(video.Asset, video.SourceTime, hint) is { } frame ? ImageContent(node.Crop, frame) : null,
+            ImageContent image => media.GetImage(image.Asset, hint) is { } picture ? ImageContent(node.Crop, picture) : null,
+            TextContent text => TextContent(node.Crop, text),
+            ShapeContent shape => ShapeContent(node.Crop, shape.Shape, plan),
+            _ => null,
+        };
+        if (content is null)
+        {
+            return;
         }
+
+        var layered = node.Opacity < 1 || node.Blend != BlendMode.Normal;
+        using var composite = layered ? CreatePaint(node) : null;
+        canvas.Save();
+        canvas.SetMatrix(matrix);
+        if (node.Effects.IsEmpty)
+        {
+            content.Draw(canvas, composite);
+        }
+        else
+        {
+            using var result = ApplyEffects(content, node, media, (float)hint);
+            if (result is not null)
+            {
+                using var plain = composite is null ? new SKPaint { IsAntialias = true } : null;
+                result.DrawLocal(canvas, composite ?? plain);
+            }
+        }
+
+        canvas.Restore();
+    }
+
+    // 中身を、出力と同じくらいの細かさ（ローカル座標 1 あたり scale ピクセル）の画像にしてから、エフェクトを順にかける
+    private static EffectImage? ApplyEffects(Content content, DrawNode node, IMediaSource media, float scale)
+    {
+        if (content.Bounds.Width <= 0 || content.Bounds.Height <= 0)
+        {
+            return null;
+        }
+
+        // 大きくなりすぎないよう、一辺を MaxEffectSize ピクセルまでにする
+        var longest = Math.Max(content.Bounds.Width, content.Bounds.Height);
+        scale = Math.Clamp(scale, 1f / 64, Math.Max(1f / 64, Math.Min(4f, MaxEffectSize / longest)));
+
+        var image = EffectImage.Create(content.Bounds, scale);
+        using (var canvas = image.OpenLocalCanvas())
+        {
+            content.Draw(canvas, null);
+        }
+
+        var context = new EffectContext(media);
+        foreach (var effect in node.Effects)
+        {
+            if (CpuEffects.Find(effect.Type) is not { } processor)
+            {
+                continue;
+            }
+
+            var next = processor.Apply(image, effect.Parameters, context);
+            if (!ReferenceEquals(next, image))
+            {
+                image.Dispose();
+                image = next;
+            }
+        }
+
+        return image;
     }
 
     private TextLayout GetLayout(string text, TextStyle style)
@@ -118,44 +171,103 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         return _layouts.GetOrAdd((text, style), key => TextLayout.Create(key.Text, key.Style, _fonts));
     }
 
-    // 文字・図形のように、幅 × 高さの箱（左上が原点）に描くものを描く。切り抜いた残りの中心をローカル座標の原点に置く。
-    // 縁取りや影を重ねて描くので、不透明度と合成モードは、全体を描いてからまとめて適用する
-    private static void DrawVector(
-        SKCanvas canvas, DrawNode node, SKMatrix matrix, float width, float height, SKRect inkBounds, Action<SKCanvas> draw)
+    private Content? TextContent(Crop crop, TextContent text)
     {
-        var crop = node.Crop;
+        var layout = GetLayout(text.Text, text.Style);
+        return VectorContent(crop, layout.Width, layout.Height, layout.InkBounds, canvas => layout.Draw(canvas, text.VisibleCharacters));
+    }
+
+    private static Content? ShapeContent(Crop crop, ShapeStyle shape, FramePlan plan)
+    {
+        // 背景はシーン全体の大きさの四角形
+        var (width, height) = shape.Kind == ShapeKind.Background
+            ? (plan.Width, plan.Height)
+            : ((float)shape.Width, (float)shape.Height);
+        return VectorContent(crop, width, height, ShapePainter.InkBounds(shape, width, height), canvas => ShapePainter.Draw(canvas, shape, width, height));
+    }
+
+    // 文字・図形のように、幅 × 高さの箱（左上が原点）に描くもの。切り抜いた残りの中心をローカル座標の原点に置く。
+    // 縁取りや影を重ねて描くので、不透明度と合成モードは、全体を描いてからまとめて適用する
+    private static Content? VectorContent(Crop crop, float width, float height, SKRect inkBounds, Action<SKCanvas> draw)
+    {
         var visible = new SKRect((float)crop.Left, (float)crop.Top, (float)(width - crop.Right), (float)(height - crop.Bottom));
         if (visible.Width <= 0 || visible.Height <= 0)
         {
-            return;
+            return null;
         }
 
-        canvas.Save();
-        canvas.SetMatrix(matrix);
-        canvas.Translate(-visible.MidX, -visible.MidY);
-
+        var cropped = crop != Crop.None;
         var bounds = inkBounds;
-        if (crop != Crop.None)
+        if (cropped)
         {
-            canvas.ClipRect(visible, antialias: true);
             bounds.Intersect(visible);
         }
 
-        var layered = node.Opacity < 1 || node.Blend != BlendMode.Normal;
-        if (layered)
+        var local = bounds;
+        local.Offset(-visible.MidX, -visible.MidY);
+        return new Content(local, (canvas, composite) =>
         {
-            using var paint = CreatePaint(node);
-            canvas.SaveLayer(bounds, paint);
-        }
+            canvas.Save();
+            canvas.Translate(-visible.MidX, -visible.MidY);
+            if (cropped)
+            {
+                canvas.ClipRect(visible, antialias: true);
+            }
 
-        draw(canvas);
+            if (composite is not null)
+            {
+                canvas.SaveLayer(bounds, composite);
+            }
 
-        if (layered)
-        {
+            draw(canvas);
+            if (composite is not null)
+            {
+                canvas.Restore();
+            }
+
             canvas.Restore();
+        });
+    }
+
+    // 素材を切り抜いて、残った部分の中心をローカル座標の原点に置く
+    private static Content? ImageContent(Crop crop, SourceImage source)
+    {
+        var visibleWidth = source.Width - crop.Left - crop.Right;
+        var visibleHeight = source.Height - crop.Top - crop.Bottom;
+        if (visibleWidth <= 0 || visibleHeight <= 0)
+        {
+            return null;
         }
 
-        canvas.Restore();
+        // 切り抜く範囲を、素材の画像（縮小されていることがある）のピクセルにする
+        var image = source.Image;
+        var ratioX = image.Width / (double)source.Width;
+        var ratioY = image.Height / (double)source.Height;
+        var subset = new SKRectI(
+            Math.Clamp((int)Math.Round(crop.Left * ratioX), 0, image.Width),
+            Math.Clamp((int)Math.Round(crop.Top * ratioY), 0, image.Height),
+            Math.Clamp((int)Math.Round((source.Width - crop.Right) * ratioX), 0, image.Width),
+            Math.Clamp((int)Math.Round((source.Height - crop.Bottom) * ratioY), 0, image.Height));
+        if (subset.Width <= 0 || subset.Height <= 0)
+        {
+            return null;
+        }
+
+        var destination = new SKRect(
+            (float)(-visibleWidth / 2), (float)(-visibleHeight / 2), (float)(visibleWidth / 2), (float)(visibleHeight / 2));
+        return new Content(destination, (canvas, composite) =>
+        {
+            fixed (byte* pixels = image.Pixels)
+            {
+                // 画素を写さずに、切り抜いた部分だけを Skia の画像として扱う
+                var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+                using var whole = new SKPixmap(info, (nint)pixels, image.Stride);
+                using var part = whole.ExtractSubset(subset);
+                using var skImage = SKImage.FromPixels(part);
+                using var plain = composite is null ? new SKPaint { IsAntialias = true } : null;
+                canvas.DrawImage(skImage, destination, Sampling, composite ?? plain);
+            }
+        });
     }
 
     private static SKPaint CreatePaint(DrawNode node)
@@ -177,50 +289,6 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         return paint;
     }
 
-    // 素材を切り抜いて、残った部分の中心をローカル座標の原点に置いて描く
-    private static void DrawImage(SKCanvas canvas, DrawNode node, SourceImage source, SKMatrix matrix)
-    {
-        var crop = node.Crop;
-        var visibleWidth = source.Width - crop.Left - crop.Right;
-        var visibleHeight = source.Height - crop.Top - crop.Bottom;
-        if (visibleWidth <= 0 || visibleHeight <= 0)
-        {
-            return;
-        }
-
-        // 切り抜く範囲を、素材の画像（縮小されていることがある）のピクセルにする
-        var image = source.Image;
-        var ratioX = image.Width / (double)source.Width;
-        var ratioY = image.Height / (double)source.Height;
-        var subset = new SKRectI(
-            Math.Clamp((int)Math.Round(crop.Left * ratioX), 0, image.Width),
-            Math.Clamp((int)Math.Round(crop.Top * ratioY), 0, image.Height),
-            Math.Clamp((int)Math.Round((source.Width - crop.Right) * ratioX), 0, image.Width),
-            Math.Clamp((int)Math.Round((source.Height - crop.Bottom) * ratioY), 0, image.Height));
-        if (subset.Width <= 0 || subset.Height <= 0)
-        {
-            return;
-        }
-
-        using var paint = CreatePaint(node);
-        var destination = new SKRect(
-            (float)(-visibleWidth / 2), (float)(-visibleHeight / 2), (float)(visibleWidth / 2), (float)(visibleHeight / 2));
-
-        fixed (byte* pixels = image.Pixels)
-        {
-            // 画素を写さずに、切り抜いた部分だけを Skia の画像として扱う
-            var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
-            using var whole = new SKPixmap(info, (nint)pixels, image.Stride);
-            using var part = whole.ExtractSubset(subset);
-            using var skImage = SKImage.FromPixels(part);
-
-            canvas.Save();
-            canvas.SetMatrix(matrix);
-            canvas.DrawImage(skImage, destination, Sampling, paint);
-            canvas.Restore();
-        }
-    }
-
     // Matrix3x2 は行ベクトル（x' = x·M11 + y·M21 + M31）、SKMatrix は列ベクトル（x' = ScaleX·x + SkewX·y + TransX）
     private static SKMatrix ToSkia(Matrix3x2 m) =>
         new(m.M11, m.M21, m.M31, m.M12, m.M22, m.M32, 0, 0, 1);
@@ -237,4 +305,10 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         BlendMode.Difference => SKBlendMode.Difference,
         _ => SKBlendMode.SrcOver,
     };
+
+    /// <summary>
+    /// ローカル座標（切り抜いた残りの中心が原点）に描ける中身。Bounds は描かれる範囲。
+    /// Draw の 2 つ目の引数は、不透明度と合成モード（null なら、そのまま重ねる）
+    /// </summary>
+    private sealed record Content(SKRect Bounds, Action<SKCanvas, SKPaint?> Draw);
 }

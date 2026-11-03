@@ -67,6 +67,42 @@ internal static class TestImages
             (false, false) => (255, 0, 160, 128),
         });
 
+    /// <summary>幅 stripe ピクセルごとに first と second を交互に並べた縦じま</summary>
+    public static BgraImage Stripes(int width, int height, int stripe, (byte R, byte G, byte B, byte A) first, (byte R, byte G, byte B, byte A) second) =>
+        Create(width, height, (x, _) => x / stripe % 2 == 0 ? first : second);
+
+    /// <summary>
+    /// エフェクトを確かめるための画像。上半分は色相が左から右へ一周するグラデーション、
+    /// 下半分の左 2/3 は黒から白へのグラデーション、右 1/3 は緑（クロマキー用）
+    /// </summary>
+    public static BgraImage Subject(int width, int height) =>
+        Create(width, height, (x, y) =>
+        {
+            if (y < height / 2)
+            {
+                return Hue(x * 360.0 / width);
+            }
+
+            if (x < width * 2 / 3)
+            {
+                var level = (byte)(x * 255 / (width * 2 / 3 - 1));
+                return (level, level, level, 255);
+            }
+
+            return (0, 255, 0, 255);
+        });
+
+    private static (byte R, byte G, byte B, byte A) Hue(double degrees)
+    {
+        double Channel(double offset)
+        {
+            var k = (offset + degrees / 60) % 6;
+            return 1 - Math.Max(0, Math.Min(Math.Min(k, 4 - k), 1));
+        }
+
+        return ((byte)Math.Round(Channel(5) * 255), (byte)Math.Round(Channel(3) * 255), (byte)Math.Round(Channel(1) * 255), 255);
+    }
+
     public static BgraImage Create(int width, int height, Func<int, int, (byte R, byte G, byte B, byte A)> colorAt)
     {
         var pixels = new byte[width * height * 4];

@@ -27,6 +27,12 @@ public interface IMediaSource
     SourceImage? GetVideoFrame(AssetId asset, Rational time, double scale);
 
     SourceImage? GetImage(AssetId asset, double scale);
+
+    /// <summary>
+    /// エフェクトのパラメーターで指定したファイル（LUT など）の場所。プロジェクトのフォルダからの相対パスなら、
+    /// プロジェクトのフォルダを基準にする。既定では、そのまま返す
+    /// </summary>
+    string ResolvePath(string reference) => reference;
 }
 
 /// <summary>

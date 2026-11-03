@@ -2,6 +2,7 @@ using System.Numerics;
 using NakkuntMovieMaker.Core.Collections;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Core.Time;
+using NakkuntMovieMaker.Rendering.Effects;
 
 namespace NakkuntMovieMaker.Rendering;
 
@@ -19,7 +20,8 @@ public abstract record RenderNode;
 /// 素材を 1 つ描く。描画の処理は、素材（Content）から切り抜き（Crop）で残した部分を、その中心がローカル座標の原点に
 /// 来るように置き、Transform（ローカル座標 → シーンのピクセル座標）で変形して、不透明度と合成モードで重ねる。
 /// ローカル座標の単位は素材のピクセル（動画・画像は元の大きさ。縮小してデコードしても単位は変えない）。
-/// Item は元になったアイテム（プレビュー上で選択するときに使う）
+/// Item は元になったアイテム（プレビュー上で選択するときに使う）。
+/// Effects は、切り抜いた素材にローカル座標で順に適用するエフェクトで、変形・不透明度・合成モードはその後に適用する
 /// </summary>
 public sealed record DrawNode(
     ItemId? Item,
@@ -27,7 +29,8 @@ public sealed record DrawNode(
     Crop Crop,
     Matrix3x2 Transform,
     double Opacity,
-    BlendMode Blend) : RenderNode;
+    BlendMode Blend,
+    EquatableArray<EvaluatedEffect> Effects = default) : RenderNode;
 
 /// <summary>描く素材の中身</summary>
 public abstract record DrawContent;
