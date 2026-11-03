@@ -19,5 +19,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/NakkuntMovieMaker.Core.Tests/NakkuntMovieMaker.Core.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Engine.Tests/NakkuntMovieMaker.Engine.Tests.csproj" />
+    <Project Path="tests/NakkuntMovieMaker.Media.Tests/NakkuntMovieMaker.Media.Tests.csproj" />
   </Folder>
 </Solution>

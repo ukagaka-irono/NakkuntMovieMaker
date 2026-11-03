@@ -4,6 +4,8 @@
 *.jpg binary
 *.ico binary
 *.wav binary
+*.mp3 binary
 *.mp4 binary
+*.webm binary
 *.ttf binary
 *.otf binary

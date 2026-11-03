@@ -24,19 +24,66 @@ internal static class Program
             Description = "読み込んだ FFmpeg と nmm_audio のバージョン・ライセンスを表示する",
         };
 
+        var fileArgument = new Argument<FileInfo?>("file")
+        {
+            Description = "情報を表示するメディアファイル",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+
         var command = new Command("probe", "FFmpeg・nmm_audio やメディアファイルの情報を表示する");
         command.Options.Add(versionOption);
+        command.Arguments.Add(fileArgument);
         command.SetAction(parseResult =>
         {
-            if (!parseResult.GetValue(versionOption))
+            if (parseResult.GetValue(versionOption))
             {
-                Console.Error.WriteLine("メディアファイルの情報の表示は、まだ実装していません。--version を指定してください。");
+                return PrintNativeVersions();
+            }
+
+            var file = parseResult.GetValue(fileArgument);
+            if (file is null)
+            {
+                Console.Error.WriteLine("メディアファイルを指定するか、--version を指定してください。");
                 return 2;
             }
 
-            return PrintNativeVersions();
+            return PrintMediaInfo(file.FullName);
         });
         return command;
+    }
+
+    private static int PrintMediaInfo(string path)
+    {
+        MediaInfo info;
+        try
+        {
+            info = MediaProbe.Probe(path);
+        }
+        catch (Exception ex) when (ex is MediaException or InvalidOperationException)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+
+        Console.WriteLine($"{Path.GetFileName(path)}（{info.Kind}、形式 {info.FormatName}）");
+        if (info.Duration is { } duration)
+        {
+            Console.WriteLine($"  長さ: {duration.ToDouble():0.###} 秒");
+        }
+
+        foreach (var video in info.VideoStreams)
+        {
+            var fps = video.FrameRate is { } rate ? $"{rate.ToDouble():0.###}fps（{rate}）" : "フレームレート不明";
+            var rotation = video.Rotation != 0 ? $"、{video.Rotation} 度回転" : "";
+            Console.WriteLine($"  映像 #{video.Index}: {video.Codec} {video.Width}×{video.Height} {fps} {video.PixelFormat}{rotation}");
+        }
+
+        foreach (var audio in info.AudioStreams)
+        {
+            Console.WriteLine($"  音声 #{audio.Index}: {audio.Codec} {audio.SampleRate}Hz {audio.Channels}ch");
+        }
+
+        return 0;
     }
 
     private static int PrintNativeVersions()
