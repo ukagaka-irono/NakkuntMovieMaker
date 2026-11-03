@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="../NakkuntMovieMaker.Voice/NakkuntMovieMaker.Voice.csproj" />
+  </ItemGroup>
+</Project>

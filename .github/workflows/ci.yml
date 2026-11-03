@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: ビルドとテスト (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: 復元
+        run: dotnet restore NakkuntMovieMaker.slnx
+
+      - name: ビルド
+        run: dotnet build NakkuntMovieMaker.slnx -c Release --no-restore
+
+      - name: テスト
+        run: dotnet test --solution NakkuntMovieMaker.slnx -c Release --no-build

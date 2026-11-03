@@ -410,21 +410,23 @@ NakkuntMovieMaker のプラグインを作るための資料とツールを用�
 
 | 名称 | 用途 | 対応 OS |
 | --- | --- | --- |
-| [AquesTalk1](https://www.a-quest.com/products/aquestalk_1.html) | 音声合成エンジン | Windows / Linux / macOS |
-| [AquesTalk2](https://www.a-quest.com/products/aquestalk_2.html) | 音声合成エンジン | Windows / Linux / macOS |
-| [AquesTalk10](https://www.a-quest.com/products/aquestalk10.html) | 音声合成エンジン | Windows / Linux / macOS |
-| [AqKanji2Koe-A](https://www.a-quest.com/products/aqkanji2koe.html) | 言語処理エンジン | Windows / Linux / macOS |
+| [AquesTalk1](https://www.a-quest.com/products/aquestalk_1.html) | 音声合成エンジン（任意で導入） | Windows / Linux / macOS |
+| [AquesTalk2](https://www.a-quest.com/products/aquestalk_2.html) | 音声合成エンジン（任意で導入） | Windows / Linux / macOS |
+| [AquesTalk10](https://www.a-quest.com/products/aquestalk10.html) | 音声合成エンジン（任意で導入） | Windows / Linux / macOS |
+| [AqKanji2Koe-A](https://www.a-quest.com/products/aqkanji2koe.html) | 言語処理エンジン（任意で導入） | Windows / Linux / macOS |
 | [FFmpeg](https://ffmpeg.org/) | 動画・音声処理 | — |
 | [OpenColorIO](https://opencolorio.org/) | カラーマネジメント | Windows / Linux / macOS |
 | [MeltySynth](https://github.com/sinshu/meltysynth) | MIDI の再生（標準） | Windows / Linux / macOS |
 | [FluidSynth](https://www.fluidsynth.org/) | MIDI の再生（SF3・DLS の音色、MIDI 機器からの入力） | Windows / Linux / macOS |
+
+AquesTalk と AqKanji2Koe はソフトに同梱しません。使う場合は、[株式会社アクエスト](https://www.a-quest.com/)から入手したライブラリを、ソフトのフォルダ内の `engines/aquestalk/` に置くか、設定画面で場所を指定してください。導入しなくても、ほかの音声合成や録音でセリフを作れます。営利目的で利用する場合は、AquesTalk の使用ライセンスが必要です。
 
 ## 対応している音声合成ソフト・サービス
 
 - [A.I.VOICE](https://aivoice.jp/)
 - AivisProject（[AivisSpeech](https://aivis-project.com/) / [AivisCloudAPI](https://hub.aivis-project.com/cloud-api/)）
 - [Amazon Polly](https://aws.amazon.com/jp/polly/)
-- [AquesTalk1](https://www.a-quest.com/products/aquestalk_1.html) / [AquesTalk2](https://www.a-quest.com/products/aquestalk_2.html) / [AquesTalk10](https://www.a-quest.com/products/aquestalk10.html)（営利目的での利用には使用ライセンスが必要）
+- [AquesTalk1](https://www.a-quest.com/products/aquestalk_1.html) / [AquesTalk2](https://www.a-quest.com/products/aquestalk_2.html) / [AquesTalk10](https://www.a-quest.com/products/aquestalk10.html)（任意で導入。営利目的での利用には使用ライセンスが必要）
 - [CapCut](https://www.capcut.com/)（非公式な方法で使用。利用規約に反するおそれがある）
 - [CeVIO AI / CeVIO Creative Studio 7](https://cevio.jp/)
 - [CoeFont](https://coefont.cloud/)（一部の音声は無料。それ以外は Enterprise 以上のプランが必要）

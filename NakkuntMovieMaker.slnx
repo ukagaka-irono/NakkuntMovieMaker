@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/NakkuntMovieMaker.Benchmarks/NakkuntMovieMaker.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/NakkuntMovieMaker.App/NakkuntMovieMaker.App.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Audio/NakkuntMovieMaker.Audio.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Cli/NakkuntMovieMaker.Cli.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Core/NakkuntMovieMaker.Core.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Engine/NakkuntMovieMaker.Engine.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Media/NakkuntMovieMaker.Media.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Rendering.Skia/NakkuntMovieMaker.Rendering.Skia.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Rendering/NakkuntMovieMaker.Rendering.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Text/NakkuntMovieMaker.Text.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Voice.AquesTalk/NakkuntMovieMaker.Voice.AquesTalk.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Voice.Sapi/NakkuntMovieMaker.Voice.Sapi.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Voice/NakkuntMovieMaker.Voice.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NakkuntMovieMaker.Engine.Tests/NakkuntMovieMaker.Engine.Tests.csproj" />
+  </Folder>
+</Solution>

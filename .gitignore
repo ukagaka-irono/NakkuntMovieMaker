@@ -1,0 +1,20 @@
+# .NET のビルド結果
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+BenchmarkDotNet.Artifacts/
+
+# IDE（Rider・IntelliJ）の設定
+.idea/
+
+# ネイティブライブラリ（tools/fetch-native で取得する）
+native/bin/
+
+# 利用者が任意で導入する音声合成エンジン（AquesTalk など）
+engines/
+
+# プロジェクトのキャッシュと自動保存
+.nmm/
