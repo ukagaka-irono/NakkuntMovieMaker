@@ -2,5 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../NakkuntMovieMaker.Core/NakkuntMovieMaker.Core.csproj" />
+    <ProjectReference Include="../NakkuntMovieMaker.Audio/NakkuntMovieMaker.Audio.csproj" />
   </ItemGroup>
 </Project>
