@@ -9,7 +9,7 @@ public sealed record NativeAudioInfo(int ApiVersion, string MiniaudioVersion);
 public static partial class NativeAudio
 {
     /// <summary>この .NET 側のコードが前提とする nmm_audio の API のバージョン</summary>
-    public const int ExpectedApiVersion = 1;
+    public const int ExpectedApiVersion = 2;
 
     private const string LibraryName = "nmm_audio";
 
