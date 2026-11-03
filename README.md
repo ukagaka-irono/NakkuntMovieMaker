@@ -58,13 +58,17 @@ AI の機能は、NVIDIA GPU（CUDA）、Intel GPU（OpenVINO。内蔵 GPU・Arc
 
 ただし、AI の機能や GPU が主力となる機能（3D・コンポジット・カラーグレーディング・重い映像エフェクト・高解像度の編集など）は、開発者の PC のスペックにはこだわらず、できる限り実用的に快適に使えることを目標にします。
 
+開発者が使用している PC のスペックは次のとおりです。
+
 | 項目 | 内容 |
 | --- | --- |
-| CPU | Intel Core i5-1145G7（4 コア 8 スレッド） |
-| GPU | Intel Iris Xe Graphics（内蔵 GPU） |
-| メモリ | 16GB |
-| ストレージ | SSD 256GB |
-| OS | Windows 11 Pro |
+| PC | Panasonic Let's note SV1（CF-SV1） |
+| CPU | Intel Core i5-1145G7（4 コア 8 スレッド、2.6GHz・最大 4.4GHz） |
+| GPU | Intel Iris Xe Graphics（CPU 内蔵） |
+| メモリ | 16GB（LPDDR4X-4266） |
+| ストレージ | NVMe SSD 256GB |
+| ディスプレイ | 12.1 型、1920×1200、60Hz |
+| OS | Windows 11 Pro 26H2（64 ビット） |
 
 ## 主な機能
 
