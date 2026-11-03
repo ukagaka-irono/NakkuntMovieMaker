@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using NakkuntMovieMaker.Core.Animation;
 using NakkuntMovieMaker.Core.Collections;
 using NakkuntMovieMaker.Core.Time;
@@ -109,6 +110,20 @@ public sealed record VoiceItem(ItemId Id, LayerId Layer, long Start, long Length
 /// <summary>立ち絵。口パクは、時間が重なっている同じキャラクターのセリフの声に合わせる</summary>
 public sealed record TachieItem(ItemId Id, LayerId Layer, long Start, long Length, CharacterId Character)
     : VisualItem(Id, Layer, Start, Length);
+
+/// <summary>
+/// 知らない種類のアイテム（プラグインが入っていない環境で開いたときなど）。
+/// 描画はしないが、Data（保存されていた JSON のうち、共通の項目を除いた残り）を持ち、保存するときにそのまま書き戻す。
+/// 共通の項目（種類・ID・レイヤー・開始・長さ・グループ・エフェクト）は、この record の値から書く
+/// </summary>
+public sealed record UnknownItem(ItemId Id, LayerId Layer, long Start, long Length, string TypeId, JsonElement Data)
+    : Item(Id, Layer, Start, Length)
+{
+    public bool Equals(UnknownItem? other) =>
+        base.Equals(other) && TypeId == other.TypeId && JsonElement.DeepEquals(Data, other.Data);
+
+    public override int GetHashCode() => HashCode.Combine(base.GetHashCode(), TypeId);
+}
 
 /// <summary>セリフの声の出どころ</summary>
 public abstract record VoiceSource;
