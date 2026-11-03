@@ -20,20 +20,26 @@ public static class TimelineEvaluator
     /// frame（シーンのフレーム番号）の FramePlan を作る。非表示のレイヤーは描かず、
     /// ソロのレイヤーが 1 つでもあれば、ソロのレイヤーだけを描く。
     /// エフェクトとトランジションは、effects・transitions（省略すると組み込みのもの）に登録された種類だけを評価し、
-    /// 知らない種類は飛ばす（トランジションは、かけずにそのまま切り替える）
+    /// 知らない種類は飛ばす（トランジションは、かけずにそのまま切り替える）。
+    /// セリフの字幕は、characters（プロジェクトのキャラクター）の字幕のスタイルで描く
     /// </summary>
     public static FramePlan Evaluate(
-        Scene scene, long frame, RgbaColor? background = null, EffectRegistry? effects = null, TransitionRegistry? transitions = null)
+        Scene scene,
+        long frame,
+        RgbaColor? background = null,
+        EffectRegistry? effects = null,
+        TransitionRegistry? transitions = null,
+        IReadOnlyDictionary<CharacterId, Character>? characters = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        effects ??= EffectRegistry.Default;
+        var context = new Context(scene, effects ?? EffectRegistry.Default, characters ?? NoCharacters);
         transitions ??= TransitionRegistry.Default;
 
         var anySolo = scene.Layers.Any(layer => layer.Solo);
         var nodes = ImmutableArray.CreateBuilder<RenderNode>();
         foreach (var layer in scene.Layers.Where(layer => layer.Visible && (!anySolo || layer.Solo)))
         {
-            nodes.AddRange(EvaluateLayer(scene, layer, frame, effects, transitions));
+            nodes.AddRange(EvaluateLayer(context, layer, frame, transitions));
         }
 
         return new FramePlan(scene.Format.Width, scene.Format.Height, background ?? RgbaColor.Black, new EquatableArray<RenderNode>(nodes.ToImmutable()));
@@ -63,8 +69,9 @@ public static class TimelineEvaluator
     }
 
     // 1 つのレイヤーのノード。トランジションの範囲では、前後のアイテムを 1 つの TransitionNode にまとめる
-    private static IEnumerable<RenderNode> EvaluateLayer(Scene scene, Layer layer, long frame, EffectRegistry effects, TransitionRegistry transitions)
+    private static IEnumerable<RenderNode> EvaluateLayer(Context context, Layer layer, long frame, TransitionRegistry transitions)
     {
+        var scene = context.Scene;
         var items = scene.ItemsOnLayer(layer.Id).ToList();
         var replaced = new HashSet<ItemId>();
         var transitionNodes = new List<(long Start, RenderNode Node)>();
@@ -80,8 +87,8 @@ public static class TimelineEvaluator
             var local = frame - window.Start;
             var parameters = EvaluateParameters(definition.Parameters, item.Transition.Parameters, local);
             var progress = local / (double)window.Duration;
-            var from = window.From is null ? null : EvaluateItem(scene, window.From, frame, effects);
-            var to = EvaluateItem(scene, item, frame, effects);
+            var from = window.From is null ? null : EvaluateItem(context, window.From, frame);
+            var to = EvaluateItem(context, item, frame);
             transitionNodes.Add((item.Start, new TransitionNode(definition.Type, progress, parameters, from, to)));
             replaced.Add(item.Id);
             if (window.From is not null)
@@ -92,15 +99,16 @@ public static class TimelineEvaluator
 
         return items
             .Where(item => item.Contains(frame) && !replaced.Contains(item.Id))
-            .Select(item => (item.Start, Node: (RenderNode?)EvaluateItem(scene, item, frame, effects)))
+            .Select(item => (item.Start, Node: (RenderNode?)EvaluateItem(context, item, frame)))
             .Concat(transitionNodes.Select(entry => (entry.Start, Node: (RenderNode?)entry.Node)))
             .Where(entry => entry.Node is not null)
             .OrderBy(entry => entry.Start)
             .Select(entry => entry.Node!);
     }
 
-    private static DrawNode? EvaluateItem(Scene scene, Item item, long frame, EffectRegistry effects)
+    private static DrawNode? EvaluateItem(Context context, Item item, long frame)
     {
+        var (scene, effects, characters) = context;
         if (item is not VisualItem visual)
         {
             return null;
@@ -113,8 +121,9 @@ public static class TimelineEvaluator
             ImageItem image => new ImageContent(image.Asset),
             TextItem text => new TextContent(text.Text, text.Style, VisibleCharacters(text.Text, text.Style, local, scene.Fps)),
             ShapeItem shape => new ShapeContent(shape.Shape),
+            VoiceItem voice => Subtitle(voice, characters, local, scene.Fps),
 
-            // セリフの字幕と立ち絵は、キャラクターの設定を使うので、セリフ・立ち絵の手順で加える
+            // 立ち絵は、立ち絵の手順で加える
             _ => null,
         };
         if (content is null)
@@ -131,6 +140,18 @@ public static class TimelineEvaluator
 
         var evaluated = EvaluateEffects(item.Effects, new EffectTime(local, item.Length, scene.Fps), effects);
         return new DrawNode(item.Id, content, visual.Crop, transform, opacity, visual.Blend, evaluated);
+    }
+
+    // セリフの字幕：セリフで指定したスタイル、なければキャラクターの字幕のスタイル（キャラクターがなければ既定のスタイル）
+    private static TextContent? Subtitle(VoiceItem voice, IReadOnlyDictionary<CharacterId, Character> characters, long local, Rational fps)
+    {
+        if (string.IsNullOrEmpty(voice.Text))
+        {
+            return null;
+        }
+
+        var style = voice.SubtitleOverride ?? characters.GetValueOrDefault(voice.Character)?.Subtitle ?? TextStyle.Default;
+        return new TextContent(voice.Text, style, VisibleCharacters(voice.Text, style, local, fps));
     }
 
     /// <summary>
@@ -207,6 +228,8 @@ public static class TimelineEvaluator
     }
 
     // 一文字ずつ表示するときに見えている文字の数。サロゲートペアなどの組み合わせ文字は 1 文字と数える
+    private static readonly IReadOnlyDictionary<CharacterId, Character> NoCharacters = new Dictionary<CharacterId, Character>();
+
     private static int? VisibleCharacters(string text, TextStyle style, long local, Rational fps)
     {
         if (style.RevealCharsPerSecond <= 0)
@@ -220,4 +243,7 @@ public static class TimelineEvaluator
         // トランジションでアイテムの始まりより前を描くときは、まだ 1 文字も見えない
         return (int)Math.Clamp(Math.Floor(seconds * style.RevealCharsPerSecond + 1e-9), 0, total);
     }
+
+    // 評価に使うもの（シーン・エフェクトの種類・キャラクター）
+    private sealed record Context(Scene Scene, EffectRegistry Effects, IReadOnlyDictionary<CharacterId, Character> Characters);
 }

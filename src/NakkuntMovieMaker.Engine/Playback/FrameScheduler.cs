@@ -42,13 +42,21 @@ public sealed class FrameScheduler : IDisposable
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Thread[] _threads;
     private Scene _scene;
+    private IReadOnlyDictionary<CharacterId, Character> _characters;
     private double _scale = 1;
     private int _busy;
     private TaskCompletionSource _idle = CompletedSource();
 
-    public FrameScheduler(Scene scene, IRenderBackend backend, IMediaSource media, FrameSchedulerOptions? options = null)
+    /// <param name="characters">プロジェクトのキャラクター（セリフの字幕のスタイルに使う）</param>
+    public FrameScheduler(
+        Scene scene,
+        IRenderBackend backend,
+        IMediaSource media,
+        FrameSchedulerOptions? options = null,
+        IReadOnlyDictionary<CharacterId, Character>? characters = null)
     {
         _scene = scene;
+        _characters = characters ?? new Dictionary<CharacterId, Character>();
         _backend = backend;
         _media = media;
         _options = options ?? FrameSchedulerOptions.Default;
@@ -106,6 +114,16 @@ public sealed class FrameScheduler : IDisposable
         lock (_gate)
         {
             _scene = scene;
+        }
+    }
+
+    /// <summary>キャラクターを変えた後の一覧にする</summary>
+    public void SetCharacters(IReadOnlyDictionary<CharacterId, Character> characters)
+    {
+        ArgumentNullException.ThrowIfNull(characters);
+        lock (_gate)
+        {
+            _characters = characters;
         }
     }
 
@@ -223,6 +241,8 @@ public sealed class FrameScheduler : IDisposable
                 SetScene(current);
             }
 
+            SetCharacters(change.Current.Characters);
+
             Invalidate(change.Dirty);
         }
 
@@ -268,7 +288,16 @@ public sealed class FrameScheduler : IDisposable
         }
     }
 
-    private FramePlan Evaluate(Scene scene, long frame) => TimelineEvaluator.Evaluate(scene, frame, _options.Background);
+    private FramePlan Evaluate(Scene scene, long frame)
+    {
+        IReadOnlyDictionary<CharacterId, Character> characters;
+        lock (_gate)
+        {
+            characters = _characters;
+        }
+
+        return TimelineEvaluator.Evaluate(scene, frame, _options.Background, characters: characters);
+    }
 
     private void Work()
     {

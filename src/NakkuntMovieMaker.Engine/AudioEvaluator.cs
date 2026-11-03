@@ -10,7 +10,7 @@ namespace NakkuntMovieMaker.Engine;
 /// <summary>
 /// シーンの音を AudioPlan にする（映像の TimelineEvaluator にあたるもの）。
 /// ミュートのレイヤーは鳴らさず、ソロのレイヤーが 1 つでもあれば、ソロのレイヤーだけを鳴らす。
-/// セリフ（音声合成）の声は、セリフの手順で加える。録音した声は、ここで素材として鳴らす
+/// セリフは、録音した声なら素材を、合成した声ならキャッシュ（まだ合成していなければ鳴らさない）を鳴らす
 /// </summary>
 public static class AudioEvaluator
 {
@@ -42,12 +42,15 @@ public static class AudioEvaluator
             VideoItem video => (video.Asset, video.Playback, video.Audio),
             AudioItem audio => (audio.Asset, audio.Playback, audio.Audio),
             VoiceItem { Source: RecordedVoice recorded } voice => (recorded.Asset, MediaPlayback.Normal, voice.Audio),
+            VoiceItem { Source: SynthesizedVoice { CacheKey: not null } } voice => (default(AssetId), MediaPlayback.Normal, voice.Audio),
             _ => null,
         };
         if (sound is not { } found)
         {
             return null;
         }
+
+        var voiceKey = item is VoiceItem { Source: SynthesizedVoice { CacheKey: { } key } } ? key : null;
 
         var (asset, playback, mix) = found;
 
@@ -65,7 +68,10 @@ public static class AudioEvaluator
             mix.Pan,
             TimeMath.FramesToSampleCount(item.Start, Math.Min(mix.FadeInFrames, item.Length), format.Fps, format.SampleRate),
             TimeMath.FramesToSampleCount(Math.Max(item.Start, item.End - mix.FadeOutFrames), Math.Min(mix.FadeOutFrames, item.Length), format.Fps, format.SampleRate),
-            mix.DuckingDb);
+            mix.DuckingDb)
+        {
+            VoiceKey = voiceKey,
+        };
     }
 
     /// <summary>

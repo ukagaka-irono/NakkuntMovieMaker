@@ -29,6 +29,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
     private readonly ConcurrentDictionary<(AssetId Asset, int Step), SourceImage?> _images = new();
     private readonly ConcurrentDictionary<(AssetId Asset, int Step), DecoderSlot?> _decoders = new();
     private readonly ConcurrentDictionary<AssetId, Lazy<PcmAudio?>> _audio = new();
+    private readonly ConcurrentDictionary<string, Lazy<PcmAudio?>> _voices = new(StringComparer.Ordinal);
     private long _imageBytes;
 
     /// <param name="quality">動画の RGB への変換の質（プレビューは速さ、書き出しは質を優先する）</param>
@@ -137,23 +138,32 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
     /// </summary>
     public IAudioStream? OpenAudio(AssetId asset)
     {
-        var audio = _audio.GetOrAdd(asset, id => new Lazy<PcmAudio?>(() =>
-        {
-            if (PathOf(id) is not { } path || !File.Exists(path))
-            {
-                return null;
-            }
-
-            try
-            {
-                return _cache.OpenAudio(path);
-            }
-            catch (MediaException)
-            {
-                return null;
-            }
-        })).Value;
+        var audio = _audio.GetOrAdd(asset, id => new Lazy<PcmAudio?>(() => OpenPcm(PathOf(id)))).Value;
         return audio is null ? null : new PcmAudioStream(audio);
+    }
+
+    /// <summary>合成した声のキャッシュ（プロジェクトの voices/&lt;キー&gt;.wav）を、48kHz の PCM キャッシュから読めるようにする</summary>
+    public IAudioStream? OpenVoice(string key)
+    {
+        var audio = _voices.GetOrAdd(key, name => new Lazy<PcmAudio?>(() => OpenPcm(Path.Combine(_projectFolder, "voices", name + ".wav")))).Value;
+        return audio is null ? null : new PcmAudioStream(audio);
+    }
+
+    private PcmAudio? OpenPcm(string? path)
+    {
+        if (path is null || !File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return _cache.OpenAudio(path);
+        }
+        catch (MediaException)
+        {
+            return null;
+        }
     }
 
     public string ResolvePath(string reference) =>
@@ -168,12 +178,13 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
         _decoders.Clear();
         _images.Clear();
-        foreach (var audio in _audio.Values.Where(audio => audio.IsValueCreated))
+        foreach (var audio in _audio.Values.Concat(_voices.Values).Where(audio => audio.IsValueCreated))
         {
             audio.Value?.Dispose();
         }
 
         _audio.Clear();
+        _voices.Clear();
     }
 
     // 必要な倍率以上で、いちばん小さい段階

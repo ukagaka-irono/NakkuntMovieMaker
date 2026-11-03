@@ -81,6 +81,23 @@ public sealed class ProjectMediaSourceTests : IDisposable
     }
 
     [Fact]
+    public void OpensSynthesizedVoicesFromTheProject()
+    {
+        RequireFfmpeg();
+        Directory.CreateDirectory(Path.Combine(_folder, "voices"));
+        Audio.WavWriter.WriteFile(Path.Combine(_folder, "voices", "abc.wav"), new float[24000], 1, 24000);
+        var (media, _) = Open("x.png", AssetKind.Image);
+        using var _2 = media;
+
+        var voice = media.OpenVoice("abc");
+
+        // 24kHz の 1 秒は、48kHz の PCM キャッシュで 48000 サンプル
+        Assert.NotNull(voice);
+        Assert.Equal((48000, 48000L), (voice.SampleRate, voice.FrameCount));
+        Assert.Null(media.OpenVoice("missing"));
+    }
+
+    [Fact]
     public void ReturnsNullForMissingMedia()
     {
         RequireFfmpeg();

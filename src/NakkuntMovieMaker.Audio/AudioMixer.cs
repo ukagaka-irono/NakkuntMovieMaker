@@ -194,7 +194,8 @@ public sealed class AudioMixer
 
         public static ClipVoice? Create(AudioClip clip, AudioPlan plan, IAudioSource source)
         {
-            if (source.OpenAudio(clip.Asset) is not { } stream)
+            var opened = clip.VoiceKey is { } key ? source.OpenVoice(key) : source.OpenAudio(clip.Asset);
+            if (opened is not { } stream)
             {
                 return null;
             }

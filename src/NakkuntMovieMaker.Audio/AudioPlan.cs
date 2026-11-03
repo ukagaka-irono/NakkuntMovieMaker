@@ -24,7 +24,8 @@ public readonly record struct SampleRange(long Start, long End);
 /// 1 つのアイテムの音。Start・Length はタイムラインのサンプル（Start はアイテムの先頭のフレームの最初のサンプル）。
 /// 音量・パンのキーフレームは、アイテムの先頭からのフレームで評価する。
 /// 素材は [SourceOffset, SourceOffset + 長さ × Speed) 秒の範囲を使い、Reverse なら後ろから使う。
-/// フェードはサンプル数で、DuckingDb はセリフの間に下げる量（デシベル）
+/// フェードはサンプル数で、DuckingDb はセリフの間に下げる量（デシベル）。
+/// VoiceKey を指定すると、素材の代わりに合成した声のキャッシュ（voices/&lt;VoiceKey&gt;.wav）を鳴らす
 /// </summary>
 public sealed record AudioClip(
     ItemId Item,
@@ -41,6 +42,8 @@ public sealed record AudioClip(
     long FadeOut,
     double DuckingDb)
 {
+    public string? VoiceKey { get; init; }
+
     public long End => Start + Length;
 }
 
@@ -62,6 +65,9 @@ public interface IAudioStream
 public interface IAudioSource
 {
     IAudioStream? OpenAudio(AssetId asset);
+
+    /// <summary>合成した声のキャッシュ（キー）を開く。なければ null</summary>
+    IAudioStream? OpenVoice(string key) => null;
 }
 
 /// <summary>PCM キャッシュを IAudioStream として読む</summary>
