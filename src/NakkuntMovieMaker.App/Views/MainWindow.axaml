@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
+        xmlns:views="using:NakkuntMovieMaker.App.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1440" d:DesignHeight="900"
@@ -49,7 +50,11 @@
 
     <Grid x:Name="Workspace" Margin="4" RowDefinitions="*,4,320" ColumnDefinitions="300,4,*,4,340">
       <Border x:Name="LeftPanel" Classes="panel">
-        <TextBlock Classes="empty-hint" Text="素材の一覧" />
+        <TabControl>
+          <TabItem Header="素材">
+            <views:MediaPoolView DataContext="{Binding MediaPool}" />
+          </TabItem>
+        </TabControl>
       </Border>
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
       <Border x:Name="CenterPanel" Grid.Column="2" Classes="panel">

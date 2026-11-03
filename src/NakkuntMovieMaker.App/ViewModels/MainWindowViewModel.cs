@@ -17,6 +17,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Session = session;
         Shortcuts = shortcuts;
         _dialogs = dialogs;
+        MediaPool = new MediaPoolViewModel(session, dialogs);
         session.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(EditorSession.Title))
@@ -46,6 +47,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ShortcutRegistry Shortcuts { get; }
 
     public IDialogService Dialogs => _dialogs;
+
+    public MediaPoolViewModel MediaPool { get; }
 
     public string Title => Session.Title;
 

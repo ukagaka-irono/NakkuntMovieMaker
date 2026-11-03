@@ -53,3 +53,25 @@ public sealed class TestEnvironment : IDisposable
         }
     }
 }
+
+/// <summary>Media のテスト用の素材</summary>
+public static class Fixtures
+{
+    public static string Path(string name) => System.IO.Path.Combine(AppContext.BaseDirectory, "Fixtures", name);
+
+    public static void RequireFfmpeg()
+    {
+        var loaded = Media.FfmpegLibrary.TryLoad(out _, out var error);
+        Assert.SkipWhen(!loaded && Environment.GetEnvironmentVariable("NMM_REQUIRE_FFMPEG") != "1", $"FFmpeg を読み込めないためスキップします（{error}）");
+        Assert.True(loaded, error);
+    }
+
+    /// <summary>素材を一時フォルダに写す（場所を変えるテスト用）</summary>
+    public static string CopyTo(string folder, string name)
+    {
+        Directory.CreateDirectory(folder);
+        var target = System.IO.Path.Combine(folder, name);
+        File.Copy(Path(name), target, overwrite: true);
+        return target;
+    }
+}
