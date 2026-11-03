@@ -8,13 +8,14 @@ namespace NakkuntMovieMaker.Engine.Playback;
 /// <summary>
 /// 再生の設定。BufferMilliseconds は先に混ぜておく音の長さ（長いほど途切れにくいが、編集・シークの反映が遅れる）、
 /// PrefetchFrames は先に描いておくフレームの数。NullAudioDevice は音を出さない仮のデバイスを使う（テスト用）、
-/// DisableAudioDevice はデバイスを使わず、時計だけで再生する
+/// DisableAudioDevice はデバイスを使わず、時計だけで再生する。OutputDevice は出力デバイスの名前（null なら既定のデバイス）
 /// </summary>
 public sealed record PlaybackOptions(
     int BufferMilliseconds = 150,
     int PrefetchFrames = 12,
     bool NullAudioDevice = false,
-    bool DisableAudioDevice = false);
+    bool DisableAudioDevice = false,
+    string? OutputDevice = null);
 
 /// <summary>再生の記録。DroppedFrames は、表示する時刻までに描き終わらず飛ばしたフレームの数</summary>
 public sealed record PlaybackStatistics(long ShownFrames, long DroppedFrames, long UnderrunFrames);
@@ -62,7 +63,7 @@ public sealed class PlaybackController : IDisposable
             try
             {
                 var bufferFrames = Math.Max(BlockFrames * 2, _plan.SampleRate * _options.BufferMilliseconds / 1000);
-                _output = AudioOutput.Open(_plan.SampleRate, bufferFrames, _options.NullAudioDevice);
+                _output = AudioOutput.Open(_plan.SampleRate, bufferFrames, _options.NullAudioDevice, _options.OutputDevice);
             }
             catch (AudioDeviceException ex)
             {

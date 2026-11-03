@@ -45,18 +45,21 @@ public sealed partial class AudioOutput : IDisposable
 
     private nint Handle => _handle != 0 ? _handle : throw new ObjectDisposedException(nameof(AudioOutput));
 
-    /// <summary>既定の出力デバイスを開く。nullDevice なら、音を出さずに実時間で消費するだけの仮のデバイスを使う（テスト用）</summary>
+    /// <summary>
+    /// 出力デバイスを開く。deviceName が null なら既定のデバイス（名前は AudioDevices.List で調べる）。
+    /// nullDevice なら、音を出さずに実時間で消費するだけの仮のデバイスを使う（テスト用）
+    /// </summary>
     /// <exception cref="AudioDeviceException">デバイスを開けなかった（nmm_audio がない場合も含む）</exception>
-    public static AudioOutput Open(int sampleRate, int bufferFrames, bool nullDevice = false)
+    public static AudioOutput Open(int sampleRate, int bufferFrames, bool nullDevice = false, string? deviceName = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sampleRate);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bufferFrames);
         try
         {
-            var result = nmm_playback_open((uint)sampleRate, Channels, (uint)bufferFrames, nullDevice ? 1 : 0, out var handle);
+            var result = nmm_playback_open((uint)sampleRate, Channels, (uint)bufferFrames, nullDevice ? 1 : 0, deviceName, out var handle);
             if (result != 0 || handle == 0)
             {
-                throw new AudioDeviceException($"音の出力デバイスを開けませんでした（miniaudio のエラー {result}）");
+                throw new AudioDeviceException(AudioDevices.DescribeOpenError("出力", deviceName, result));
             }
 
             return new AudioOutput(handle, sampleRate, bufferFrames);
@@ -126,8 +129,8 @@ public sealed partial class AudioOutput : IDisposable
         }
     }
 
-    [LibraryImport("nmm_audio")]
-    private static partial int nmm_playback_open(uint sampleRate, uint channels, uint bufferFrames, int nullBackend, out nint playback);
+    [LibraryImport("nmm_audio", StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int nmm_playback_open(uint sampleRate, uint channels, uint bufferFrames, int nullBackend, string? deviceName, out nint playback);
 
     [LibraryImport("nmm_audio")]
     private static partial int nmm_playback_start(nint playback);
