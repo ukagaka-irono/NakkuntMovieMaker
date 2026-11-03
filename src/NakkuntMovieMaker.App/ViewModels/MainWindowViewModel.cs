@@ -25,6 +25,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         VoicePlayer = new VoicePlayer(session.DisableAudioDevice, () => session.Settings.OutputDevice);
         Dialogue = new DialogueViewModel(session, dialogs, VoicePlayer);
         Recording = new RecordingViewModel(session, dialogs, Preview, openInput);
+        Characters = new CharactersViewModel(session, dialogs, VoicePlayer, PropertiesViewModel.SystemFonts());
         session.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(EditorSession.Title))
@@ -96,6 +97,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public DialogueViewModel Dialogue { get; }
 
     public RecordingViewModel Recording { get; }
+
+    public CharactersViewModel Characters { get; }
 
     public string Title => Session.Title;
 

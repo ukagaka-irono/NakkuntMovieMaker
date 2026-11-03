@@ -46,6 +46,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
     /// <summary>別のプロジェクトを開いた（または新しく作った）。画面は表示を作り直す</summary>
     public event EventHandler? ProjectOpened;
 
+    /// <summary>音声合成エンジンを読み込み直した</summary>
+    public event EventHandler? VoiceEnginesReloaded;
+
     /// <summary>プロジェクトが編集された（元に戻す・やり直しを含む）</summary>
     public event EventHandler<DocumentChange>? Changed;
 
@@ -209,6 +212,13 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>音声合成エンジンを読み込み直す（AquesTalk の場所を変えたとき）</summary>
+    public void ReloadVoiceEngines()
+    {
+        _workspace!.ReloadVoices(this);
+        VoiceEnginesReloaded?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>再生位置を動かす（0 より前には行かない）。再生中なら再生もその位置から続ける</summary>
     public void Seek(long frame)
     {
@@ -369,16 +379,7 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
                 Media,
                 Frames,
                 new PlaybackOptions(DisableAudioDevice: session.DisableAudioDevice, OutputDevice: session.Settings.OutputDevice));
-            if (session._voiceEngines is { } create)
-            {
-                Engines = create();
-            }
-            else
-            {
-                var aquesTalk = session.Settings.AquesTalkFolder is { Length: > 0 } aquesFolder ? AquesTalkOptions.Default with { Folder = aquesFolder } : null;
-                (Engines, ConverterError) = Engine.VoiceEngines.CreateDefault(aquesTalk);
-            }
-
+            (Engines, ConverterError) = CreateEngines(session);
             Voices = new VoiceService(Engines, new VoiceCache(folder));
         }
 
@@ -392,11 +393,30 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
 
         public PlaybackController Playback { get; }
 
-        public VoiceEngineRegistry Engines { get; }
+        public VoiceEngineRegistry Engines { get; private set; }
 
-        public VoiceService Voices { get; }
+        public VoiceService Voices { get; private set; }
 
-        public string? ConverterError { get; }
+        public string? ConverterError { get; private set; }
+
+        public void ReloadVoices(EditorSession session)
+        {
+            Voices.Dispose();
+            Engines.Dispose();
+            (Engines, ConverterError) = CreateEngines(session);
+            Voices = new VoiceService(Engines, new VoiceCache(session.ProjectFolder));
+        }
+
+        private static (VoiceEngineRegistry, string?) CreateEngines(EditorSession session)
+        {
+            if (session._voiceEngines is { } create)
+            {
+                return (create(), null);
+            }
+
+            var aquesTalk = session.Settings.AquesTalkFolder is { Length: > 0 } folder ? AquesTalkOptions.Default with { Folder = folder } : null;
+            return Engine.VoiceEngines.CreateDefault(aquesTalk);
+        }
 
         public void Dispose()
         {

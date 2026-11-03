@@ -310,7 +310,8 @@ public sealed partial class PropertiesViewModel : ObservableObject
         _ => choice,
     };
 
-    private static IReadOnlyList<string> SystemFonts()
+    /// <summary>PC に入っているフォントの名前</summary>
+    public static IReadOnlyList<string> SystemFonts()
     {
         try
         {

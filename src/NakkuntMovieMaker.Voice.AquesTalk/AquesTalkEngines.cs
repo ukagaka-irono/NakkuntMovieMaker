@@ -76,7 +76,7 @@ public sealed unsafe class AquesTalk1Engine : AquesTalkEngineBase
     public override VoiceEngineStatus Status =>
         Voices.Count > 0
             ? VoiceEngineStatus.Ready
-            : NotInstalled("AquesTalk1", $"{Path.Combine("engines", "aquestalk", "aquestalk1", AquesTalkOptions.Rid)}/<声の名前（f1 など）>/", "https://www.a-quest.com/products/aquestalk_1.html");
+            : NotInstalled("AquesTalk1", $"{Options.ProductFolder("aquestalk1")}{Path.DirectorySeparatorChar}<声の名前（f1 など）>", "https://www.a-quest.com/products/aquestalk_1.html");
 
     public override VoiceAudio Synthesize(VoiceRequest request, CancellationToken cancellationToken)
     {
@@ -155,7 +155,7 @@ public sealed unsafe class AquesTalk10Engine : AquesTalkEngineBase
     public override VoiceEngineStatus Status =>
         _library.Value is not null
             ? VoiceEngineStatus.Ready
-            : NotInstalled("AquesTalk10", $"{Path.Combine("engines", "aquestalk", "aquestalk10", AquesTalkOptions.Rid)}/", "https://www.a-quest.com/products/aquestalk10.html");
+            : NotInstalled("AquesTalk10", Options.ProductFolder("aquestalk10"), "https://www.a-quest.com/products/aquestalk10.html");
 
     public override VoiceAudio Synthesize(VoiceRequest request, CancellationToken cancellationToken)
     {
@@ -257,7 +257,7 @@ public sealed unsafe class AquesTalk2Engine : AquesTalkEngineBase
     public override VoiceEngineStatus Status =>
         _library.Value is not null
             ? VoiceEngineStatus.Ready
-            : NotInstalled("AquesTalk2", $"{Path.Combine("engines", "aquestalk", "aquestalk2", AquesTalkOptions.Rid)}/", "https://www.a-quest.com/products/aquestalk_2.html");
+            : NotInstalled("AquesTalk2", Options.ProductFolder("aquestalk2"), "https://www.a-quest.com/products/aquestalk_2.html");
 
     public override VoiceAudio Synthesize(VoiceRequest request, CancellationToken cancellationToken)
     {

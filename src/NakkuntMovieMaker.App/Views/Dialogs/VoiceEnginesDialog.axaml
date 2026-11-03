@@ -1,0 +1,49 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
+        x:Class="NakkuntMovieMaker.App.Views.Dialogs.VoiceEnginesDialog"
+        x:DataType="vm:VoiceEnginesViewModel"
+        Title="音声合成エンジン"
+        Width="720" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="{StaticResource DialogPadding}" Spacing="{StaticResource Space2}">
+    <TextBlock Classes="panel-header" Text="エンジン" />
+    <ItemsControl ItemsSource="{Binding Engines}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="vm:EngineChoice">
+          <Border Classes="panel" Margin="0,0,0,4">
+            <StackPanel Spacing="2">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Text="使えます" Classes="secondary" IsVisible="{Binding Available}" />
+                <TextBlock DockPanel.Dock="Right" Text="未導入" Classes="warning" IsVisible="{Binding !Available}" />
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+              </DockPanel>
+              <TextBlock Classes="secondary" Text="{Binding Message}" TextWrapping="Wrap" IsVisible="{Binding !Available}" />
+              <HyperlinkButton Content="{Binding HelpUrl}" Click="OnOpenLink" Tag="{Binding HelpUrl}" Padding="0"
+                               IsVisible="{Binding HelpUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <TextBlock Classes="panel-header" Text="AquesTalk の導入" Margin="0,8,0,0" />
+    <TextBlock Text="{x:Static vm:VoiceEnginesViewModel.LicenseNotice}" TextWrapping="Wrap" />
+    <HyperlinkButton Content="A-quest の公式ページ" Click="OnOpenLink" Tag="{x:Static vm:VoiceEnginesViewModel.OfficialUrl}" Padding="0" />
+    <TextBlock Text="入手したライブラリを、次のように置いてください：" Margin="0,4,0,0" />
+    <SelectableTextBlock Classes="secondary" Text="{Binding Layout}" TextWrapping="Wrap" FontFamily="monospace" />
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="{StaticResource Space1}" Margin="4,0,0,0">
+        <Button Content="場所を変える…" Command="{Binding BrowseCommand}" />
+        <Button Content="既定に戻す" Command="{Binding ResetFolderCommand}" />
+        <Button Content="読み込み直す" Command="{Binding ReloadCommand}" ToolTip.Tip="ライブラリを置いたあとで押してください" />
+      </StackPanel>
+      <TextBox Text="{Binding Folder}" IsReadOnly="True" />
+    </DockPanel>
+    <TextBlock Classes="warning" Text="{Binding ConverterError}" IsVisible="{Binding HasConverterError}" />
+
+    <StackPanel Classes="dialog-buttons">
+      <Button Classes="accent" Content="閉じる" IsDefault="True" IsCancel="True" Click="OnClose" />
+    </StackPanel>
+  </StackPanel>
+</Window>

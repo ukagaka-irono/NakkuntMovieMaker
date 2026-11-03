@@ -1,0 +1,93 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
+             xmlns:model="using:NakkuntMovieMaker.Core.Model"
+             xmlns:voice="using:NakkuntMovieMaker.Voice"
+             x:Class="NakkuntMovieMaker.App.Views.CharactersView"
+             x:DataType="vm:CharactersViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="{StaticResource Space1}" Margin="0,0,0,8">
+      <Button Classes="toolbar" Content="追加" Command="{Binding AddCommand}" />
+      <Button Classes="toolbar" Content="複製" Command="{Binding DuplicateCommand}" />
+      <Button Classes="toolbar" Content="削除" Command="{Binding RemoveCommand}" />
+      <Button Classes="toolbar" Content="エンジン…" Command="{Binding ShowEngineGuideCommand}" ToolTip.Tip="音声合成エンジンと AquesTalk の導入" />
+    </StackPanel>
+    <ListBox DockPanel.Dock="Top" ItemsSource="{Binding Characters}" SelectedItem="{Binding Selected}" MaxHeight="140" Background="Transparent">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="model:Character">
+          <TextBlock Text="{Binding Name}" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <Grid>
+      <TextBlock Classes="empty-hint" Text="キャラクターを追加すると、セリフに声と字幕を付けられます" IsVisible="{Binding !HasSelection}" />
+      <ScrollViewer IsVisible="{Binding HasSelection}" HorizontalScrollBarVisibility="Disabled" Margin="0,8,0,0">
+        <StackPanel Spacing="6" Margin="0,0,12,0">
+          <Grid ColumnDefinitions="110,*" ColumnSpacing="4">
+            <TextBlock Classes="field-label" Text="名前" />
+            <TextBox Grid.Column="1" x:Name="NameBox" Text="{Binding Name}" />
+          </Grid>
+
+          <TextBlock Classes="panel-header" Text="声" Margin="0,8,0,0" />
+          <Grid ColumnDefinitions="110,*" ColumnSpacing="4">
+            <TextBlock Classes="field-label" Text="エンジン" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding Engines}" SelectedItem="{Binding Engine}" HorizontalAlignment="Stretch" />
+          </Grid>
+          <StackPanel IsVisible="{Binding HasEngineProblem}" Spacing="4" Margin="114,0,0,0">
+            <TextBlock Classes="warning" Text="{Binding EngineMessage}" />
+            <Button Content="導入の案内…" Command="{Binding ShowEngineGuideCommand}" />
+          </StackPanel>
+          <Grid ColumnDefinitions="110,*" ColumnSpacing="4">
+            <TextBlock Classes="field-label" Text="声" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding Voices}" SelectedItem="{Binding Voice}" HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="voice:VoiceInfo">
+                  <TextBlock Text="{Binding Name}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </Grid>
+          <Grid ColumnDefinitions="110,*" ColumnSpacing="4">
+            <TextBlock Classes="field-label" Text="速さ" />
+            <NumericUpDown Grid.Column="1" Value="{Binding Speed}" Minimum="0.5" Maximum="2" Increment="0.05" FormatString="0.##" />
+          </Grid>
+          <Grid ColumnDefinitions="110,*" ColumnSpacing="4">
+            <TextBlock Classes="field-label" Text="高さ" />
+            <NumericUpDown Grid.Column="1" Value="{Binding Pitch}" Minimum="0.5" Maximum="2" Increment="0.05" FormatString="0.##" />
+          </Grid>
+          <Grid ColumnDefinitions="110,*" ColumnSpacing="4">
+            <TextBlock Classes="field-label" Text="抑揚" />
+            <NumericUpDown Grid.Column="1" Value="{Binding Intonation}" Minimum="0" Maximum="2" Increment="0.05" FormatString="0.##" />
+          </Grid>
+          <Grid ColumnDefinitions="110,*" ColumnSpacing="4">
+            <TextBlock Classes="field-label" Text="音量" />
+            <NumericUpDown Grid.Column="1" Value="{Binding Volume}" Minimum="0" Maximum="2" Increment="0.05" FormatString="0.##" />
+          </Grid>
+          <Button Content="試聴" Command="{Binding ListenCommand}" Margin="114,0,0,0" />
+          <TextBlock Classes="secondary" Text="{Binding Status}" TextWrapping="Wrap" />
+
+          <TextBlock Classes="panel-header" Text="立ち絵" Margin="0,8,0,0" />
+          <Grid ColumnDefinitions="110,*" ColumnSpacing="4">
+            <TextBlock Classes="field-label" Text="種類" />
+            <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:CharactersViewModel.TachieKinds}" SelectedItem="{Binding TachieType}" HorizontalAlignment="Stretch" />
+          </Grid>
+          <Grid ColumnDefinitions="110,*,Auto" ColumnSpacing="4">
+            <TextBlock Classes="field-label" Text="場所" />
+            <TextBox Grid.Column="1" Text="{Binding TachiePath}" IsReadOnly="True" />
+            <Button Grid.Column="2" Content="参照…" Command="{Binding BrowseTachieCommand}" />
+          </Grid>
+          <Button Content="再生位置に立ち絵を置く" Command="{Binding PlaceTachieCommand}" Margin="114,0,0,0" />
+
+          <TextBlock Classes="panel-header" Text="字幕のスタイル" Margin="0,8,0,0" />
+          <ItemsControl ItemsSource="{Binding SubtitleEditors}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</UserControl>

@@ -4,62 +4,6 @@
              xmlns:effects="using:NakkuntMovieMaker.Rendering.Effects"
              x:Class="NakkuntMovieMaker.App.Views.PropertiesView"
              x:DataType="vm:PropertiesViewModel">
-  <UserControl.DataTemplates>
-    <!-- 入力欄の種類ごとの見た目。左に名前、右に入力欄 -->
-    <DataTemplate DataType="vm:AnimatedNumberEditor">
-      <StackPanel Spacing="2">
-        <Grid ColumnDefinitions="110,*,Auto" ColumnSpacing="4">
-          <TextBlock Classes="field-label" Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
-          <NumericUpDown Grid.Column="1" Value="{Binding Value}" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}" Increment="{Binding Increment}" FormatString="{Binding Format}" />
-          <ToggleButton Grid.Column="2" Classes="toolbar keyframe" IsChecked="{Binding HasKey, Mode=OneWay}" Command="{Binding ToggleKeyCommand}" Content="◆"
-                        ToolTip.Tip="再生位置にキーフレームを置く・外す" />
-        </Grid>
-        <ComboBox ItemsSource="{x:Static vm:AnimatedNumberEditor.Easings}" SelectedItem="{Binding Easing}" IsVisible="{Binding HasKey}"
-                  HorizontalAlignment="Stretch" Margin="114,0,0,0" ToolTip.Tip="このキーフレームから次までの変化のしかた" />
-      </StackPanel>
-    </DataTemplate>
-    <DataTemplate DataType="vm:NumberEditor">
-      <Grid ColumnDefinitions="110,*" ColumnSpacing="4">
-        <TextBlock Classes="field-label" Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
-        <NumericUpDown Grid.Column="1" Value="{Binding Value}" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}" Increment="{Binding Increment}" FormatString="{Binding Format}" />
-      </Grid>
-    </DataTemplate>
-    <DataTemplate DataType="vm:ColorEditor">
-      <Grid ColumnDefinitions="110,*,Auto" ColumnSpacing="4">
-        <TextBlock Classes="field-label" Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
-        <TextBox Grid.Column="1" Text="{Binding Text}" FontFamily="monospace" ToolTip.Tip="#RRGGBB か、不透明度も入れるなら #RRGGBBAA" />
-        <Border Grid.Column="2" Width="28" Height="24" CornerRadius="3" BorderThickness="1" BorderBrush="{DynamicResource PanelBorderBrush}">
-          <Border.Background>
-            <SolidColorBrush Color="{Binding Swatch}" />
-          </Border.Background>
-        </Border>
-      </Grid>
-    </DataTemplate>
-    <DataTemplate DataType="vm:BoolEditor">
-      <CheckBox Content="{Binding Label}" IsChecked="{Binding Value}" Margin="114,0,0,0" />
-    </DataTemplate>
-    <DataTemplate DataType="vm:ChoiceEditor">
-      <Grid ColumnDefinitions="110,*" ColumnSpacing="4">
-        <TextBlock Classes="field-label" Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
-        <ComboBox Grid.Column="1" ItemsSource="{Binding Choices}" SelectedItem="{Binding Selected}" HorizontalAlignment="Stretch" />
-      </Grid>
-    </DataTemplate>
-    <DataTemplate DataType="vm:TextEditor">
-      <Grid ColumnDefinitions="110,*" ColumnSpacing="4">
-        <TextBlock Classes="field-label" Text="{Binding Label}" VerticalAlignment="Top" Margin="0,6,8,0" />
-        <TextBox Grid.Column="1" Text="{Binding Text}" AcceptsReturn="{Binding Multiline}" TextWrapping="Wrap" MinHeight="32" MaxHeight="160"
-                 PlaceholderText="{Binding Placeholder}" LostFocus="OnTextLostFocus" KeyDown="OnTextKeyDown" />
-      </Grid>
-    </DataTemplate>
-    <DataTemplate DataType="vm:FileEditor">
-      <Grid ColumnDefinitions="110,*,Auto" ColumnSpacing="4">
-        <TextBlock Classes="field-label" Text="{Binding Label}" />
-        <TextBox Grid.Column="1" Text="{Binding Path}" IsReadOnly="True" />
-        <Button Grid.Column="2" Content="参照…" Command="{Binding BrowseCommand}" />
-      </Grid>
-    </DataTemplate>
-  </UserControl.DataTemplates>
-
   <DockPanel>
     <TextBlock DockPanel.Dock="Top" Classes="panel-header" Text="{Binding Title}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasItem}" />
     <DropDownButton DockPanel.Dock="Bottom" Content="エフェクトを追加" HorizontalAlignment="Stretch" Margin="0,8,0,0" IsVisible="{Binding CanHaveEffects}">
