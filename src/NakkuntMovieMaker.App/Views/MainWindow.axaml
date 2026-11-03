@@ -3,17 +3,66 @@
         xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="720"
+        mc:Ignorable="d" d:DesignWidth="1440" d:DesignHeight="900"
         x:Class="NakkuntMovieMaker.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="{Binding Title}"
-        Width="1280" Height="720">
+        Width="1440" Height="900" MinWidth="960" MinHeight="600"
+        WindowStartupLocation="CenterScreen">
+  <!-- メニューの Tag はショートカットのコマンドの ID。表示するキーはショートカットの設定から入れる -->
+  <DockPanel>
+    <Menu x:Name="MainMenu" DockPanel.Dock="Top">
+      <MenuItem Header="ファイル(_F)">
+        <MenuItem Header="新規作成(_N)…" Command="{Binding NewProjectCommand}" Tag="file.new" />
+        <MenuItem Header="開く(_O)…" Command="{Binding OpenProjectCommand}" Tag="file.open" />
+        <MenuItem Header="最近使ったプロジェクト(_R)" ItemsSource="{Binding RecentProjects}">
+          <MenuItem.ItemContainerTheme>
+            <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" x:DataType="x:String">
+              <Setter Property="Header" Value="{Binding}" />
+              <Setter Property="Command" Value="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenRecentCommand}" />
+              <Setter Property="CommandParameter" Value="{Binding}" />
+            </ControlTheme>
+          </MenuItem.ItemContainerTheme>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="保存(_S)" Command="{Binding SaveCommand}" Tag="file.save" />
+        <MenuItem Header="名前を付けて保存(_A)…" Command="{Binding SaveAsCommand}" Tag="file.saveAs" />
+        <Separator />
+        <MenuItem x:Name="ExportMenu" Header="書き出し(_E)…" Tag="file.export" />
+        <Separator />
+        <MenuItem Header="プロジェクトの設定(_P)…" Command="{Binding ProjectSettingsCommand}" Tag="file.projectSettings" />
+        <Separator />
+        <MenuItem Header="終了(_X)" Click="OnExit" />
+      </MenuItem>
+      <MenuItem x:Name="EditMenu" Header="編集(_E)">
+        <MenuItem Header="{Binding UndoHeader}" Command="{Binding UndoCommand}" Tag="edit.undo" />
+        <MenuItem Header="{Binding RedoHeader}" Command="{Binding RedoCommand}" Tag="edit.redo" />
+      </MenuItem>
+      <MenuItem x:Name="ViewMenu" Header="表示(_V)" />
+      <MenuItem x:Name="PlayMenu" Header="再生(_P)" />
+      <MenuItem x:Name="ToolsMenu" Header="ツール(_T)" />
+    </Menu>
 
-  <Design.DataContext>
-    <vm:MainWindowViewModel />
-  </Design.DataContext>
+    <Border DockPanel.Dock="Bottom" Padding="8,2" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0">
+      <TextBlock Classes="secondary" Text="{Binding Status}" />
+    </Border>
 
-  <TextBlock Text="{Binding Title}"
-             HorizontalAlignment="Center"
-             VerticalAlignment="Center" />
+    <Grid x:Name="Workspace" Margin="4" RowDefinitions="*,4,320" ColumnDefinitions="300,4,*,4,340">
+      <Border x:Name="LeftPanel" Classes="panel">
+        <TextBlock Classes="empty-hint" Text="素材の一覧" />
+      </Border>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+      <Border x:Name="CenterPanel" Grid.Column="2" Classes="panel">
+        <TextBlock Classes="empty-hint" Text="プレビュー" />
+      </Border>
+      <GridSplitter Grid.Column="3" ResizeDirection="Columns" Background="Transparent" />
+      <Border x:Name="RightPanel" Grid.Column="4" Classes="panel">
+        <TextBlock Classes="empty-hint" Text="プロパティ" />
+      </Border>
+      <GridSplitter Grid.Row="1" Grid.ColumnSpan="5" ResizeDirection="Rows" Background="Transparent" />
+      <Border x:Name="BottomPanel" Grid.Row="2" Grid.ColumnSpan="5" Classes="panel">
+        <TextBlock Classes="empty-hint" Text="タイムライン" />
+      </Border>
+    </Grid>
+  </DockPanel>
 </Window>

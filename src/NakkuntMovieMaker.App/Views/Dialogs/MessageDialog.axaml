@@ -1,0 +1,11 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="NakkuntMovieMaker.App.Views.Dialogs.MessageDialog"
+        SizeToContent="WidthAndHeight"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="{StaticResource DialogPadding}" MinWidth="320" MaxWidth="560">
+    <TextBlock x:Name="MessageText" TextWrapping="Wrap" />
+    <StackPanel x:Name="Buttons" Classes="dialog-buttons" />
+  </StackPanel>
+</Window>

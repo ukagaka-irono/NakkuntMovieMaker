@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using NakkuntMovieMaker.Core.Model;
+using NakkuntMovieMaker.Core.Time;
 
 namespace NakkuntMovieMaker.Core.Editing;
 
@@ -385,6 +386,33 @@ public static class EditCommands
         }
 
         return merged;
+    }
+
+    /// <summary>
+    /// シーンの名前と形式（解像度・フレームレート・サンプルレート）を変える。フレームレートが変わるときは、
+    /// アイテムの位置と長さ、マーカーを、同じ時刻になるよう新しいフレームレートに合わせる（長さは 1 フレーム以上）。
+    /// キーフレームはアイテムの先頭からのフレーム数のまま変えない
+    /// </summary>
+    public static IOperation ChangeSceneSettings(Project project, SceneId sceneId, string name, SceneFormat format)
+    {
+        var scene = project.GetScene(sceneId);
+        var from = scene.Fps;
+        var to = format.Fps;
+        long Convert(long frame) => from == to ? frame : Rational.Rescale(frame, 1 / from, 1 / to, Rounding.Nearest);
+
+        var items = scene.Items.Values.Select(item =>
+        {
+            var start = Convert(item.Start);
+            return item with { Start = start, Length = Math.Max(1, Convert(item.End) - start) };
+        });
+        var updated = scene with
+        {
+            Name = name,
+            Format = format,
+            Items = items.ToImmutableDictionary(item => item.Id),
+            Markers = scene.Markers.Select(marker => marker with { Frame = Convert(marker.Frame) }).ToImmutableList(),
+        };
+        return new ReplaceScene(updated);
     }
 
     /// <summary>操作を順に適用しながら Transaction を組み立て、最後に結果を確かめる</summary>

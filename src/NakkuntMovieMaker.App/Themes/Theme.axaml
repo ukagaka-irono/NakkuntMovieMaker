@@ -1,0 +1,85 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- 画面で使う色・間隔・文字の大きさは、すべてここで決める。自前で描くコントロール（タイムライン・プレビュー・メーター）もここの色を使う -->
+
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Dark">
+      <Color x:Key="WindowBackgroundColor">#1E1F22</Color>
+      <Color x:Key="PanelBackgroundColor">#26272B</Color>
+      <Color x:Key="PanelBorderColor">#3A3B40</Color>
+      <Color x:Key="SecondaryTextColor">#9A9CA3</Color>
+      <Color x:Key="PreviewBackgroundColor">#111214</Color>
+      <Color x:Key="TimelineBackgroundColor">#1B1C1F</Color>
+      <Color x:Key="TimelineLayerAltColor">#212226</Color>
+      <Color x:Key="TimelineRulerColor">#2C2D32</Color>
+      <Color x:Key="TimelineGridColor">#33343A</Color>
+      <Color x:Key="TimelineTextColor">#D4D5DA</Color>
+      <Color x:Key="PlayheadColor">#FF5A4E</Color>
+      <Color x:Key="SelectionColor">#FFD24A</Color>
+      <Color x:Key="RangeColor">#334A90E2</Color>
+      <Color x:Key="SnapColor">#4AD2FF</Color>
+      <Color x:Key="ItemVideoColor">#3F6FB5</Color>
+      <Color x:Key="ItemImageColor">#3E8E7E</Color>
+      <Color x:Key="ItemAudioColor">#2F8A4F</Color>
+      <Color x:Key="ItemTextColor">#9156B5</Color>
+      <Color x:Key="ItemShapeColor">#B5793F</Color>
+      <Color x:Key="ItemVoiceColor">#B54F6F</Color>
+      <Color x:Key="ItemTachieColor">#6A7A2F</Color>
+      <Color x:Key="WaveformColor">#A0FFFFFF</Color>
+      <Color x:Key="MeterGreenColor">#3CC46B</Color>
+      <Color x:Key="MeterYellowColor">#E6C440</Color>
+      <Color x:Key="MeterRedColor">#E8504A</Color>
+      <Color x:Key="MeterBackgroundColor">#16171A</Color>
+      <Color x:Key="WarningColor">#E6A040</Color>
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Light">
+      <Color x:Key="WindowBackgroundColor">#F3F3F5</Color>
+      <Color x:Key="PanelBackgroundColor">#FFFFFF</Color>
+      <Color x:Key="PanelBorderColor">#D5D6DB</Color>
+      <Color x:Key="SecondaryTextColor">#6A6C73</Color>
+      <Color x:Key="PreviewBackgroundColor">#2A2B2F</Color>
+      <Color x:Key="TimelineBackgroundColor">#ECEDF0</Color>
+      <Color x:Key="TimelineLayerAltColor">#E4E5E9</Color>
+      <Color x:Key="TimelineRulerColor">#DADBE0</Color>
+      <Color x:Key="TimelineGridColor">#CDCED4</Color>
+      <Color x:Key="TimelineTextColor">#2A2B30</Color>
+      <Color x:Key="PlayheadColor">#E0362B</Color>
+      <Color x:Key="SelectionColor">#E0A800</Color>
+      <Color x:Key="RangeColor">#334A90E2</Color>
+      <Color x:Key="SnapColor">#0A90C0</Color>
+      <Color x:Key="ItemVideoColor">#6F9AD8</Color>
+      <Color x:Key="ItemImageColor">#6CB8A8</Color>
+      <Color x:Key="ItemAudioColor">#62B57F</Color>
+      <Color x:Key="ItemTextColor">#B88AD6</Color>
+      <Color x:Key="ItemShapeColor">#D8A46F</Color>
+      <Color x:Key="ItemVoiceColor">#D8809C</Color>
+      <Color x:Key="ItemTachieColor">#9DAD5C</Color>
+      <Color x:Key="WaveformColor">#90000000</Color>
+      <Color x:Key="MeterGreenColor">#2FA85A</Color>
+      <Color x:Key="MeterYellowColor">#D0A820</Color>
+      <Color x:Key="MeterRedColor">#D83A34</Color>
+      <Color x:Key="MeterBackgroundColor">#DADBE0</Color>
+      <Color x:Key="WarningColor">#B87010</Color>
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+
+  <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{DynamicResource WindowBackgroundColor}" />
+  <SolidColorBrush x:Key="PanelBackgroundBrush" Color="{DynamicResource PanelBackgroundColor}" />
+  <SolidColorBrush x:Key="PanelBorderBrush" Color="{DynamicResource PanelBorderColor}" />
+  <SolidColorBrush x:Key="SecondaryTextBrush" Color="{DynamicResource SecondaryTextColor}" />
+  <SolidColorBrush x:Key="PreviewBackgroundBrush" Color="{DynamicResource PreviewBackgroundColor}" />
+  <SolidColorBrush x:Key="WarningBrush" Color="{DynamicResource WarningColor}" />
+
+  <!-- 間隔は 4 の倍数 -->
+  <x:Double x:Key="Space1">4</x:Double>
+  <x:Double x:Key="Space2">8</x:Double>
+  <x:Double x:Key="Space3">12</x:Double>
+  <x:Double x:Key="Space4">16</x:Double>
+  <Thickness x:Key="PanelPadding">8</Thickness>
+  <Thickness x:Key="DialogPadding">16</Thickness>
+  <CornerRadius x:Key="PanelCornerRadius">4</CornerRadius>
+
+  <x:Double x:Key="SmallFontSize">11</x:Double>
+  <x:Double x:Key="BodyFontSize">13</x:Double>
+  <x:Double x:Key="HeadingFontSize">15</x:Double>
+</ResourceDictionary>

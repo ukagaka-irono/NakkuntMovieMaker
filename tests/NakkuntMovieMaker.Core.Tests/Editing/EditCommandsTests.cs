@@ -260,4 +260,33 @@ public class EditCommandsTests
         var radius = (NumberParameter)trimmed.Effects[0].Parameters["radius"];
         Assert.Equal([-5L, 35L], radius.Value.Keys.Select(key => key.Frame));
     }
+
+    [Fact]
+    public void ChangingTheFrameRateKeepsTimes()
+    {
+        var format = SceneFormat.Landscape1080p60 with { Width = 1280, Height = 720 };
+        var marker = new Marker(MarkerId.New(), 15, "目印", RgbaColor.White);
+        var project = new SetMarker(_t.SceneId, marker.Id, marker).Apply(_t.Project).Project;
+
+        var operation = EditCommands.ChangeSceneSettings(project, _t.SceneId, "新しい名前", format);
+        var scene = operation.Apply(project).Project.GetScene(_t.SceneId);
+
+        Assert.Equal(("新しい名前", format), (scene.Name, scene.Format));
+        Assert.Equal((80L, 2 * _t.Shape.Length), (scene.GetItem(_t.Shape.Id).Start, scene.GetItem(_t.Shape.Id).Length));
+        Assert.Equal(30, scene.Markers[0].Frame);
+        Assert.Equal(project, operation.Apply(project).Inverse.Apply(operation.Apply(project).Project).Project);
+
+        // フレームレートが同じなら、位置は変わらない
+        var resized = EditCommands.ChangeSceneSettings(project, _t.SceneId, "メイン", SceneFormat.Landscape1080p30 with { Width = 640 }).Apply(project).Project;
+        Assert.Equal(40, resized.GetScene(_t.SceneId).GetItem(_t.Shape.Id).Start);
+    }
+
+    [Fact]
+    public void RenamesTheProject()
+    {
+        var result = new RenameProject("別の名前").Apply(_t.Project);
+
+        Assert.Equal("別の名前", result.Project.Name);
+        Assert.Equal(_t.Project, result.Inverse.Apply(result.Project).Project);
+    }
 }

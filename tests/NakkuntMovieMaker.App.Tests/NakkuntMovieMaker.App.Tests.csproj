@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/NakkuntMovieMaker.App/NakkuntMovieMaker.App.csproj" />
+  </ItemGroup>
+</Project>

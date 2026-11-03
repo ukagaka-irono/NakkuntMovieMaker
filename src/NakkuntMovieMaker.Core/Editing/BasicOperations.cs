@@ -216,6 +216,27 @@ public sealed record SetAsset(AssetId Id, Asset? Asset) : IOperation
     }
 }
 
+/// <summary>シーンを、同じ ID の新しい内容に丸ごと置き換える（名前や形式の変更など）</summary>
+public sealed record ReplaceScene(Scene Scene) : IOperation
+{
+    public string Description => "シーンの設定";
+
+    public OperationResult Apply(Project project)
+    {
+        var old = project.GetScene(Scene.Id);
+        return new OperationResult(project.WithScene(Scene), new ReplaceScene(old), [DirtyRange.WholeScene(Scene.Id)]);
+    }
+}
+
+/// <summary>プロジェクトの名前を変える</summary>
+public sealed record RenameProject(string Name) : IOperation
+{
+    public string Description => "プロジェクトの名前の変更";
+
+    public OperationResult Apply(Project project) =>
+        new(project with { Name = Name }, new RenameProject(project.Name), []);
+}
+
 public static class Operations
 {
     /// <summary>複数の操作を 1 つの Transaction にまとめる</summary>
