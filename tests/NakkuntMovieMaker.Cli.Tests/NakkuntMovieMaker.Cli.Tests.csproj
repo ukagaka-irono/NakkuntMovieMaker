@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../../src/NakkuntMovieMaker.Cli/NakkuntMovieMaker.Cli.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../NakkuntMovieMaker.Media.Tests/Fixtures/tone-1s.wav" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

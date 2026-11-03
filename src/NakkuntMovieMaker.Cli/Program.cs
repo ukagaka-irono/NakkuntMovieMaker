@@ -8,12 +8,13 @@ namespace NakkuntMovieMaker.Cli;
 
 internal static class Program
 {
-    // export / render-frame のサブコマンドは、エンジンの実装に合わせて追加する
     public static int Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
         var root = new RootCommand("NakkuntMovieMaker のコマンドラインツール");
+        root.Subcommands.Add(ExportCommands.CreateExportCommand());
+        root.Subcommands.Add(ExportCommands.CreateRenderFrameCommand());
         root.Subcommands.Add(CreateProbeCommand());
         root.Subcommands.Add(CreateBenchCommand());
         return root.Parse(args).Invoke();
