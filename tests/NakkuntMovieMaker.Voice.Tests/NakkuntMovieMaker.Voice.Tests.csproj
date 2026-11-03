@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../../src/NakkuntMovieMaker.Voice/NakkuntMovieMaker.Voice.csproj" />
+    <ProjectReference Include="../../src/NakkuntMovieMaker.Voice.Sapi/NakkuntMovieMaker.Voice.Sapi.csproj" />
+    <ProjectReference Include="../../src/NakkuntMovieMaker.Voice.AquesTalk/NakkuntMovieMaker.Voice.AquesTalk.csproj" />
   </ItemGroup>
 </Project>
