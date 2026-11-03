@@ -88,6 +88,8 @@
         <MenuItem Header="録音の開始・停止" Command="{Binding Recording.ToggleRecordCommand}" Tag="record.toggle" />
         <Separator />
         <MenuItem Header="音声合成エンジンと AquesTalk の導入…" Command="{Binding Characters.ShowEngineGuideCommand}" />
+        <Separator />
+        <MenuItem Header="設定（ショートカット・自動保存）…" Command="{Binding SettingsCommand}" />
       </MenuItem>
     </Menu>
 

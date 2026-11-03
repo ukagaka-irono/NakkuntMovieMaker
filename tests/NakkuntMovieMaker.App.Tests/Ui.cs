@@ -40,6 +40,9 @@ public sealed class TestEnvironment : IDisposable
 
     public string SettingsPath => Path.Combine(Folder, "settings.json");
 
+    /// <summary>自動保存の復元の記録（利用者の本物の記録には触れない）</summary>
+    public string RecoveryFolder => Path.Combine(Folder, "recovery");
+
     public EditorSession CreateSession() =>
         new(Settings, disableAudioDevice: true, settingsPath: SettingsPath, voiceEngines: () => new Voice.VoiceEngineRegistry([new TestVoiceEngine()]));
 

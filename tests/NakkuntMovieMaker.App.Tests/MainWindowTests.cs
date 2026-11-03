@@ -19,7 +19,7 @@ public sealed class MainWindowTests : IDisposable
 
     public void Dispose() => _environment.Dispose();
 
-    private MainWindowViewModel CreateViewModel() => new(_environment.CreateSession(), new ShortcutRegistry(), _dialogs);
+    private MainWindowViewModel CreateViewModel() => new(_environment.CreateSession(), new ShortcutRegistry(), _dialogs, recoveryFolder: _environment.RecoveryFolder, settingsPath: _environment.SettingsPath);
 
     private static IOperation AddShape(EditorSession session, long start = 0) =>
         EditCommands.AddItem(

@@ -14,6 +14,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        Opened += async (_, _) =>
+        {
+            // 前回の自動保存が残っていれば復元するか聞き、自動保存を始める
+            if (ViewModel is { } viewModel)
+            {
+                await viewModel.RecoverAsync();
+            }
+        };
     }
 
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;

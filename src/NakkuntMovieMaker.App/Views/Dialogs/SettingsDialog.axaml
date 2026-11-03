@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
+        x:Class="NakkuntMovieMaker.App.Views.Dialogs.SettingsDialog"
+        x:DataType="vm:SettingsViewModel"
+        Title="設定"
+        Width="680" Height="620"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="{StaticResource DialogPadding}">
+    <StackPanel DockPanel.Dock="Bottom" Classes="dialog-buttons">
+      <Button Classes="accent" Content="OK" IsDefault="True" Click="OnOk" />
+      <Button Content="キャンセル" IsCancel="True" Click="OnCancel" />
+    </StackPanel>
+    <TabControl>
+      <TabItem Header="ショートカット">
+        <DockPanel Margin="0,8,0,0">
+          <StackPanel DockPanel.Dock="Bottom" Spacing="{StaticResource Space2}" Margin="0,8,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space1}">
+              <Button Content="キーを割り当てる" Command="{Binding CaptureCommand}" />
+              <Button Content="割り当てを外す" Command="{Binding ClearCommand}" />
+              <Button Content="最初に戻す" Command="{Binding ResetCommand}" />
+              <Button Content="すべて最初に戻す" Command="{Binding ResetAllCommand}" />
+            </StackPanel>
+            <TextBlock Classes="secondary" Text="{Binding Status}" TextWrapping="Wrap" />
+          </StackPanel>
+          <ListBox ItemsSource="{Binding Shortcuts}" SelectedItem="{Binding Selected}" Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ShortcutEntry">
+                <Grid ColumnDefinitions="100,*,180">
+                  <TextBlock Classes="secondary" Text="{Binding Category}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="{Binding GestureText}" FontFamily="monospace" VerticalAlignment="Center"
+                             FontWeight="{Binding IsChanged, Converter={x:Static vm:SettingsDialogConverters.BoldWhenTrue}}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="全般">
+        <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="12" Margin="0,12,0,0">
+          <TextBlock Classes="field-label" Text="自動保存の間隔（分）" />
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource Space2}">
+            <NumericUpDown Value="{Binding AutosaveMinutes}" Minimum="0" Maximum="60" Increment="1" FormatString="0" Width="120" />
+            <TextBlock Classes="secondary" Text="0 にすると自動保存しません" VerticalAlignment="Center" />
+          </StackPanel>
+          <TextBlock Grid.Row="1" Classes="field-label" Text="音の出力デバイス" />
+          <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding OutputDevices}" SelectedItem="{Binding OutputDevice}" HorizontalAlignment="Stretch" />
+          <TextBlock Grid.Row="2" Grid.Column="1" Classes="secondary" Text="出力デバイスは、次にプロジェクトを開いたときから使います" TextWrapping="Wrap" />
+        </Grid>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</Window>

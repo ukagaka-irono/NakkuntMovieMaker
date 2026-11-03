@@ -39,12 +39,19 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
         var project = Project.CreateNew("新しいプロジェクト", SceneFormat.Landscape1080p30);
         Document = new ProjectDocument(project);
         ProjectFolder = CreateUntitledFolder();
+        _untitledFolder = ProjectFolder;
         SceneId = project.RootScene;
         Attach();
     }
 
     /// <summary>別のプロジェクトを開いた（または新しく作った）。画面は表示を作り直す</summary>
     public event EventHandler? ProjectOpened;
+
+    /// <summary>別のプロジェクトに替わる直前（今のプロジェクトの後始末に使う）</summary>
+    public event EventHandler? ProjectOpening;
+
+    /// <summary>プロジェクトを保存した</summary>
+    public event EventHandler? Saved;
 
     /// <summary>音声合成エンジンを読み込み直した</summary>
     public event EventHandler? VoiceEnginesReloaded;
@@ -144,6 +151,7 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
         _store.Save(Project, EntryPath);
         Document.MarkSaved();
         OnPropertyChanged(nameof(Title));
+        Saved?.Invoke(this, EventArgs.Empty);
         return true;
     }
 
@@ -182,6 +190,20 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
 
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(IsUntitled));
+        Saved?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// 自動保存から復元する。素材と声は元のプロジェクトのフォルダ（保存していなかったプロジェクトなら作業フォルダ）から読み、
+    /// 保存先は元のプロジェクトのファイル（なければ未保存）にする。復元した内容は保存していない変更として扱う
+    /// </summary>
+    /// <exception cref="ProjectFormatException">プロジェクトとして読めない</exception>
+    public void OpenRecovered(string autosaveEntry, string projectFolder, string? originalEntry)
+    {
+        var project = _store.Load(autosaveEntry);
+        var document = new ProjectDocument(project);
+        document.MarkUnsaved();
+        Replace(document, projectFolder, originalEntry);
     }
 
     /// <summary>操作を適用する。適用できなければ、その理由を返す</summary>
@@ -237,15 +259,14 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
 
     private void Replace(ProjectDocument document, string folder, string? entryPath)
     {
-        var oldUntitled = _untitledFolder;
+        ProjectOpening?.Invoke(this, EventArgs.Empty);
+        var previousUntitled = _untitledFolder;
         Document.Changed -= OnDocumentChanged;
         Document = document;
         ProjectFolder = folder;
         EntryPath = entryPath;
-        if (entryPath is not null)
-        {
-            _untitledFolder = null;
-        }
+        // 保存していないプロジェクトは、フォルダが作業フォルダ（閉じたら消す）
+        _untitledFolder = entryPath is null ? folder : null;
 
         SceneId = document.Current.RootScene;
         Selection = [];
@@ -253,9 +274,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
         RangeEnd = null;
         CurrentFrame = 0;
         Attach();
-        if (oldUntitled != _untitledFolder)
+        if (previousUntitled is not null && previousUntitled != _untitledFolder)
         {
-            DeleteUntitled(oldUntitled);
+            DeleteUntitled(previousUntitled);
         }
 
         ProjectOpened?.Invoke(this, EventArgs.Empty);
@@ -294,7 +315,6 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
     {
         var folder = Path.Combine(Path.GetTempPath(), "NakkuntMovieMaker", "untitled", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
-        _untitledFolder = folder;
         return folder;
     }
 

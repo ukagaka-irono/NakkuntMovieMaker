@@ -106,6 +106,15 @@ public sealed class ProjectDocument
         }
     }
 
+    /// <summary>今の状態を、保存していない状態にする（自動保存から復元したときなど）</summary>
+    public void MarkUnsaved()
+    {
+        lock (_gate)
+        {
+            _savedState = -1;
+        }
+    }
+
     /// <summary>操作を適用する。やり直しの履歴は消える</summary>
     /// <exception cref="EditException">操作を適用できなかった（プロジェクトは変わらない）</exception>
     public void Execute(IOperation operation)

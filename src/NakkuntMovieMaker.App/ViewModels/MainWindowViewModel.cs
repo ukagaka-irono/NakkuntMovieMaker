@@ -12,9 +12,23 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly IDialogService _dialogs;
 
+    private readonly string _recoveryFolder;
+    private readonly string _settingsPath;
+
     /// <param name="openInput">録音の入力デバイスを開く（テストでは差し替える）</param>
-    public MainWindowViewModel(EditorSession session, ShortcutRegistry shortcuts, IDialogService dialogs, Func<string?, Audio.IAudioInput>? openInput = null)
+    /// <param name="recoveryFolder">自動保存の復元の記録を置くフォルダ（テストでは差し替える）</param>
+    /// <param name="settingsPath">設定ファイル（テストでは差し替える）</param>
+    public MainWindowViewModel(
+        EditorSession session,
+        ShortcutRegistry shortcuts,
+        IDialogService dialogs,
+        Func<string?, Audio.IAudioInput>? openInput = null,
+        string? recoveryFolder = null,
+        string? settingsPath = null)
     {
+        _recoveryFolder = recoveryFolder ?? AutosaveService.DefaultRecoveryFolder;
+        _settingsPath = settingsPath ?? AppSettings.DefaultPath;
+        Autosave = new AutosaveService(session, _recoveryFolder);
         Session = session;
         Shortcuts = shortcuts;
         _dialogs = dialogs;
@@ -100,6 +114,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public RecordingViewModel Recording { get; }
 
     public CharactersViewModel Characters { get; }
+
+    public AutosaveService Autosave { get; }
 
     public string Title => Session.Title;
 
@@ -228,6 +244,51 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// 前回、保存していない変更を残したまま終わっていたら（自動保存が残っていれば）、復元するか聞く。
+    /// 復元しなければ自動保存を消す。そのあと自動保存を始める
+    /// </summary>
+    public async Task RecoverAsync()
+    {
+        foreach (var entry in AutosaveService.Find(_recoveryFolder))
+        {
+            var place = entry.OriginalEntry ?? "保存していないプロジェクト";
+            if (await _dialogs.ConfirmAsync(
+                    "自動保存からの復元",
+                    $"前回、「{entry.ProjectName}」（{place}）を保存せずに終了しました。{entry.SavedAt.LocalDateTime:M月d日 H:mm} の自動保存から復元しますか？\n復元しない場合、自動保存は消えます。",
+                    "復元する"))
+            {
+                try
+                {
+                    Session.OpenRecovered(entry.AutosaveEntry, entry.ProjectFolder, entry.OriginalEntry);
+                    Autosave.Adopt(entry);
+                    Status = "自動保存から復元しました。保存してください";
+                    break;
+                }
+                catch (Exception ex) when (ex is Core.Serialization.ProjectFormatException or IOException or UnauthorizedAccessException)
+                {
+                    await _dialogs.ShowErrorAsync("復元できません", ex.Message);
+                }
+            }
+
+            AutosaveService.Discard(entry);
+        }
+
+        Autosave.Start();
+    }
+
+    /// <summary>設定（ショートカット・自動保存・出力デバイス）</summary>
+    [RelayCommand]
+    private async Task SettingsAsync()
+    {
+        var settings = new SettingsViewModel(Shortcuts, Session.Settings);
+        if (await _dialogs.ShowDialogAsync<bool?>(new Views.Dialogs.SettingsDialog(), settings) == true)
+        {
+            settings.Apply(_settingsPath);
+            Autosave.Start();
+        }
+    }
+
     /// <summary>書き出しダイアログを開く</summary>
     [RelayCommand]
     private async Task ExportAsync()
@@ -270,6 +331,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        Autosave.Dispose();
         Recording.Dispose();
         VoicePlayer.Dispose();
         Session.Dispose();
