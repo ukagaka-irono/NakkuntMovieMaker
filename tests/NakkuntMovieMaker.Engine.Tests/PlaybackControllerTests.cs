@@ -153,6 +153,26 @@ public class PlaybackControllerTests
     }
 
     // どの素材にも 440Hz の音を返す
+    [Fact]
+    public void ReportsTheLevelOfWhatIsPlaying()
+    {
+        RequireNativeAudio();
+        var (playback, frames) = Create(CreateScene(300));
+        using var scheduler = frames;
+        using var player = playback;
+        Assert.Equal(StereoLevel.Silent, playback.Level);
+
+        playback.Play();
+        Thread.Sleep(300);
+        var level = playback.Level;
+        playback.Pause();
+
+        // 振幅 0.2 のサイン波（-14 dB）。パンは中央なので左右に少し下げて分ける
+        Assert.InRange(level.Left.PeakDb, -20, -10);
+        Assert.InRange(level.Right.RmsDb, -25, -13);
+        Assert.Equal(StereoLevel.Silent, playback.Level);
+    }
+
     private sealed class ToneSource : IAudioSource
     {
         private readonly float[] _tone = [.. Enumerable.Range(0, 48000 * 20).SelectMany(i => Enumerable.Repeat((float)(0.2 * Math.Sin(2 * Math.PI * 440 * i / 48000)), 2))];

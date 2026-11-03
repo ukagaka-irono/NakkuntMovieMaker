@@ -98,6 +98,10 @@ public sealed partial class PreviewViewModel : ObservableObject
 
     public bool IsPlaying => Speed != 0;
 
+    /// <summary>今鳴っている音の大きさ（レベルメーター）</summary>
+    [ObservableProperty]
+    public partial Audio.StereoLevel Level { get; private set; } = Audio.StereoLevel.Silent;
+
     public string SpeedText => Speed is 0 or 1 ? "" : $"{Speed}×";
 
     [ObservableProperty]
@@ -129,6 +133,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         }
 
         var playback = _session.Playback;
+        Level = Speed == 1 ? playback.Level : Audio.StereoLevel.Silent;
         if (Speed == 1)
         {
             if (playback.TryGetFrame(out var frame))

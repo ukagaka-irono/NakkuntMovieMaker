@@ -52,6 +52,11 @@ public sealed class PlaybackController : IDisposable
     private long _shown;
     private long _dropped;
 
+    // 混ぜた音のブロックごとの大きさ（レベルメーター用）。鳴る位置で引けるよう、ブロックの先頭のサンプルと組にして覚えておく
+    private readonly (long Start, StereoLevel Level)[] _levels = new (long, StereoLevel)[64];
+    private int _levelCount;
+    private long _mixedSample;
+
     public PlaybackController(Scene scene, IAudioSource audio, FrameScheduler frames, PlaybackOptions? options = null)
     {
         _frames = frames;
@@ -109,6 +114,33 @@ public sealed class PlaybackController : IDisposable
 
     /// <summary>今表示するフレーム</summary>
     public long CurrentFrame => TimeMath.SampleToFrame(CurrentSample, _plan.Fps, _plan.SampleRate);
+
+    /// <summary>今鳴っている音の左右の大きさ（止まっているとき・音のデバイスがないときは無音）</summary>
+    public StereoLevel Level
+    {
+        get
+        {
+            lock (_gate)
+            {
+                if (!_playing || _output is null)
+                {
+                    return StereoLevel.Silent;
+                }
+
+                var clock = Clock();
+                for (var i = 0; i < Math.Min(_levelCount, _levels.Length); i++)
+                {
+                    var (start, level) = _levels[i];
+                    if (clock >= start && clock < start + BlockFrames)
+                    {
+                        return level;
+                    }
+                }
+
+                return StereoLevel.Silent;
+            }
+        }
+    }
 
     public PlaybackStatistics Statistics
     {
@@ -283,6 +315,8 @@ public sealed class PlaybackController : IDisposable
     {
         _startSample = sample;
         _mixer.Seek(sample);
+        _mixedSample = sample;
+        _levelCount = 0;
         _prefetchAnchor = long.MinValue;
         if (_output is not null)
         {
@@ -300,6 +334,8 @@ public sealed class PlaybackController : IDisposable
         {
             _mixer.Render(_block);
             _output.Write(_block);
+            _levels[_levelCount++ % _levels.Length] = (_mixedSample, StereoLevel.Measure(_block));
+            _mixedSample += BlockFrames;
         }
     }
 

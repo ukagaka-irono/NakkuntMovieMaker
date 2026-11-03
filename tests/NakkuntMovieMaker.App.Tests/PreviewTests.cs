@@ -182,3 +182,16 @@ public sealed class PreviewTests : IDisposable
         public int GetHashCode((double, double) obj) => 0;
     }
 }
+
+public sealed class LevelMeterTests
+{
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(-30, 0.5)]
+    [InlineData(-60, 0)]
+    [InlineData(-90, 0)]
+    [InlineData(6, 1)]
+    [InlineData(double.NegativeInfinity, 0)]
+    public void MapsDecibelsToHeight(double db, double expected) =>
+        Assert.Equal(expected, Controls.LevelMeter.Position(db), 6);
+}

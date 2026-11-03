@@ -32,6 +32,8 @@
         <Button Classes="toolbar" Command="{Binding ToggleFullScreenCommand}" ToolTip.Tip="全画面プレビュー（F11）"><PathIcon Data="{StaticResource IconFullScreen}" /></Button>
       </StackPanel>
     </Grid>
+    <controls:LevelMeter DockPanel.Dock="Right" Width="44" Margin="8,0,0,0" Level="{Binding Level}"
+                         ToolTip.Tip="音量レベル（dBFS）。上の印が赤いときは音が割れています（押すと消えます）" />
     <controls:PreviewSurface x:Name="Surface" ViewModel="{Binding}" ClipToBounds="True" />
   </DockPanel>
 </UserControl>
