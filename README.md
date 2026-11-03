@@ -39,16 +39,23 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 
 | 項目 | 内容 |
 | --- | --- |
-| 対応 OS | Windows / Linux / macOS |
+| 対応 OS | Windows / Linux / macOS（Apple Silicon のみ。Intel Mac は対象外） |
 | フレームワーク | .NET 10.0 |
+| GPU（Windows・Linux） | Vulkan 1.2 以上に対応した GPU（NVIDIA GeForce GTX 900 以降・AMD Radeon RX 400 以降・Intel 第 6 世代 Core の内蔵 GPU 以降・Intel Arc） |
+| GPU（macOS） | Apple Silicon（M1 以降・Metal 3） |
+| VRAM | 4GB 以上を推奨 |
 
 基本的には LTS 版の .NET を使用しますが、将来的に LTS 版以外の .NET を使用する可能性があります。
+
+上の表より古い GPU（GeForce GTX 700 以前・Radeon HD シリーズなど）や GPU がない環境では、CPU だけで処理します。
+
+AI の機能は、NVIDIA GPU（CUDA）と Apple Silicon（Core ML）では GPU で処理し、それ以外の環境では CPU で処理します（処理に時間がかかります）。
 
 ## 主な機能
 
 - 動画・音声処理の方式を 2 種類用意
-  - GPU を使う処理
-  - CPU だけで行う処理
+  - GPU を使う処理（対応 GPU は「[動作環境](#動作環境)」を参照）
+  - CPU だけで行う処理（対応していない GPU や GPU がない環境でも動作）
 - プラグインによる機能の拡張
   - 音声合成：新しい音声合成ソフト・サービスへの対応
   - 映像エフェクト
@@ -183,7 +190,7 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 
 - エンコード設定の細かい指定、多くの出力形式
 - 高解像度（4K 超）・高フレームレート（120fps）・10 ビットでの出力
-- ハードウェアエンコード（NVIDIA NVENC・AMD AMF・Intel QSV・Apple VideoToolbox）
+- ハードウェアエンコード（NVIDIA NVENC・AMD AMF・Intel QSV・Apple VideoToolbox・VA-API（Linux の AMD・Intel））
 - レンダーキュー（複数の出力をまとめて実行）、別のパソコンでの出力（リモートレンダリング）
 - 連番画像の出力（PNG・JPG）、出力時のフレームレートの変換
 - 表示中のフレームの画像保存・クリップボードへのコピー
