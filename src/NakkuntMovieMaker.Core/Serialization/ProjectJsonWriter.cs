@@ -330,6 +330,7 @@ internal static class ProjectJsonWriter
         writer.WriteNumber("fadeIn", audio.FadeInFrames);
         writer.WriteNumber("fadeOut", audio.FadeOutFrames);
         writer.WriteBoolean("preservePitch", audio.PreservePitch);
+        WriteNumber(writer, "ducking", audio.DuckingDb);
         writer.WriteEndObject();
     }
 

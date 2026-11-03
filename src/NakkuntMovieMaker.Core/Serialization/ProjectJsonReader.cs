@@ -214,7 +214,8 @@ internal sealed class ProjectJsonReader(string file)
         GetAnimatableNumber(element, "pan"),
         GetLong(element, "fadeIn"),
         GetLong(element, "fadeOut"),
-        GetBool(element, "preservePitch"));
+        GetBool(element, "preservePitch"),
+        TryGet(element, "ducking", out var ducking) ? ReadDouble(ducking, "ducking") : 0);
 
     private VoiceParams ReadVoiceParams(JsonElement element) => new(
         GetDouble(element, "speed"),

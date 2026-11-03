@@ -65,7 +65,7 @@ public class ProjectStoreTests : IDisposable
         var recorded = new AudioItem(ItemId.New(), t.Layers[3], 400, 50, AssetId.New())
         {
             Playback = new MediaPlayback(new(1001, 30000), new(3, 2), Reverse: true),
-            Audio = new AudioMix(Animatable.FromKeys(new Keyframe<double>(0, 0), new Keyframe<double>(10, 1)), -0.5, 5, 10, PreservePitch: false),
+            Audio = new AudioMix(Animatable.FromKeys(new Keyframe<double>(0, 0), new Keyframe<double>(10, 1)), -0.5, 5, 10, PreservePitch: false, DuckingDb: 12),
         };
         var voice = t.Voice with
         {

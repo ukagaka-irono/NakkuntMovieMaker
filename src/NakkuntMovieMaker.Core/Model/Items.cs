@@ -187,14 +187,16 @@ public sealed record MediaPlayback(Rational SourceOffset, Rational Speed, bool R
 
 /// <summary>
 /// 音量・パン・フェード。Volume は倍率（1 が元の大きさ）、Pan は -1（左）〜 1（右）。
-/// フェードはフレーム数。PreservePitch は速度を変えても音の高さを保つか
+/// フェードはフレーム数。PreservePitch は速度を変えても音の高さを保つか。
+/// DuckingDb は、セリフが鳴っている間にこの音を下げる量（デシベル、0 なら下げない。BGM に使う）
 /// </summary>
 public sealed record AudioMix(
     Animatable<double> Volume,
     Animatable<double> Pan,
     long FadeInFrames = 0,
     long FadeOutFrames = 0,
-    bool PreservePitch = true)
+    bool PreservePitch = true,
+    double DuckingDb = 0)
 {
     public static readonly AudioMix Default = new(1.0, 0.0);
 }

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using NakkuntMovieMaker.Audio;
 using NakkuntMovieMaker.Core.Assets;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Core.Time;
@@ -13,7 +14,7 @@ namespace NakkuntMovieMaker.Engine;
 /// 段階ごとに縮小した画像を用意する（少し大きさが変わるたびに作り直さないように）。
 /// 複数のスレッドから同時に使ってよい（同じ動画は、デコーダーを順番に使う）
 /// </summary>
-public sealed class ProjectMediaSource : IMediaSource, IDisposable
+public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 {
     private static readonly double[] Steps = [1, 0.5, 0.25, 0.125];
 
@@ -27,6 +28,7 @@ public sealed class ProjectMediaSource : IMediaSource, IDisposable
     private readonly ConcurrentDictionary<string, MediaInfo?> _info = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<(AssetId Asset, int Step), SourceImage?> _images = new();
     private readonly ConcurrentDictionary<(AssetId Asset, int Step), DecoderSlot?> _decoders = new();
+    private readonly ConcurrentDictionary<AssetId, Lazy<PcmAudio?>> _audio = new();
     private long _imageBytes;
 
     /// <param name="quality">動画の RGB への変換の質（プレビューは速さ、書き出しは質を優先する）</param>
@@ -96,6 +98,11 @@ public sealed class ProjectMediaSource : IMediaSource, IDisposable
                 _images.TryRemove(key, out _);
             }
 
+            if (_audio.TryRemove(id, out var audio) && audio.IsValueCreated)
+            {
+                audio.Value?.Dispose();
+            }
+
             foreach (var key in _decoders.Keys.Where(key => key.Asset == id))
             {
                 if (_decoders.TryRemove(key, out var slot) && slot is not null)
@@ -120,7 +127,33 @@ public sealed class ProjectMediaSource : IMediaSource, IDisposable
             {
                 _decoders.TryRemove(key, out _);
             }
+
+            _audio.TryRemove(id, out _);
         }
+    }
+
+    /// <summary>
+    /// 素材の音声を、48kHz の PCM キャッシュから読めるようにする（キャッシュがなければ作るので、初回は時間がかかる）
+    /// </summary>
+    public IAudioStream? OpenAudio(AssetId asset)
+    {
+        var audio = _audio.GetOrAdd(asset, id => new Lazy<PcmAudio?>(() =>
+        {
+            if (PathOf(id) is not { } path || !File.Exists(path))
+            {
+                return null;
+            }
+
+            try
+            {
+                return _cache.OpenAudio(path);
+            }
+            catch (MediaException)
+            {
+                return null;
+            }
+        })).Value;
+        return audio is null ? null : new PcmAudioStream(audio);
     }
 
     public string ResolvePath(string reference) =>
@@ -135,6 +168,12 @@ public sealed class ProjectMediaSource : IMediaSource, IDisposable
 
         _decoders.Clear();
         _images.Clear();
+        foreach (var audio in _audio.Values.Where(audio => audio.IsValueCreated))
+        {
+            audio.Value?.Dispose();
+        }
+
+        _audio.Clear();
     }
 
     // 必要な倍率以上で、いちばん小さい段階

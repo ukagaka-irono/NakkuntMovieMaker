@@ -67,6 +67,20 @@ public sealed class ProjectMediaSourceTests : IDisposable
     }
 
     [Fact]
+    public void OpensAudioThroughThePcmCache()
+    {
+        RequireFfmpeg();
+        var (media, asset) = Open(Fixture("tone-1s.wav"), AssetKind.Audio);
+        using var _ = media;
+
+        var audio = media.OpenAudio(asset);
+
+        Assert.NotNull(audio);
+        Assert.Equal((48000, 1, 48000L), (audio.SampleRate, audio.Channels, audio.FrameCount));
+        Assert.Null(media.OpenAudio(AssetId.New()));
+    }
+
+    [Fact]
     public void ReturnsNullForMissingMedia()
     {
         RequireFfmpeg();
