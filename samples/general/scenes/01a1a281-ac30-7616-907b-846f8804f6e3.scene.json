@@ -1,0 +1,438 @@
+{
+  "id": "01a1a281-ac30-7616-907b-846f8804f6e3",
+  "name": "メイン",
+  "format": {
+    "width": 1920,
+    "height": 1080,
+    "fps": "30",
+    "sampleRate": 48000
+  },
+  "layers": [
+    {
+      "id": "01a1a281-ac30-7a67-8dd1-33dd5108e1f6",
+      "name": "レイヤー 1",
+      "visible": true,
+      "locked": false,
+      "muted": false,
+      "solo": false
+    },
+    {
+      "id": "01a1a281-ac30-7afe-a67c-41b8154327b2",
+      "name": "レイヤー 2",
+      "visible": true,
+      "locked": false,
+      "muted": false,
+      "solo": false
+    },
+    {
+      "id": "01a1a281-ac30-7f68-b3bc-9ddf7b30bb4d",
+      "name": "レイヤー 3",
+      "visible": true,
+      "locked": false,
+      "muted": false,
+      "solo": false
+    },
+    {
+      "id": "01a1a281-ac30-7010-97b1-a3438e16ba87",
+      "name": "レイヤー 4",
+      "visible": true,
+      "locked": false,
+      "muted": false,
+      "solo": false
+    },
+    {
+      "id": "01a1a281-ac30-75a6-9f56-9493121b0ead",
+      "name": "レイヤー 5",
+      "visible": true,
+      "locked": false,
+      "muted": false,
+      "solo": false
+    }
+  ],
+  "markers": [
+    {
+      "id": "01a1a281-ac3b-7d88-9574-526a2f77e128",
+      "frame": 90,
+      "name": "ロゴ",
+      "color": "#4AD2FF"
+    }
+  ],
+  "items": [
+    {
+      "$type": "nmm.image",
+      "id": "01a1a281-ac36-7f23-b7e4-ed7356faf191",
+      "layer": "01a1a281-ac30-7a67-8dd1-33dd5108e1f6",
+      "start": 0,
+      "length": 300,
+      "effects": [
+        {
+          "id": "01a1a281-ac36-7dcf-9c83-4bbf83d38512",
+          "type": "nmm.colorAdjust",
+          "enabled": true,
+          "parameters": {
+            "saturation": {
+              "$type": "number",
+              "value": 20
+            }
+          }
+        }
+      ],
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "asset": "01a1a281-ac30-77fc-bb53-834efaccbd5c"
+    },
+    {
+      "$type": "nmm.text",
+      "id": "01a1a281-ac39-7239-afa4-2526bdfb7f51",
+      "layer": "01a1a281-ac30-7f68-b3bc-9ddf7b30bb4d",
+      "start": 0,
+      "length": 150,
+      "effects": [
+        {
+          "id": "01a1a281-ac3a-7a03-a44f-97a13abd000c",
+          "type": "nmm.glow",
+          "enabled": true,
+          "parameters": {
+            "radius": {
+              "$type": "number",
+              "value": 16
+            },
+            "strength": {
+              "$type": "number",
+              "value": 60
+            }
+          }
+        }
+      ],
+      "transform": {
+        "x": 0,
+        "y": {
+          "keys": [
+            {
+              "frame": 0,
+              "value": 420,
+              "easing": "cubic-out"
+            },
+            {
+              "frame": 30,
+              "value": 360,
+              "easing": "linear"
+            }
+          ]
+        },
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": {
+        "keys": [
+          {
+            "frame": 0,
+            "value": 0,
+            "easing": "linear"
+          },
+          {
+            "frame": 20,
+            "value": 1,
+            "easing": "linear"
+          },
+          {
+            "frame": 130,
+            "value": 1,
+            "easing": "linear"
+          },
+          {
+            "frame": 149,
+            "value": 0,
+            "easing": "linear"
+          }
+        ]
+      },
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "text": "NakkuntMovieMaker",
+      "style": {
+        "fontFamily": "",
+        "fontSize": 120,
+        "color": "#FFFFFF",
+        "bold": true,
+        "italic": false,
+        "outline": {
+          "color": "#182852",
+          "width": 8
+        },
+        "alignment": "center",
+        "lineSpacing": 1.2,
+        "letterSpacing": 0,
+        "vertical": false,
+        "revealCharsPerSecond": 0
+      }
+    },
+    {
+      "$type": "nmm.video",
+      "id": "01a1a281-ac39-765f-bc97-f35116587ce1",
+      "layer": "01a1a281-ac30-7afe-a67c-41b8154327b2",
+      "start": 0,
+      "length": 90,
+      "effects": [],
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1.2,
+        "scaleY": 1.2,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "asset": "01a1a281-ac35-7f9b-a97f-d538920b326c",
+      "playback": {
+        "sourceOffset": "0",
+        "speed": "1",
+        "reverse": false
+      },
+      "audio": {
+        "volume": 0,
+        "pan": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "preservePitch": true,
+        "ducking": 0
+      }
+    },
+    {
+      "$type": "nmm.image",
+      "id": "01a1a281-ac39-7c9a-9622-039ba3f02429",
+      "layer": "01a1a281-ac30-7afe-a67c-41b8154327b2",
+      "start": 90,
+      "length": 105,
+      "effects": [
+        {
+          "id": "01a1a281-ac39-7579-b385-134f70212a50",
+          "type": "nmm.dropShadow",
+          "enabled": true,
+          "parameters": {
+            "blur": {
+              "$type": "number",
+              "value": 12
+            },
+            "offsetX": {
+              "$type": "number",
+              "value": 16
+            },
+            "offsetY": {
+              "$type": "number",
+              "value": 16
+            }
+          }
+        }
+      ],
+      "transition": {
+        "type": "nmm.crossfade",
+        "duration": 20,
+        "parameters": {}
+      },
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": {
+          "keys": [
+            {
+              "frame": 0,
+              "value": -20,
+              "easing": "back-out"
+            },
+            {
+              "frame": 40,
+              "value": 0,
+              "easing": "linear"
+            }
+          ]
+        },
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "asset": "01a1a281-ac35-7f39-9384-d36b54abf2d5"
+    },
+    {
+      "$type": "nmm.shape",
+      "id": "01a1a281-ac39-7ee2-b880-a567511de06f",
+      "layer": "01a1a281-ac30-7afe-a67c-41b8154327b2",
+      "start": 195,
+      "length": 105,
+      "effects": [],
+      "transition": {
+        "type": "nmm.wipe",
+        "duration": 20,
+        "parameters": {}
+      },
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": {
+          "keys": [
+            {
+              "frame": 0,
+              "value": 0,
+              "easing": "linear"
+            },
+            {
+              "frame": 104,
+              "value": 180,
+              "easing": "linear"
+            }
+          ]
+        },
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "shape": {
+        "kind": "star",
+        "width": 420,
+        "height": 420,
+        "fill": {
+          "$type": "linearGradient",
+          "start": "#FFD24A",
+          "end": "#FF5A4E",
+          "angle": 45
+        },
+        "strokeColor": "#FFFFFF",
+        "strokeWidth": 8,
+        "cornerRadius": 0,
+        "sides": 5,
+        "innerRadiusRatio": 0.5
+      }
+    },
+    {
+      "$type": "nmm.text",
+      "id": "01a1a281-ac3a-7919-b9b7-25b203149bc4",
+      "layer": "01a1a281-ac30-7f68-b3bc-9ddf7b30bb4d",
+      "start": 150,
+      "length": 150,
+      "effects": [],
+      "transform": {
+        "x": -700,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "text": "サンプル動画",
+      "style": {
+        "fontFamily": "",
+        "fontSize": 96,
+        "color": "#FFFFFF",
+        "bold": false,
+        "italic": false,
+        "outline": {
+          "color": "#000000",
+          "width": 4
+        },
+        "shadow": {
+          "color": "#000000A0",
+          "offsetX": 6,
+          "offsetY": 6,
+          "blur": 6
+        },
+        "alignment": "center",
+        "lineSpacing": 1.2,
+        "letterSpacing": 0,
+        "vertical": true,
+        "revealCharsPerSecond": 8
+      }
+    },
+    {
+      "$type": "nmm.audio",
+      "id": "01a1a281-ac3a-7bab-b93a-40ac244f140b",
+      "layer": "01a1a281-ac30-75a6-9f56-9493121b0ead",
+      "start": 0,
+      "length": 300,
+      "effects": [],
+      "asset": "01a1a281-ac36-71c6-a392-fc90ba84db53",
+      "playback": {
+        "sourceOffset": "0",
+        "speed": "1",
+        "reverse": false
+      },
+      "audio": {
+        "volume": 0.6,
+        "pan": 0,
+        "fadeIn": 15,
+        "fadeOut": 45,
+        "preservePitch": true,
+        "ducking": 0
+      }
+    }
+  ]
+}

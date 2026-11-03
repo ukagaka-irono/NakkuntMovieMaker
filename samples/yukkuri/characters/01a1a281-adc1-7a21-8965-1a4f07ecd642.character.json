@@ -1,0 +1,34 @@
+{
+  "id": "01a1a281-adc1-7a21-8965-1a4f07ecd642",
+  "name": "霊夢",
+  "voice": {
+    "engineId": "sapi",
+    "voiceId": "",
+    "params": {
+      "speed": 1,
+      "pitch": 1,
+      "intonation": 1,
+      "volume": 1
+    }
+  },
+  "subtitle": {
+    "fontFamily": "",
+    "fontSize": 64,
+    "color": "#FFFFFF",
+    "bold": false,
+    "italic": false,
+    "outline": {
+      "color": "#C81E32",
+      "width": 8
+    },
+    "alignment": "center",
+    "lineSpacing": 1.2,
+    "letterSpacing": 0,
+    "vertical": false,
+    "revealCharsPerSecond": 0
+  },
+  "tachie": {
+    "kind": "parts",
+    "path": "tachie/reimu"
+  }
+}

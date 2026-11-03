@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="NakkuntMovieMaker.Cli.Tests" />
+    <InternalsVisibleTo Include="NakkuntMovieMaker.E2E.Tests" />
   </ItemGroup>
 
   <ItemGroup>

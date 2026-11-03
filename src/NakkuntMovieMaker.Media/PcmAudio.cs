@@ -92,6 +92,13 @@ public sealed unsafe class PcmAudio : IDisposable
         }
 
         var frames = destination.Length / Channels;
+        if (startFrame + frames <= 0 || startFrame >= FrameCount)
+        {
+            // すべて素材の外
+            destination.Clear();
+            return;
+        }
+
         var first = Math.Clamp(startFrame, 0, FrameCount);
         var last = Math.Clamp(startFrame + frames, 0, FrameCount);
         var before = (int)(first - startFrame);

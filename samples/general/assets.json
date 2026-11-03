@@ -1,0 +1,24 @@
+{
+  "assets": [
+    {
+      "id": "01a1a281-ac30-77fc-bb53-834efaccbd5c",
+      "kind": "image",
+      "path": "media/background.png"
+    },
+    {
+      "id": "01a1a281-ac35-7f39-9384-d36b54abf2d5",
+      "kind": "image",
+      "path": "media/logo.png"
+    },
+    {
+      "id": "01a1a281-ac35-7f9b-a97f-d538920b326c",
+      "kind": "video",
+      "path": "media/clip.mp4"
+    },
+    {
+      "id": "01a1a281-ac36-71c6-a392-fc90ba84db53",
+      "kind": "audio",
+      "path": "media/bgm.wav"
+    }
+  ]
+}

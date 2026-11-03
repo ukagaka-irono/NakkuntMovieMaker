@@ -1,0 +1,347 @@
+{
+  "id": "01a1a281-adc0-7d38-b8e8-69b8f7faf964",
+  "name": "メイン",
+  "format": {
+    "width": 1920,
+    "height": 1080,
+    "fps": "30",
+    "sampleRate": 48000
+  },
+  "layers": [
+    {
+      "id": "01a1a281-adc0-7676-8af3-c9a6b692a4cb",
+      "name": "レイヤー 1",
+      "visible": true,
+      "locked": false,
+      "muted": false,
+      "solo": false
+    },
+    {
+      "id": "01a1a281-adc0-7d88-9712-85121a93b3cc",
+      "name": "レイヤー 2",
+      "visible": true,
+      "locked": false,
+      "muted": false,
+      "solo": false
+    },
+    {
+      "id": "01a1a281-adc0-75c1-82fd-ca679cc293fe",
+      "name": "レイヤー 3",
+      "visible": true,
+      "locked": false,
+      "muted": false,
+      "solo": false
+    },
+    {
+      "id": "01a1a281-adc0-744c-a533-dd9122c7439d",
+      "name": "レイヤー 4",
+      "visible": true,
+      "locked": false,
+      "muted": false,
+      "solo": false
+    },
+    {
+      "id": "01a1a281-adc0-7d66-9df1-e3c4e6b3d24d",
+      "name": "レイヤー 5",
+      "visible": true,
+      "locked": false,
+      "muted": false,
+      "solo": false
+    },
+    {
+      "id": "01a1a281-adc0-7ff3-9920-fb67ae996994",
+      "name": "レイヤー 6",
+      "visible": true,
+      "locked": false,
+      "muted": false,
+      "solo": false
+    }
+  ],
+  "markers": [],
+  "items": [
+    {
+      "$type": "nmm.tachie",
+      "id": "01a1a281-adc5-7334-ab58-670803345991",
+      "layer": "01a1a281-adc0-7d88-9712-85121a93b3cc",
+      "start": 0,
+      "length": 360,
+      "effects": [],
+      "transform": {
+        "x": 600,
+        "y": 120,
+        "scaleX": 1.2,
+        "scaleY": 1.2,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "character": "01a1a281-adc1-7a21-8965-1a4f07ecd642"
+    },
+    {
+      "$type": "nmm.shape",
+      "id": "01a1a281-adc5-7449-921d-6b08aea9765a",
+      "layer": "01a1a281-adc0-7676-8af3-c9a6b692a4cb",
+      "start": 0,
+      "length": 360,
+      "effects": [],
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "shape": {
+        "kind": "background",
+        "width": 1920,
+        "height": 1080,
+        "fill": {
+          "$type": "linearGradient",
+          "start": "#E6F0FA",
+          "end": "#AAC8E6",
+          "angle": 90
+        },
+        "strokeWidth": 0,
+        "cornerRadius": 0,
+        "sides": 5,
+        "innerRadiusRatio": 0.5
+      }
+    },
+    {
+      "$type": "nmm.tachie",
+      "id": "01a1a281-adc5-77de-b5f5-a99dc3f09612",
+      "layer": "01a1a281-adc0-75c1-82fd-ca679cc293fe",
+      "start": 0,
+      "length": 360,
+      "effects": [],
+      "transform": {
+        "x": -600,
+        "y": 120,
+        "scaleX": 1.2,
+        "scaleY": 1.2,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": true,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "character": "01a1a281-adc1-7a09-94ed-5e518a21aacc"
+    },
+    {
+      "$type": "nmm.audio",
+      "id": "01a1a281-adc5-7c02-b486-95286da20d32",
+      "layer": "01a1a281-adc0-7ff3-9920-fb67ae996994",
+      "start": 0,
+      "length": 360,
+      "effects": [],
+      "asset": "01a1a281-adc5-7695-b419-c842a348b923",
+      "playback": {
+        "sourceOffset": "0",
+        "speed": "1",
+        "reverse": false
+      },
+      "audio": {
+        "volume": 0.35,
+        "pan": 0,
+        "fadeIn": 0,
+        "fadeOut": 30,
+        "preservePitch": true,
+        "ducking": 12
+      }
+    },
+    {
+      "$type": "nmm.voice",
+      "id": "01a1a281-ae03-71c9-a35b-763fe492e606",
+      "layer": "01a1a281-adc0-744c-a533-dd9122c7439d",
+      "start": 15,
+      "length": 32,
+      "effects": [],
+      "transform": {
+        "x": 0,
+        "y": 410.4,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "character": "01a1a281-adc1-7a21-8965-1a4f07ecd642",
+      "text": "ゆっくり霊夢です",
+      "source": {
+        "$type": "synthesized",
+        "cacheKey": "sample-01"
+      },
+      "audio": {
+        "volume": 1,
+        "pan": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "preservePitch": true,
+        "ducking": 0
+      }
+    },
+    {
+      "$type": "nmm.voice",
+      "id": "01a1a281-ae44-78bc-bb63-0fe29152d614",
+      "layer": "01a1a281-adc0-744c-a533-dd9122c7439d",
+      "start": 59,
+      "length": 36,
+      "effects": [],
+      "transform": {
+        "x": 0,
+        "y": 410.4,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "character": "01a1a281-adc1-7a09-94ed-5e518a21aacc",
+      "text": "ゆっくり魔理沙だぜ",
+      "source": {
+        "$type": "synthesized",
+        "cacheKey": "sample-02"
+      },
+      "audio": {
+        "volume": 1,
+        "pan": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "preservePitch": true,
+        "ducking": 0
+      }
+    },
+    {
+      "$type": "nmm.voice",
+      "id": "01a1a281-aeae-7132-898d-4150862489d4",
+      "layer": "01a1a281-adc0-744c-a533-dd9122c7439d",
+      "start": 107,
+      "length": 59,
+      "effects": [],
+      "transform": {
+        "x": 0,
+        "y": 410.4,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "character": "01a1a281-adc1-7a21-8965-1a4f07ecd642",
+      "text": "今日は動画の作り方を解説するよ",
+      "source": {
+        "$type": "synthesized",
+        "cacheKey": "sample-03"
+      },
+      "audio": {
+        "volume": 1,
+        "pan": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "preservePitch": true,
+        "ducking": 0
+      }
+    },
+    {
+      "$type": "nmm.voice",
+      "id": "01a1a281-af23-7307-8b78-1698d552f410",
+      "layer": "01a1a281-adc0-744c-a533-dd9122c7439d",
+      "start": 178,
+      "length": 51,
+      "effects": [],
+      "transform": {
+        "x": 0,
+        "y": 410.4,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "character": "01a1a281-adc1-7a09-94ed-5e518a21aacc",
+      "text": "最後まで見ていってくれよな",
+      "source": {
+        "$type": "synthesized",
+        "cacheKey": "sample-04"
+      },
+      "audio": {
+        "volume": 1,
+        "pan": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "preservePitch": true,
+        "ducking": 0
+      }
+    }
+  ]
+}

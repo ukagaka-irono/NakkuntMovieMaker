@@ -114,6 +114,14 @@ public class AudioCacheTests
         Assert.Equal(audio.GetSamples(audio.FrameCount - 5, 5).ToArray(), buffer[..10]);
         Assert.All(buffer[10..], sample => Assert.Equal(0f, sample));
 
+        // すべて範囲の外（前・後ろ）なら無音
+        Array.Fill(buffer, 1f);
+        audio.Read(-1000, buffer);
+        Assert.All(buffer, sample => Assert.Equal(0f, sample));
+        Array.Fill(buffer, 1f);
+        audio.Read(audio.FrameCount + 1000, buffer);
+        Assert.All(buffer, sample => Assert.Equal(0f, sample));
+
         Assert.Throws<ArgumentException>(() => audio.Read(0, new float[3]));
     }
 
