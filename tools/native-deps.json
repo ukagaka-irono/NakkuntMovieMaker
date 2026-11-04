@@ -14,6 +14,35 @@
         "sha256": "7a1ba2af36e5beeb98151e766a903b1d115f2206a86571f17f873cd7292c424f",
         "libDir": "lib"
       }
+    },
+    "sourceBuild": {
+      "_comment": "BtbN の配布物がない RID（macOS）は、ソースからビルドする（GPL の部品なし・共有ライブラリ）。tools/fetch-native で取得し、tools/build-native でビルドする",
+      "rids": [
+        "osx-arm64"
+      ],
+      "sources": [
+        {
+          "name": "ffmpeg",
+          "version": "9.0.2",
+          "license": "LGPL-3.0-or-later",
+          "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
+          "sha256": ""
+        },
+        {
+          "name": "openh264",
+          "version": "2.6.0",
+          "license": "BSD-2-Clause",
+          "url": "https://github.com/cisco/openh264/archive/refs/tags/v2.6.0.tar.gz",
+          "sha256": ""
+        },
+        {
+          "name": "kvazaar",
+          "version": "2.3.2",
+          "license": "BSD-3-Clause",
+          "url": "https://github.com/ultravideo/kvazaar/releases/download/v2.3.2/kvazaar-2.3.2.tar.xz",
+          "sha256": "35e506a6d2be9ae343f17787eb80fa214492b276e9c88b6e93749050ae380070"
+        }
+      ]
     }
   },
   "fonts": {

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci/**']
   pull_request:
 
 jobs:
@@ -28,9 +28,18 @@ jobs:
           ./tools/fetch-native.ps1
           ./tools/build-native.ps1
 
+      # macOS の FFmpeg はソースからビルドするので（数分かかる）、ソースの版とビルドの手順が同じあいだは前の結果を使う
+      - name: macOS の FFmpeg のビルドのキャッシュ
+        if: runner.os == 'macOS'
+        uses: actions/cache@v5
+        with:
+          path: native/build/osx-arm64-ffmpeg
+          key: ffmpeg-osx-arm64-${{ hashFiles('tools/native-deps.json', 'tools/build-native.sh') }}
+
       - name: ネイティブライブラリの取得とビルド（Linux・macOS）
         if: runner.os != 'Windows'
         run: |
+          if [ "$RUNNER_OS" = macOS ] && ! command -v pkg-config >/dev/null; then brew install pkgconf; fi
           ./tools/fetch-native.sh
           ./tools/build-native.sh
 
@@ -43,8 +52,7 @@ jobs:
       - name: テスト
         run: dotnet test --solution NakkuntMovieMaker.slnx -c Release --no-build
         env:
-          # macOS 用の LGPL 版 FFmpeg はまだ用意していないので、macOS だけは必須にしない
-          NMM_REQUIRE_FFMPEG: ${{ runner.os != 'macOS' && '1' || '0' }}
+          NMM_REQUIRE_FFMPEG: '1'
           NMM_REQUIRE_NMM_AUDIO: '1'
           NMM_REQUIRE_FONTS: '1'
           NMM_REQUIRE_COLORFULTALK: '1'
