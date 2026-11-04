@@ -25,8 +25,6 @@ public sealed class AppSettings
     /// <summary>プレビューの解像度（1・0.5・0.25）</summary>
     public double PreviewScale { get; set; } = 0.5;
 
-    public string? AquesTalkFolder { get; set; }
-
     public string? OutputDevice { get; set; }
 
     public string? InputDevice { get; set; }

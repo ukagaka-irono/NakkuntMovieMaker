@@ -5,7 +5,7 @@ using NakkuntMovieMaker.Core.Model;
 
 namespace NakkuntMovieMaker.App.Tests;
 
-/// <summary>キャラクターの設定と、音声合成エンジン・AquesTalk の導入の案内</summary>
+/// <summary>キャラクターの設定と、音声合成エンジンの案内</summary>
 public sealed class CharactersTests : IDisposable
 {
     private readonly TestEnvironment _environment = new();
@@ -102,31 +102,15 @@ public sealed class CharactersTests : IDisposable
     });
 
     [Fact]
-    public Task ShowsHowToInstallAquesTalk() => Ui.Run(() =>
+    public Task ListsTheBuiltInEngines() => Ui.Run(() =>
     {
-        // 組み込みのエンジン（AquesTalk は置いていないので未導入）
+        // 組み込みのエンジン：ColorfulTalk（同梱）と SAPI（Windows だけ）
         using var session = new EditorSession(_environment.Settings, disableAudioDevice: true, settingsPath: _environment.SettingsPath);
-        var engines = new VoiceEnginesViewModel(session, _dialogs);
+        var engines = new VoiceEnginesViewModel(session);
 
-        var aquesTalk = engines.Engines.Where(engine => engine.Id.StartsWith("aquestalk", StringComparison.Ordinal)).ToList();
-        Assert.Equal(3, aquesTalk.Count);
-        Assert.All(aquesTalk, engine =>
-        {
-            Assert.False(engine.Available);
-            Assert.False(string.IsNullOrEmpty(engine.Message));
-            Assert.StartsWith("https://", engine.HelpUrl);
-            Assert.EndsWith("（未導入）", engine.ToString());
-        });
-        Assert.Contains("aquestalk1", engines.Layout);
-        Assert.Contains("使用ライセンス", VoiceEnginesViewModel.LicenseNotice);
-
-        // 置き場所を変えると、そこを見て読み込み直す
-        _dialogs.Folders.Enqueue(Path.Combine(_environment.Folder, "aq"));
-        engines.BrowseCommand.Execute(null);
-        Assert.Equal(Path.Combine(_environment.Folder, "aq"), engines.Folder);
-        Assert.Equal(engines.Folder, session.Settings.AquesTalkFolder);
-        Assert.Contains(Path.Combine(_environment.Folder, "aq"), engines.Engines.First(engine => engine.Id == "aquestalk1").Message);
-        engines.ResetFolderCommand.Execute(null);
-        Assert.Null(session.Settings.AquesTalkFolder);
+        Assert.Equal(["colorfultalk1", "sapi"], engines.Engines.Select(engine => engine.Id).Order(StringComparer.Ordinal));
+        var colorful = engines.Engines.Single(engine => engine.Id == "colorfultalk1");
+        Assert.Equal("ColorfulTalk（旧版）", colorful.Name);
+        Assert.Contains("きょ'うわ/い'い/てんきです。", VoiceEnginesViewModel.KoeGuide);
     });
 }

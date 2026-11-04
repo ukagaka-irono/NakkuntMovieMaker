@@ -15,8 +15,5 @@ native/bin/
 native/build/
 native/downloads/
 
-# 利用者が任意で導入する音声合成エンジン（AquesTalk など）
-engines/
-
 # プロジェクトのキャッシュと自動保存
 .nmm/

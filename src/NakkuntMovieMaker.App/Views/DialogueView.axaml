@@ -22,7 +22,7 @@
       </ComboBox.ItemTemplate>
     </ComboBox>
     <TextBox DockPanel.Dock="Right" Text="{Binding Reading}" Width="160" Margin="4,0,0,0" PlaceholderText="読み（空なら自動）" KeyDown="OnKeyDown"
-             ToolTip.Tip="読みを直したいときに入れる（AquesTalk の音声記号列など）" />
+             ToolTip.Tip="読みを直したいときに入れる（ColorfulTalk の記号列など）" />
     <TextBox x:Name="Input" Text="{Binding Text}" PlaceholderText="セリフを入れて Enter（Ctrl+Enter でここへ移る）" KeyDown="OnKeyDown" />
   </DockPanel>
 </UserControl>

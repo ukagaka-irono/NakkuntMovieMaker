@@ -1,5 +1,5 @@
 {
-  "id": "01a1a281-adc0-7d38-b8e8-69b8f7faf964",
+  "id": "01a1a62c-b985-7791-afc3-62010426dd65",
   "name": "メイン",
   "format": {
     "width": 1920,
@@ -9,7 +9,7 @@
   },
   "layers": [
     {
-      "id": "01a1a281-adc0-7676-8af3-c9a6b692a4cb",
+      "id": "01a1a62c-b985-7b2f-b76f-7da052f2f215",
       "name": "レイヤー 1",
       "visible": true,
       "locked": false,
@@ -17,7 +17,7 @@
       "solo": false
     },
     {
-      "id": "01a1a281-adc0-7d88-9712-85121a93b3cc",
+      "id": "01a1a62c-b985-711c-a28d-b427f3c2862a",
       "name": "レイヤー 2",
       "visible": true,
       "locked": false,
@@ -25,7 +25,7 @@
       "solo": false
     },
     {
-      "id": "01a1a281-adc0-75c1-82fd-ca679cc293fe",
+      "id": "01a1a62c-b985-7acc-8178-5aed86107554",
       "name": "レイヤー 3",
       "visible": true,
       "locked": false,
@@ -33,7 +33,7 @@
       "solo": false
     },
     {
-      "id": "01a1a281-adc0-744c-a533-dd9122c7439d",
+      "id": "01a1a62c-b985-76e1-b077-ebfee090e1ce",
       "name": "レイヤー 4",
       "visible": true,
       "locked": false,
@@ -41,7 +41,7 @@
       "solo": false
     },
     {
-      "id": "01a1a281-adc0-7d66-9df1-e3c4e6b3d24d",
+      "id": "01a1a62c-b985-7b01-88d1-74220842159d",
       "name": "レイヤー 5",
       "visible": true,
       "locked": false,
@@ -49,7 +49,7 @@
       "solo": false
     },
     {
-      "id": "01a1a281-adc0-7ff3-9920-fb67ae996994",
+      "id": "01a1a62c-b985-794c-b9e4-0719a6bc29ea",
       "name": "レイヤー 6",
       "visible": true,
       "locked": false,
@@ -60,37 +60,9 @@
   "markers": [],
   "items": [
     {
-      "$type": "nmm.tachie",
-      "id": "01a1a281-adc5-7334-ab58-670803345991",
-      "layer": "01a1a281-adc0-7d88-9712-85121a93b3cc",
-      "start": 0,
-      "length": 360,
-      "effects": [],
-      "transform": {
-        "x": 600,
-        "y": 120,
-        "scaleX": 1.2,
-        "scaleY": 1.2,
-        "rotation": 0,
-        "anchorX": 0,
-        "anchorY": 0,
-        "flipHorizontal": false,
-        "flipVertical": false
-      },
-      "opacity": 1,
-      "blend": "normal",
-      "crop": {
-        "left": 0,
-        "top": 0,
-        "right": 0,
-        "bottom": 0
-      },
-      "character": "01a1a281-adc1-7a21-8965-1a4f07ecd642"
-    },
-    {
       "$type": "nmm.shape",
-      "id": "01a1a281-adc5-7449-921d-6b08aea9765a",
-      "layer": "01a1a281-adc0-7676-8af3-c9a6b692a4cb",
+      "id": "01a1a62c-b992-716c-97e6-2a87650f3415",
+      "layer": "01a1a62c-b985-7b2f-b76f-7da052f2f215",
       "start": 0,
       "length": 360,
       "effects": [],
@@ -131,8 +103,8 @@
     },
     {
       "$type": "nmm.tachie",
-      "id": "01a1a281-adc5-77de-b5f5-a99dc3f09612",
-      "layer": "01a1a281-adc0-75c1-82fd-ca679cc293fe",
+      "id": "01a1a62c-b992-7181-97f1-13d7b99a8606",
+      "layer": "01a1a62c-b985-7acc-8178-5aed86107554",
       "start": 0,
       "length": 360,
       "effects": [],
@@ -155,16 +127,44 @@
         "right": 0,
         "bottom": 0
       },
-      "character": "01a1a281-adc1-7a09-94ed-5e518a21aacc"
+      "character": "01a1a62c-b986-7bd3-b47e-9a3431b30fd6"
     },
     {
-      "$type": "nmm.audio",
-      "id": "01a1a281-adc5-7c02-b486-95286da20d32",
-      "layer": "01a1a281-adc0-7ff3-9920-fb67ae996994",
+      "$type": "nmm.tachie",
+      "id": "01a1a62c-b992-7be2-a94e-e5a1ecbcfe35",
+      "layer": "01a1a62c-b985-711c-a28d-b427f3c2862a",
       "start": 0,
       "length": 360,
       "effects": [],
-      "asset": "01a1a281-adc5-7695-b419-c842a348b923",
+      "transform": {
+        "x": 600,
+        "y": 120,
+        "scaleX": 1.2,
+        "scaleY": 1.2,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "character": "01a1a62c-b985-785f-966d-6a222d05ae6c"
+    },
+    {
+      "$type": "nmm.audio",
+      "id": "01a1a62c-b993-7c82-817b-7911824243a8",
+      "layer": "01a1a62c-b985-794c-b9e4-0719a6bc29ea",
+      "start": 0,
+      "length": 360,
+      "effects": [],
+      "asset": "01a1a62c-b98d-7ca9-b47b-0ab514162718",
       "playback": {
         "sourceOffset": "0",
         "speed": "1",
@@ -181,132 +181,9 @@
     },
     {
       "$type": "nmm.voice",
-      "id": "01a1a281-ae03-71c9-a35b-763fe492e606",
-      "layer": "01a1a281-adc0-744c-a533-dd9122c7439d",
+      "id": "01a1a62c-b9ba-74a9-9bbf-ebc5a6605c92",
+      "layer": "01a1a62c-b985-76e1-b077-ebfee090e1ce",
       "start": 15,
-      "length": 32,
-      "effects": [],
-      "transform": {
-        "x": 0,
-        "y": 410.4,
-        "scaleX": 1,
-        "scaleY": 1,
-        "rotation": 0,
-        "anchorX": 0,
-        "anchorY": 0,
-        "flipHorizontal": false,
-        "flipVertical": false
-      },
-      "opacity": 1,
-      "blend": "normal",
-      "crop": {
-        "left": 0,
-        "top": 0,
-        "right": 0,
-        "bottom": 0
-      },
-      "character": "01a1a281-adc1-7a21-8965-1a4f07ecd642",
-      "text": "ゆっくり霊夢です",
-      "source": {
-        "$type": "synthesized",
-        "cacheKey": "sample-01"
-      },
-      "audio": {
-        "volume": 1,
-        "pan": 0,
-        "fadeIn": 0,
-        "fadeOut": 0,
-        "preservePitch": true,
-        "ducking": 0
-      }
-    },
-    {
-      "$type": "nmm.voice",
-      "id": "01a1a281-ae44-78bc-bb63-0fe29152d614",
-      "layer": "01a1a281-adc0-744c-a533-dd9122c7439d",
-      "start": 59,
-      "length": 36,
-      "effects": [],
-      "transform": {
-        "x": 0,
-        "y": 410.4,
-        "scaleX": 1,
-        "scaleY": 1,
-        "rotation": 0,
-        "anchorX": 0,
-        "anchorY": 0,
-        "flipHorizontal": false,
-        "flipVertical": false
-      },
-      "opacity": 1,
-      "blend": "normal",
-      "crop": {
-        "left": 0,
-        "top": 0,
-        "right": 0,
-        "bottom": 0
-      },
-      "character": "01a1a281-adc1-7a09-94ed-5e518a21aacc",
-      "text": "ゆっくり魔理沙だぜ",
-      "source": {
-        "$type": "synthesized",
-        "cacheKey": "sample-02"
-      },
-      "audio": {
-        "volume": 1,
-        "pan": 0,
-        "fadeIn": 0,
-        "fadeOut": 0,
-        "preservePitch": true,
-        "ducking": 0
-      }
-    },
-    {
-      "$type": "nmm.voice",
-      "id": "01a1a281-aeae-7132-898d-4150862489d4",
-      "layer": "01a1a281-adc0-744c-a533-dd9122c7439d",
-      "start": 107,
-      "length": 59,
-      "effects": [],
-      "transform": {
-        "x": 0,
-        "y": 410.4,
-        "scaleX": 1,
-        "scaleY": 1,
-        "rotation": 0,
-        "anchorX": 0,
-        "anchorY": 0,
-        "flipHorizontal": false,
-        "flipVertical": false
-      },
-      "opacity": 1,
-      "blend": "normal",
-      "crop": {
-        "left": 0,
-        "top": 0,
-        "right": 0,
-        "bottom": 0
-      },
-      "character": "01a1a281-adc1-7a21-8965-1a4f07ecd642",
-      "text": "今日は動画の作り方を解説するよ",
-      "source": {
-        "$type": "synthesized",
-        "cacheKey": "sample-03"
-      },
-      "audio": {
-        "volume": 1,
-        "pan": 0,
-        "fadeIn": 0,
-        "fadeOut": 0,
-        "preservePitch": true,
-        "ducking": 0
-      }
-    },
-    {
-      "$type": "nmm.voice",
-      "id": "01a1a281-af23-7307-8b78-1698d552f410",
-      "layer": "01a1a281-adc0-744c-a533-dd9122c7439d",
-      "start": 178,
       "length": 51,
       "effects": [],
       "transform": {
@@ -328,11 +205,138 @@
         "right": 0,
         "bottom": 0
       },
-      "character": "01a1a281-adc1-7a09-94ed-5e518a21aacc",
-      "text": "最後まで見ていってくれよな",
+      "character": "01a1a62c-b985-785f-966d-6a222d05ae6c",
+      "text": "ゆっくり霊夢です",
+      "reading": "ゆっくり/れ'いむです。",
       "source": {
         "$type": "synthesized",
-        "cacheKey": "sample-04"
+        "cacheKey": "0940069859d60ad5af48c99b04cbca762e78cbf4a0a2250297aa40c57412fa3e"
+      },
+      "audio": {
+        "volume": 1,
+        "pan": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "preservePitch": true,
+        "ducking": 0
+      }
+    },
+    {
+      "$type": "nmm.voice",
+      "id": "01a1a62c-b9ce-795c-9df4-8d674e3c95ea",
+      "layer": "01a1a62c-b985-76e1-b077-ebfee090e1ce",
+      "start": 78,
+      "length": 51,
+      "effects": [],
+      "transform": {
+        "x": 0,
+        "y": 410.4,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "character": "01a1a62c-b986-7bd3-b47e-9a3431b30fd6",
+      "text": "ゆっくり魔理沙だぜ",
+      "reading": "ゆっくり/まりさだぜ。",
+      "source": {
+        "$type": "synthesized",
+        "cacheKey": "20ef02207e2b25624222469e4aa3bb5dac2505fe3ab0919b15c8283c2f0191d3"
+      },
+      "audio": {
+        "volume": 1,
+        "pan": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "preservePitch": true,
+        "ducking": 0
+      }
+    },
+    {
+      "$type": "nmm.voice",
+      "id": "01a1a62c-b9ea-782c-afbf-48fe3db2df9a",
+      "layer": "01a1a62c-b985-76e1-b077-ebfee090e1ce",
+      "start": 141,
+      "length": 105,
+      "effects": [],
+      "transform": {
+        "x": 0,
+        "y": 410.4,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "character": "01a1a62c-b985-785f-966d-6a222d05ae6c",
+      "text": "今日は動画の作り方を解説するよ",
+      "reading": "きょ'うわ/どうがの/つくりか'たお/かいせつするよ。",
+      "source": {
+        "$type": "synthesized",
+        "cacheKey": "9e69d84e822b89a20cb9782e93d4cd469ab011f29c08d6dba3e66b98ab7eba26"
+      },
+      "audio": {
+        "volume": 1,
+        "pan": 0,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "preservePitch": true,
+        "ducking": 0
+      }
+    },
+    {
+      "$type": "nmm.voice",
+      "id": "01a1a62c-ba00-714a-afdc-05dbb952d235",
+      "layer": "01a1a62c-b985-76e1-b077-ebfee090e1ce",
+      "start": 258,
+      "length": 72,
+      "effects": [],
+      "transform": {
+        "x": 0,
+        "y": 410.4,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0,
+        "anchorY": 0,
+        "flipHorizontal": false,
+        "flipVertical": false
+      },
+      "opacity": 1,
+      "blend": "normal",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "character": "01a1a62c-b986-7bd3-b47e-9a3431b30fd6",
+      "text": "最後まで見ていってくれよな",
+      "reading": "さ'いごまで/み'ていって/くれよな。",
+      "source": {
+        "$type": "synthesized",
+        "cacheKey": "e97ba9ec6c2395993787cdeaa07df31e19753f18fa55c530f012df5ba1fcb0bb"
       },
       "audio": {
         "volume": 1,

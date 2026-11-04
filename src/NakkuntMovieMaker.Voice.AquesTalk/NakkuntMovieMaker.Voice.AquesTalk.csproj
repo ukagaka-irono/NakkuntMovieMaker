@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="../NakkuntMovieMaker.Voice/NakkuntMovieMaker.Voice.csproj" />
-  </ItemGroup>
-</Project>

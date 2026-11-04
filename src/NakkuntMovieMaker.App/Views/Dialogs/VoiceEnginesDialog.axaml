@@ -27,20 +27,9 @@
       </ItemsControl.ItemTemplate>
     </ItemsControl>
 
-    <TextBlock Classes="panel-header" Text="AquesTalk の導入" Margin="0,8,0,0" />
-    <TextBlock Text="{x:Static vm:VoiceEnginesViewModel.LicenseNotice}" TextWrapping="Wrap" />
-    <HyperlinkButton Content="A-quest の公式ページ" Click="OnOpenLink" Tag="{x:Static vm:VoiceEnginesViewModel.OfficialUrl}" Padding="0" />
-    <TextBlock Text="入手したライブラリを、次のように置いてください：" Margin="0,4,0,0" />
-    <SelectableTextBlock Classes="secondary" Text="{Binding Layout}" TextWrapping="Wrap" FontFamily="monospace" />
-    <DockPanel>
-      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="{StaticResource Space1}" Margin="4,0,0,0">
-        <Button Content="場所を変える…" Command="{Binding BrowseCommand}" />
-        <Button Content="既定に戻す" Command="{Binding ResetFolderCommand}" />
-        <Button Content="読み込み直す" Command="{Binding ReloadCommand}" ToolTip.Tip="ライブラリを置いたあとで押してください" />
-      </StackPanel>
-      <TextBox Text="{Binding Folder}" IsReadOnly="True" />
-    </DockPanel>
-    <TextBlock Classes="warning" Text="{Binding ConverterError}" IsVisible="{Binding HasConverterError}" />
+    <TextBlock Classes="panel-header" Text="ColorfulTalk の読みの書き方" Margin="0,8,0,0" />
+    <SelectableTextBlock Text="{x:Static vm:VoiceEnginesViewModel.KoeGuide}" TextWrapping="Wrap" />
+    <HyperlinkButton Content="ColorfulTalk（GitHub）" Click="OnOpenLink" Tag="{x:Static vm:VoiceEnginesViewModel.ColorfulTalkUrl}" Padding="0" />
 
     <StackPanel Classes="dialog-buttons">
       <Button Classes="accent" Content="閉じる" IsDefault="True" IsCancel="True" Click="OnClose" />

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../NakkuntMovieMaker.Voice/NakkuntMovieMaker.Voice.csproj" />
+  </ItemGroup>
+
+  <!-- tools/build-native で作った ColorfulTalk のライブラリを、このプロジェクトを使うアプリの出力先にコピーする -->
+  <ItemGroup Condition="Exists('$(NmmNativeDir)')">
+    <None Include="$(NmmNativeDir)*colorful_talk.*;$(NmmNativeDir)licenses/colorful-talk-LICENSE.txt"
+          Link="%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          Visible="false" />
+  </ItemGroup>
+</Project>

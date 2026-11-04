@@ -5,7 +5,7 @@ using System.Security;
 namespace NakkuntMovieMaker.Voice.Sapi;
 
 /// <summary>
-/// Windows に入っている音声合成（SAPI 5）。導入なしで使えるので、AquesTalk を入れていない人もセリフの機能を試せる。
+/// Windows に入っている音声合成（SAPI 5）。Windows なら導入なしで使える。
 /// COM を使うので、合成は STA のスレッドで行う（VoiceService がエンジン用のスレッドを STA にする）。
 /// Windows 以外では「使用不可」になる
 /// </summary>

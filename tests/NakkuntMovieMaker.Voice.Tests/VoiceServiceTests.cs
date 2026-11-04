@@ -92,11 +92,11 @@ public sealed class VoiceServiceTests : IDisposable
     [Fact]
     public async Task ReportsMissingUnavailableAndFailingEngines()
     {
-        await Assert.ThrowsAsync<VoiceEngineException>(() => _service.GetAsync(new VoiceSpec("aquestalk1", "f1", VoiceParams.Default), "あ", null, Token));
+        await Assert.ThrowsAsync<VoiceEngineException>(() => _service.GetAsync(new VoiceSpec("unknown", "f1", VoiceParams.Default), "あ", null, Token));
 
-        _engine.Status = new VoiceEngineStatus(false, "AquesTalk は導入されていません", "https://www.a-quest.com/");
+        _engine.Status = new VoiceEngineStatus(false, "エンジンは導入されていません", "https://example.com/");
         var unavailable = await Assert.ThrowsAsync<VoiceEngineException>(() => _service.GetAsync(Voice(), "あ", null, Token));
-        Assert.Equal("AquesTalk は導入されていません", unavailable.Message);
+        Assert.Equal("エンジンは導入されていません", unavailable.Message);
 
         _engine.Status = VoiceEngineStatus.Ready;
         _engine.Fail = true;

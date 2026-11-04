@@ -9,7 +9,7 @@ public sealed record Character(
     TachieSpec? Tachie = null);
 
 /// <summary>
-/// 使う声。EngineId は音声合成エンジン（"aquestalk1"、"sapi" など）、
+/// 使う声。EngineId は音声合成エンジン（"colorfultalk1"、"sapi" など）、
 /// VoiceId はそのエンジンの中の声の名前
 /// </summary>
 public sealed record VoiceSpec(string EngineId, string VoiceId, VoiceParams Params);

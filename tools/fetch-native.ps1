@@ -1,5 +1,6 @@
 #Requires -Version 7
-# 同梱するフォントと FFmpeg（LGPL・共有ライブラリ版）を取得して native/bin/<rid>/ に置く（Windows 用）
+# 同梱するフォントと FFmpeg（LGPL・共有ライブラリ版）を取得して native/bin/<rid>/ に置く（Windows 用）。
+# ColorfulTalk（音声合成）のソースも取得する（ビルドは tools/build-native）
 # 取得するバージョンとハッシュは tools/native-deps.json で固定している
 param(
     [string]$Rid = [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier
@@ -38,6 +39,25 @@ foreach ($font in $deps.fonts.files) {
     Copy-Item $file (Join-Path $dir $name) -Force
 }
 Write-Host "フォント $($deps.fonts.name)（$($deps.fonts.license)）を $outDir に配置しました"
+
+# ColorfulTalk のソース（ファイルごとに SHA-256 を確かめる）
+$colorful = $deps.colorfulTalk
+$colorfulDir = Join-Path $downloads $colorful.dir
+foreach ($source in $colorful.files) {
+    $target = Join-Path $colorfulDir $source.path
+    if (-not (Test-Path $target)) {
+        New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+        Write-Host "ダウンロード: $($colorful.baseUrl)$($source.path)"
+        Invoke-WebRequest -Uri "$($colorful.baseUrl)$($source.path)" -OutFile $target
+    }
+
+    $hash = (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($hash -ne $source.sha256) {
+        Remove-Item $target
+        throw "SHA-256 が一致しません: $target（期待値 $($source.sha256)、実際 $hash）"
+    }
+}
+Write-Host "ColorfulTalk $($colorful.version) のソースを $colorfulDir に取得しました"
 
 $entry = $deps.ffmpeg.files.$Rid
 if (-not $entry) {

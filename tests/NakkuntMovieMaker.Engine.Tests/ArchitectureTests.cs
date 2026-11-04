@@ -14,7 +14,7 @@ public class ArchitectureTests
         "NakkuntMovieMaker.Rendering.Skia",
         "NakkuntMovieMaker.Audio",
         "NakkuntMovieMaker.Voice",
-        "NakkuntMovieMaker.Voice.AquesTalk",
+        "NakkuntMovieMaker.Voice.ColorfulTalk",
         "NakkuntMovieMaker.Voice.Sapi",
         "NakkuntMovieMaker.Engine",
     ];

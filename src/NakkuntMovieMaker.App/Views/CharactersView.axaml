@@ -10,7 +10,7 @@
       <Button Classes="toolbar" Content="追加" Command="{Binding AddCommand}" />
       <Button Classes="toolbar" Content="複製" Command="{Binding DuplicateCommand}" />
       <Button Classes="toolbar" Content="削除" Command="{Binding RemoveCommand}" />
-      <Button Classes="toolbar" Content="エンジン…" Command="{Binding ShowEngineGuideCommand}" ToolTip.Tip="音声合成エンジンと AquesTalk の導入" />
+      <Button Classes="toolbar" Content="エンジン…" Command="{Binding ShowEngineGuideCommand}" ToolTip.Tip="音声合成エンジンの一覧と、読みの書き方" />
     </StackPanel>
     <ListBox DockPanel.Dock="Top" ItemsSource="{Binding Characters}" SelectedItem="{Binding Selected}" MaxHeight="140" Background="Transparent">
       <ListBox.ItemTemplate>

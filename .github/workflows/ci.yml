@@ -47,3 +47,4 @@ jobs:
           NMM_REQUIRE_FFMPEG: ${{ runner.os != 'macOS' && '1' || '0' }}
           NMM_REQUIRE_NMM_AUDIO: '1'
           NMM_REQUIRE_FONTS: '1'
+          NMM_REQUIRE_COLORFULTALK: '1'

@@ -43,12 +43,12 @@ public partial class CharactersView : UserControl
         }
     }
 
-    // 音声合成エンジンと AquesTalk の導入の案内
+    // 音声合成エンジンの一覧と、読みの書き方
     private async void OnEngineGuideRequested(object? sender, EventArgs e)
     {
         if (TopLevel.GetTopLevel(this) is Window owner && owner.DataContext is MainWindowViewModel main)
         {
-            await new VoiceEnginesDialog { DataContext = new VoiceEnginesViewModel(main.Session, main.Dialogs) }.ShowDialog(owner);
+            await new VoiceEnginesDialog { DataContext = new VoiceEnginesViewModel(main.Session) }.ShowDialog(owner);
         }
     }
 }

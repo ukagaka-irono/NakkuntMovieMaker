@@ -29,20 +29,12 @@ public sealed record VoiceEngineStatus(bool Available, string? Message = null, s
 public sealed class VoiceEngineException(string message, Exception? innerException = null) : Exception(message, innerException);
 
 /// <summary>
-/// 文章を、エンジンが読む音声記号列に変える（AqKanji2Koe のように、漢字かな交じり文から読みを作るもの）
-/// </summary>
-public interface IPhoneticConverter
-{
-    string Convert(string text);
-}
-
-/// <summary>
 /// 音声合成エンジン。合成（Synthesize）と読みの作成（MakeReading）は、VoiceService がエンジンごとに 1 本のスレッドで順番に呼ぶので、
 /// スレッドセーフでなくてよい
 /// </summary>
 public interface IVoiceEngine : IDisposable
 {
-    /// <summary>種類の ID（"sapi"、"aquestalk1" など）。キャラクターの設定に保存する</summary>
+    /// <summary>種類の ID（"sapi"、"colorfultalk1" など）。キャラクターの設定に保存する</summary>
     string Id { get; }
 
     /// <summary>画面に出す名前</summary>

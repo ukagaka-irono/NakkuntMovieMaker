@@ -8,7 +8,7 @@
     <ProjectReference Include="../NakkuntMovieMaker.Rendering.Skia/NakkuntMovieMaker.Rendering.Skia.csproj" />
     <ProjectReference Include="../NakkuntMovieMaker.Audio/NakkuntMovieMaker.Audio.csproj" />
     <ProjectReference Include="../NakkuntMovieMaker.Voice/NakkuntMovieMaker.Voice.csproj" />
-    <ProjectReference Include="../NakkuntMovieMaker.Voice.AquesTalk/NakkuntMovieMaker.Voice.AquesTalk.csproj" />
+    <ProjectReference Include="../NakkuntMovieMaker.Voice.ColorfulTalk/NakkuntMovieMaker.Voice.ColorfulTalk.csproj" />
     <ProjectReference Include="../NakkuntMovieMaker.Voice.Sapi/NakkuntMovieMaker.Voice.Sapi.csproj" />
   </ItemGroup>
 </Project>

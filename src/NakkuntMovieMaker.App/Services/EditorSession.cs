@@ -10,7 +10,6 @@ using NakkuntMovieMaker.Engine.Tachie;
 using NakkuntMovieMaker.Media;
 using NakkuntMovieMaker.Rendering.Skia;
 using NakkuntMovieMaker.Voice;
-using NakkuntMovieMaker.Voice.AquesTalk;
 
 namespace NakkuntMovieMaker.App.Services;
 
@@ -65,9 +64,6 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
     /// <summary>プロジェクトを保存した</summary>
     public event EventHandler? Saved;
 
-    /// <summary>音声合成エンジンを読み込み直した</summary>
-    public event EventHandler? VoiceEnginesReloaded;
-
     /// <summary>プロジェクトが編集された（元に戻す・やり直しを含む）</summary>
     public event EventHandler<DocumentChange>? Changed;
 
@@ -110,9 +106,6 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
     public PlaybackController Playback => _workspace!.Playback;
 
     public VoiceService Voices => _workspace!.Voices;
-
-    /// <summary>AqKanji2Koe はあるが読み込めなかったときの理由</summary>
-    public string? VoiceConverterError => _workspace!.ConverterError;
 
     public VoiceEngineRegistry VoiceEngines => _workspace!.Engines;
 
@@ -247,13 +240,6 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
         {
             return ex.Message;
         }
-    }
-
-    /// <summary>音声合成エンジンを読み込み直す（AquesTalk の場所を変えたとき）</summary>
-    public void ReloadVoiceEngines()
-    {
-        _workspace!.ReloadVoices(this);
-        VoiceEnginesReloaded?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>再生位置を動かす（0 より前には行かない）。再生中なら再生もその位置から続ける</summary>
@@ -426,7 +412,7 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
                 Media,
                 Frames,
                 new PlaybackOptions(DisableAudioDevice: session.DisableAudioDevice, OutputDevice: session.Settings.OutputDevice));
-            (Engines, ConverterError) = CreateEngines(session);
+            Engines = session._voiceEngines?.Invoke() ?? Engine.VoiceEngines.CreateDefault();
             Voices = new VoiceService(Engines, new VoiceCache(folder));
         }
 
@@ -440,30 +426,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
 
         public PlaybackController Playback { get; }
 
-        public VoiceEngineRegistry Engines { get; private set; }
+        public VoiceEngineRegistry Engines { get; }
 
-        public VoiceService Voices { get; private set; }
-
-        public string? ConverterError { get; private set; }
-
-        public void ReloadVoices(EditorSession session)
-        {
-            Voices.Dispose();
-            Engines.Dispose();
-            (Engines, ConverterError) = CreateEngines(session);
-            Voices = new VoiceService(Engines, new VoiceCache(session.ProjectFolder));
-        }
-
-        private static (VoiceEngineRegistry, string?) CreateEngines(EditorSession session)
-        {
-            if (session._voiceEngines is { } create)
-            {
-                return (create(), null);
-            }
-
-            var aquesTalk = session.Settings.AquesTalkFolder is { Length: > 0 } folder ? AquesTalkOptions.Default with { Folder = folder } : null;
-            return Engine.VoiceEngines.CreateDefault(aquesTalk);
-        }
+        public VoiceService Voices { get; }
 
         public void Dispose()
         {

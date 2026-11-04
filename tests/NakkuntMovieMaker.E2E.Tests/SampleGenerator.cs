@@ -7,13 +7,15 @@ using NakkuntMovieMaker.Core.Serialization;
 using NakkuntMovieMaker.Engine;
 using NakkuntMovieMaker.Engine.Export;
 using NakkuntMovieMaker.Media;
+using NakkuntMovieMaker.Voice;
+using NakkuntMovieMaker.Voice.ColorfulTalk;
 using SkiaSharp;
 
 namespace NakkuntMovieMaker.E2E.Tests;
 
 /// <summary>
 /// samples/ の 2 つのサンプルプロジェクトを作る。素材（画像・動画・BGM・声・立ち絵）はすべてここで作るので、著作権の心配がない。
-/// 声は音声合成ではなく、文字数に合わせて母音のような音を並べたもの（口パクの確認用。Windows なら「声を作り直す」で SAPI の声にできる）。
+/// 声は ColorfulTalk（同梱の音声合成）で作る。
 /// サンプルを作り直すときだけ、NMM_GENERATE_SAMPLES=1 を付けて実行する
 /// </summary>
 public sealed class SampleGenerator
@@ -139,7 +141,6 @@ public sealed class SampleGenerator
     private static void GenerateYukkuri(string folder)
     {
         Reset(folder);
-        var voices = Directory.CreateDirectory(Path.Combine(folder, "voices")).FullName;
         var media = Directory.CreateDirectory(Path.Combine(folder, "media")).FullName;
         CreateTachie(Path.Combine(folder, "tachie", "reimu"), new SKColor(220, 60, 70));
         CreateTachie(Path.Combine(folder, "tachie", "marisa"), new SKColor(250, 200, 60));
@@ -148,24 +149,27 @@ public sealed class SampleGenerator
         var project = Project.CreateNew("ゆっくり解説のサンプル", Format, 6);
         var scene = project.Root;
         var reimu = new Character(
-            CharacterId.New(), "霊夢", new VoiceSpec("sapi", "", VoiceParams.Default),
+            CharacterId.New(), "霊夢", new VoiceSpec(ColorfulTalkEngine.EngineId, "f1", VoiceParams.Default with { Pitch = 1.1 }),
             TextStyle.Default with { FontSize = 64, Outline = new TextOutline(new RgbaColor(200, 30, 50), 8) },
             new TachieSpec(TachieKind.Parts, "tachie/reimu"));
         var marisa = new Character(
-            CharacterId.New(), "魔理沙", new VoiceSpec("sapi", "", VoiceParams.Default with { Pitch = 0.9 }),
+            CharacterId.New(), "魔理沙", new VoiceSpec(ColorfulTalkEngine.EngineId, "f1", VoiceParams.Default with { Pitch = 0.9, Speed = 1.05 }),
             TextStyle.Default with { FontSize = 64, Outline = new TextOutline(new RgbaColor(200, 150, 20), 8) },
             new TachieSpec(TachieKind.Parts, "tachie/marisa"));
         project = project with { Characters = project.Characters.Add(reimu.Id, reimu).Add(marisa.Id, marisa) };
         var bgm = new Asset(AssetId.New(), AssetKind.Audio, "media/bgm.wav");
         project = project with { Assets = project.Assets.Add(bgm.Id, bgm) };
 
-        (Character Who, string Text)[] script =
+        // 声は ColorfulTalk で作る。漢字は読めないので、読み（記号列）を付ける
+        (Character Who, string Text, string Reading)[] script =
         [
-            (reimu, "ゆっくり霊夢です"),
-            (marisa, "ゆっくり魔理沙だぜ"),
-            (reimu, "今日は動画の作り方を解説するよ"),
-            (marisa, "最後まで見ていってくれよな"),
+            (reimu, "ゆっくり霊夢です", "ゆっくり/れ'いむです。"),
+            (marisa, "ゆっくり魔理沙だぜ", "ゆっくり/まりさだぜ。"),
+            (reimu, "今日は動画の作り方を解説するよ", "きょ'うわ/どうがの/つくりか'たお/かいせつするよ。"),
+            (marisa, "最後まで見ていってくれよな", "さ'いごまで/み'ていって/くれよな。"),
         ];
+        using var engines = new VoiceEngineRegistry([new ColorfulTalkEngine()]);
+        using var service = new VoiceService(engines, new VoiceCache(folder));
 
         var start = 15L;
         var items = new List<Item>
@@ -177,14 +181,13 @@ public sealed class SampleGenerator
         };
         for (var i = 0; i < script.Length; i++)
         {
-            var (who, text) = script[i];
-            var key = $"sample-{i + 1:00}";
-            var samples = Speech(text, who == marisa ? 150 : 210, seed: i);
-            WavWriter.WriteFile(Path.Combine(voices, key + ".wav"), samples, 1, SampleRate);
-            var length = VoiceEditing.LengthFor(TimeSpan.FromSeconds((double)samples.Length / SampleRate), Format.Fps);
+            var (who, text, reading) = script[i];
+            var voice = service.GetAsync(who.Voice, text, reading).GetAwaiter().GetResult();
+            var length = VoiceEditing.LengthFor(voice.Duration, Format.Fps);
             items.Add(new VoiceItem(ItemId.New(), scene.Layers[3].Id, start, length, who.Id, text)
             {
-                Source = new SynthesizedVoice(key),
+                Reading = reading,
+                Source = new SynthesizedVoice(voice.CacheKey),
                 Transform = Transform2D.Identity with { Y = Format.Height * 0.38 },
             });
             start += length + 12;
@@ -269,47 +272,6 @@ public sealed class SampleGenerator
 
         return stereo;
     }
-
-    // 話し声のような音：文字ごとに母音のフォルマントを持つ音を並べる（句読点では間を空ける）
-    private static float[] Speech(string text, double pitch, int seed)
-    {
-        (double F1, double F2)[] vowels = [(800, 1200), (300, 2300), (350, 1400), (500, 1900), (500, 900)];
-        var random = new Random(seed);
-        var mora = (int)(SampleRate * 0.13);
-        var samples = new List<float>(SampleRate * 3);
-        foreach (var character in text)
-        {
-            if (character is '、' or '。' or '！' or '？')
-            {
-                samples.AddRange(new float[mora]);
-                continue;
-            }
-
-            var (f1, f2) = vowels[random.Next(vowels.Length)];
-            var phase = 0.0;
-            for (var i = 0; i < mora; i++)
-            {
-                var t = (double)i / mora;
-                var f0 = pitch * (1 + 0.05 * Math.Sin(2 * Math.PI * t));
-                phase += 2 * Math.PI * f0 / SampleRate;
-                var envelope = Math.Sin(Math.PI * Math.Min(1, t * 1.2));
-                var value = 0.0;
-                for (var harmonic = 1; harmonic <= 20; harmonic++)
-                {
-                    var frequency = f0 * harmonic;
-                    var weight = Formant(frequency, f1, 90) + 0.6 * Formant(frequency, f2, 120);
-                    value += weight * Math.Sin(phase * harmonic);
-                }
-
-                samples.Add((float)(0.35 * envelope * value));
-            }
-        }
-
-        var peak = samples.Max(Math.Abs);
-        return [.. samples.Select(sample => sample / peak * 0.5f)];
-    }
-
-    private static double Formant(double frequency, double center, double width) => 1 / (1 + Math.Pow((frequency - center) / width, 2));
 
     // パーツ式の立ち絵（体・目 3 枚・口 3 枚）。YMM4 の「動く立ち絵」と同じフォルダ構成
     private static void CreateTachie(string folder, SKColor color)

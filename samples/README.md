@@ -12,8 +12,7 @@ nmm export samples/general/general.nmmproj -o general.mp4 --preset youtube-1080p
 ```
 
 素材はすべて `tests/NakkuntMovieMaker.E2E.Tests/SampleGenerator.cs` がプログラムで作ったもので、自由に使えます。
-セリフの声は音声合成ではなく、文字数に合わせて母音のような音を並べたものです（口パクを確かめるため）。
-Windows なら、セリフを選んで「声を作り直す」を押すと SAPI の声になります。
+セリフの声は ColorfulTalk（同梱の音声合成）で作ったものです。漢字を含むセリフには、読み（記号列）を付けてあります。
 
 サンプルを作り直すときは、次を実行します。
 

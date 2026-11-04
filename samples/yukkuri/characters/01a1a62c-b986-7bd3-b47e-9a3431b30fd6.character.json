@@ -1,12 +1,12 @@
 {
-  "id": "01a1a281-adc1-7a21-8965-1a4f07ecd642",
-  "name": "霊夢",
+  "id": "01a1a62c-b986-7bd3-b47e-9a3431b30fd6",
+  "name": "魔理沙",
   "voice": {
-    "engineId": "sapi",
-    "voiceId": "",
+    "engineId": "colorfultalk1",
+    "voiceId": "f1",
     "params": {
-      "speed": 1,
-      "pitch": 1,
+      "speed": 1.05,
+      "pitch": 0.9,
       "intonation": 1,
       "volume": 1
     }
@@ -18,7 +18,7 @@
     "bold": false,
     "italic": false,
     "outline": {
-      "color": "#C81E32",
+      "color": "#C89614",
       "width": 8
     },
     "alignment": "center",
@@ -29,6 +29,6 @@
   },
   "tachie": {
     "kind": "parts",
-    "path": "tachie/reimu"
+    "path": "tachie/marisa"
   }
 }

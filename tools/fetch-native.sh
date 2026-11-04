@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 同梱するフォントと FFmpeg（LGPL・共有ライブラリ版）を取得して native/bin/<rid>/ に置く（Linux・macOS 用）
+# 同梱するフォントと FFmpeg（LGPL・共有ライブラリ版）を取得して native/bin/<rid>/ に置く（Linux・macOS 用）。
+# ColorfulTalk（音声合成）のソースも取得する（ビルドは tools/build-native）
 # 取得するバージョンとハッシュは tools/native-deps.json で固定している。jq が必要
 set -euo pipefail
 
@@ -49,6 +50,31 @@ for i in $(seq 0 $((font_count - 1))); do
   cp "$verified" "$dir/${name:-$(basename "$verified")}"
 done
 echo "フォント $(jq -r '.fonts.name' "$deps") を $out_dir に配置しました"
+
+# ColorfulTalk のソース（ファイルごとに SHA-256 を確かめる）
+sha256_of() {
+  if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+colorful_base="$(jq -r '.colorfulTalk.baseUrl' "$deps")"
+colorful_dir="$downloads/$(jq -r '.colorfulTalk.dir' "$deps")"
+colorful_count="$(jq '.colorfulTalk.files | length' "$deps")"
+for i in $(seq 0 $((colorful_count - 1))); do
+  path="$(jq -r ".colorfulTalk.files[$i].path" "$deps")"
+  expected="$(jq -r ".colorfulTalk.files[$i].sha256" "$deps")"
+  target="$colorful_dir/$path"
+  if [ ! -f "$target" ]; then
+    mkdir -p "$(dirname "$target")"
+    echo "ダウンロード: $colorful_base$path"
+    curl -fL --retry 3 -o "$target" "$colorful_base$path"
+  fi
+  actual="$(sha256_of "$target")"
+  if [ "$actual" != "$expected" ]; then
+    rm -f "$target"
+    echo "SHA-256 が一致しません: $target（期待値 $expected、実際 $actual）" >&2
+    exit 1
+  fi
+done
+echo "ColorfulTalk $(jq -r '.colorfulTalk.version' "$deps") のソースを $colorful_dir に取得しました"
 
 url="$(jq -r --arg rid "$rid" '.ffmpeg.files[$rid].url // empty' "$deps")"
 if [ -z "$url" ]; then

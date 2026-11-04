@@ -51,12 +51,11 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 | 編集 | タイムライン（レイヤー・移動・トリム・分割・リップル・ロール・コピーと貼り付け・グループ化・元に戻す）、キーフレーム、合成モード、速度変更と逆再生 |
 | 映像 | 映像エフェクト 15 種類、トランジション 7 種類、テキスト（縁取り・影・背景・縦書き・一文字ずつの表示・プリセット）、図形 |
 | 音声 | ミキサー（音量・パン・フェード・キーフレーム）、音の高さを保った速度変更、ラウドネスの正規化、ダッキング、レベルメーター、録音 |
-| セリフ | キャラクター、セリフ入力欄、台本の一括貼り付け、SAPI、AquesTalk（任意で導入）、セリフごとの収録、立ち絵（口パク・目パチ）、字幕（SRT） |
+| セリフ | キャラクター、セリフ入力欄、台本の一括貼り付け、ColorfulTalk（旧版。同梱）と SAPI（Windows）、セリフごとの収録、立ち絵（口パク・目パチ）、字幕（SRT） |
 | 書き出し | MP4（H.264・HEVC、ハードウェアエンコード）、プリセット、範囲、WAV、静止画 |
 
 まだ確かめていないこと：
 
-- AquesTalk は、手元に導入していないため、実際の合成を確かめていません（導入していない場合の案内と、読み込みの仕組みはテストしています）。
 - 本物のマイクでの録音は確かめていません（仮の入力デバイスでテストしています）。
 - 立ち絵は、YMM4 の「動く立ち絵」と同じフォルダ構成を想定していますが、実際の素材では確かめていません。
 
@@ -71,7 +70,7 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 - CMake と C コンパイラ（`nmm_audio` のビルドに使います。Windows は Visual Studio の C++ ビルドツール）
 
 ```bash
-# FFmpeg（LGPL 版）・フォントの取得（版とハッシュは tools/native-deps.json で固定）と、nmm_audio のビルド
+# FFmpeg（LGPL 版）・フォント・ColorfulTalk のソースの取得（版とハッシュは tools/native-deps.json で固定）と、nmm_audio・ColorfulTalk のビルド
 pwsh tools/fetch-native.ps1      # Linux・macOS は ./tools/fetch-native.sh
 pwsh tools/build-native.ps1      # Linux・macOS は ./tools/build-native.sh
 
@@ -477,27 +476,26 @@ NakkuntMovieMaker のプラグインを作るための資料とツールを用�
 | [HarfBuzzSharp](https://github.com/mono/SkiaSharp) | 文字の配置 | Windows / Linux / macOS |
 | [miniaudio](https://miniaud.io/) | 音の再生と録音 | Windows / Linux / macOS |
 | [BIZ UDPゴシック](https://github.com/googlefonts/morisawa-biz-ud-gothic) | 既定のフォント（同梱） | Windows / Linux / macOS |
-| [AquesTalk1](https://www.a-quest.com/products/aquestalk_1.html) | 音声合成エンジン（任意で導入） | Windows / Linux / macOS |
-| [AquesTalk2](https://www.a-quest.com/products/aquestalk_2.html) | 音声合成エンジン（任意で導入） | Windows / Linux / macOS |
-| [AquesTalk10](https://www.a-quest.com/products/aquestalk10.html) | 音声合成エンジン（任意で導入） | Windows / Linux / macOS |
-| [AqKanji2Koe-A](https://www.a-quest.com/products/aqkanji2koe.html) | 言語処理エンジン（任意で導入） | Windows / Linux / macOS |
+| [ColorfulTalk（旧版）](https://github.com/ukagaka-irono/colorful-talk) | 音声合成エンジン（同梱。ソースからビルド） | Windows / Linux / macOS |
 | [FFmpeg](https://ffmpeg.org/) | 動画・音声処理（LGPL 版の共有ライブラリを同梱） | Windows / Linux / macOS |
 | [OpenColorIO](https://opencolorio.org/) | カラーマネジメント | Windows / Linux / macOS |
 | [MeltySynth](https://github.com/sinshu/meltysynth) | MIDI の再生（標準） | Windows / Linux / macOS |
 | [FluidSynth](https://www.fluidsynth.org/) | MIDI の再生（SF3・DLS の音色、MIDI 機器からの入力） | Windows / Linux / macOS |
 
-AquesTalk と AqKanji2Koe はソフトに同梱しません。使う場合は、[株式会社アクエスト](https://www.a-quest.com/)から入手したライブラリを、ソフトのフォルダ内の `engines/aquestalk/` に置くか、設定画面で場所を指定してください。導入しなくても、ほかの音声合成や録音でセリフを作れます。営利目的で利用する場合は、AquesTalk の使用ライセンスが必要です。
+ColorfulTalk は規則合成（フォルマント合成）の音声合成で、漢字を読めません。漢字や英数字を含むセリフは、セリフ入力欄やプロパティの「読み」に、カナとアクセント記号の記号列（例: `きょ'うわ/い'い/てんきです。`）を入れてください。ひらがな・カタカナだけのセリフは、そのまま読みます。
+
+AquesTalk には対応しません。
 
 ## 対応している音声合成ソフト・サービス
 
 - [A.I.VOICE](https://aivoice.jp/)
 - AivisProject（[AivisSpeech](https://aivis-project.com/) / [AivisCloudAPI](https://hub.aivis-project.com/cloud-api/)）
 - [Amazon Polly](https://aws.amazon.com/jp/polly/)
-- [AquesTalk1](https://www.a-quest.com/products/aquestalk_1.html) / [AquesTalk2](https://www.a-quest.com/products/aquestalk_2.html) / [AquesTalk10](https://www.a-quest.com/products/aquestalk10.html)（任意で導入。営利目的での利用には使用ライセンスが必要）
 - [CapCut](https://www.capcut.com/)（非公式な方法で使用。利用規約に反するおそれがある）
 - [CeVIO AI / CeVIO Creative Studio 7](https://cevio.jp/)
 - [CoeFont](https://coefont.cloud/)（一部の音声は無料。それ以外は Enterprise 以上のプランが必要）
 - [COEIROINK](https://coeiroink.com/)
+- [ColorfulTalk](https://github.com/ukagaka-irono/colorful-talk)（旧版を同梱。新しい版は開発中）
 - [ElevenLabs](https://elevenlabs.io/)
 - [Google Cloud Text-to-Speech](https://cloud.google.com/text-to-speech)（別途 API キーが必要）
 - [Google 翻訳](https://translate.google.com/)（非公式な方法で使用。利用規約に反するおそれがある）
@@ -529,7 +527,5 @@ AquesTalk と AqKanji2Koe はソフトに同梱しません。使う場合は、
 
 NakkuntMovieMaker は [MIT ライセンス](LICENSE)です。
 
-同梱しているもの（FFmpeg は LGPL-3.0、miniaudio は Unlicense または MIT-0、BIZ UDPゴシックは SIL Open Font License 1.1 など）のライセンスは、
+同梱しているもの（FFmpeg は LGPL-3.0、miniaudio は Unlicense または MIT-0、ColorfulTalk は MIT、BIZ UDPゴシックは SIL Open Font License 1.1 など）のライセンスは、
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) にまとめています。FFmpeg は GPL の部品と x264 を含まない構成のものだけを同梱します。
-
-AquesTalk と AqKanji2Koe は同梱しません。営利目的で利用する場合は、利用者自身が AquesTalk の使用ライセンスを購入する必要があります。

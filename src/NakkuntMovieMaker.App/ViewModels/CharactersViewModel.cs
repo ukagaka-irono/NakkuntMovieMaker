@@ -23,7 +23,7 @@ public sealed record TachieChoice(TachieKind? Kind, string Name)
 
 /// <summary>
 /// キャラクターの設定。キャラクターの追加・複製・削除と、名前・声（エンジン・声・速さ・高さ・抑揚・音量）・字幕のスタイル・立ち絵。
-/// 変更はそれぞれ 1 回の操作（元に戻せる）。使えないエンジン（AquesTalk が未導入など）は、理由と導入の案内を出す
+/// 変更はそれぞれ 1 回の操作（元に戻せる）。使えないエンジン（ColorfulTalk のライブラリがない、Windows 以外の SAPI など）は、理由を出す
 /// </summary>
 public sealed partial class CharactersViewModel : ObservableObject
 {
@@ -43,11 +43,6 @@ public sealed partial class CharactersViewModel : ObservableObject
         _fonts = fonts;
         session.Changed += (_, _) => Refresh();
         session.ProjectOpened += (_, _) => Refresh();
-        session.VoiceEnginesReloaded += (_, _) =>
-        {
-            RefreshEngines();
-            Load();
-        };
         RefreshEngines();
         Refresh();
     }

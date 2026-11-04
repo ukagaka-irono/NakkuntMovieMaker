@@ -38,5 +38,78 @@
         "name": "BIZUDPGothic-OFL.txt"
       }
     ]
+  },
+  "colorfulTalk": {
+    "version": "1.0.0",
+    "license": "MIT",
+    "source": "https://github.com/ukagaka-irono/colorful-talk/tree/58350793230461916e66b5b3739892e5f8e83e7f",
+    "baseUrl": "https://raw.githubusercontent.com/ukagaka-irono/colorful-talk/58350793230461916e66b5b3739892e5f8e83e7f/",
+    "dir": "colorful-talk-1.0.0",
+    "files": [
+      {
+        "path": "CMakeLists.txt",
+        "sha256": "725a7f995eb7ac720119bde112424a3c9ee99f508114275e363ed915f9b30123"
+      },
+      {
+        "path": "LICENSE",
+        "sha256": "3d5af138054a1a0475a467a5352d8a4aa4fa0c4b354e58add7f1459113919a9c"
+      },
+      {
+        "path": "include/colorful_talk.h",
+        "sha256": "55b32ec65bf15f7a1a169a641fab52a8d88953de8e98001706500641d7b04592"
+      },
+      {
+        "path": "cli/ctalk.c",
+        "sha256": "3220d28549d740595b10e7fe0f8293869c92484dbf5924df434f4c596080b16f"
+      },
+      {
+        "path": "src/api.c",
+        "sha256": "c13b152c41d88bb22cc19d3fab9c4647b65eb4a7af0c131f309e1d6545dcee9a"
+      },
+      {
+        "path": "src/ct_internal.h",
+        "sha256": "441b4149f7bb27938ff35889fe2ff1e9d52ccf86c000d620a0a6ce447934275a"
+      },
+      {
+        "path": "src/kana_table.c",
+        "sha256": "271e9bf53117704d296c090c42b830f94afd9b4a7e8b9b873e67d22c45d58d9b"
+      },
+      {
+        "path": "src/klatt.c",
+        "sha256": "d3b59cce2ae8fb52e33083090968c223bda7ce6bbe1652de89f6e63ef8508dd9"
+      },
+      {
+        "path": "src/parser.c",
+        "sha256": "d7518ae138c40461497ebde1e1ac29927f2dc9817ca64dfc0fa3b016991928de"
+      },
+      {
+        "path": "src/phoneme.c",
+        "sha256": "6a45be4ea2a1f3043e2de6a6a76acacdf2fea5e569d0445f416b352bebf8910c"
+      },
+      {
+        "path": "src/prosody.c",
+        "sha256": "0d963a6e96e838b82fadbf5187086724871dfa6fb7c93db7ff6efc9d95bf014b"
+      },
+      {
+        "path": "src/track.c",
+        "sha256": "fd10d198afb19af64bb0b463e1220ab26e421ebedc42b9f8a1c37384526d53b8"
+      },
+      {
+        "path": "src/utf8.c",
+        "sha256": "5b9cce1f60c97737f928790de953e11d4289f6af71a1bfcebe9d3c41d7779d33"
+      },
+      {
+        "path": "src/wav.c",
+        "sha256": "151a3c547d87223b57a09363ad3b26103babbf8ddbe2e63d9afe47eb89794787"
+      },
+      {
+        "path": "tests/test_parser.c",
+        "sha256": "4481ab541feffe3b2388b353c1be84c76e5bdd5f679357cd0069a08fe205a565"
+      },
+      {
+        "path": "tests/test_synth.c",
+        "sha256": "a841d4d84214b1a6c6966d01a7b409c008b8f000c7d55ea8e7470c9025ee1673"
+      }
+    ]
   }
 }

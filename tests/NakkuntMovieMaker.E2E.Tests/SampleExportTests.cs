@@ -99,12 +99,37 @@ public sealed class SampleExportTests : IDisposable
         Assert.Equal(4, voices.Count);
         foreach (var voice in voices)
         {
-            // 置いた位置の 5 フレーム前から探し、BGM より大きな音が始まったところ
-            var from = (long)((voice.Start - 5) * samplesPerFrame);
-            var onset = Enumerable.Range(0, (int)(10 * samplesPerFrame)).Select(offset => from + offset).First(sample => Math.Abs(wav.Samples[sample * 2]) > 0.15);
-            var frame = onset / samplesPerFrame;
-            Assert.InRange(frame, voice.Start, voice.Start + 1);
+            // 声のファイルと書き出した音を突き合わせ、いちばん似ている位置を探す（置いた位置の前後 5 フレーム）
+            var key = Assert.IsType<SynthesizedVoice>(voice.Source).CacheKey;
+            var source = WavReader.Read(Path.Combine(Path.GetDirectoryName(entry)!, "voices", key + ".wav")).Samples;
+            var placed = (long)(voice.Start * samplesPerFrame);
+            var found = BestMatch(wav.Samples, source, placed, (int)(5 * samplesPerFrame));
+            Assert.InRange((found - placed) / samplesPerFrame, -1, 1);
         }
+    }
+
+    // mix（ステレオ）の中で、voice（モノラル）の先頭 0.4 秒といちばん似ている位置（サンプル）。center の前後 range サンプルを探す
+    private static long BestMatch(float[] mix, float[] voice, long center, int range)
+    {
+        var length = Math.Min(voice.Length, 19200);
+        double Score(long position)
+        {
+            double sum = 0;
+            for (var i = 0; i < length; i += 2)
+            {
+                var index = (position + i) * 2;
+                if (index >= 0 && index < mix.Length)
+                {
+                    sum += mix[index] * voice[i];
+                }
+            }
+
+            return sum;
+        }
+
+        // 粗く探してから、見つかった近くを 1 サンプルずつ探す
+        var best = Enumerable.Range(-range / 16, range / 8 + 1).Select(step => center + step * 16L).MaxBy(Score);
+        return Enumerable.Range(-16, 33).Select(offset => best + offset).MaxBy(Score);
     }
 
     // 映像と音の形式、フレーム数、長さ、全フレームのデコード

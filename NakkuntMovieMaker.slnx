@@ -12,7 +12,7 @@
     <Project Path="src/NakkuntMovieMaker.Rendering.Skia/NakkuntMovieMaker.Rendering.Skia.csproj" />
     <Project Path="src/NakkuntMovieMaker.Rendering/NakkuntMovieMaker.Rendering.csproj" />
     <Project Path="src/NakkuntMovieMaker.Text/NakkuntMovieMaker.Text.csproj" />
-    <Project Path="src/NakkuntMovieMaker.Voice.AquesTalk/NakkuntMovieMaker.Voice.AquesTalk.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Voice.ColorfulTalk/NakkuntMovieMaker.Voice.ColorfulTalk.csproj" />
     <Project Path="src/NakkuntMovieMaker.Voice.Sapi/NakkuntMovieMaker.Voice.Sapi.csproj" />
     <Project Path="src/NakkuntMovieMaker.Voice/NakkuntMovieMaker.Voice.csproj" />
   </Folder>

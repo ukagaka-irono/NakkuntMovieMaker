@@ -82,7 +82,7 @@ public sealed class ProjectBenchmark(Project project, string projectFolder)
     /// </summary>
     public static (string Engine, double FirstMilliseconds, double AverageMilliseconds)? MeasureVoice(string cacheFolder, CancellationToken cancellationToken = default)
     {
-        var (registry, _) = VoiceEngines.CreateDefault();
+        var registry = VoiceEngines.CreateDefault();
         using var engines = registry;
         var engine = engines.All.FirstOrDefault(candidate => candidate.Status.Available);
         if (engine is null)
