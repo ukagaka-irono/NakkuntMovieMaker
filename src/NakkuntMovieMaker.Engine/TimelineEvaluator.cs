@@ -58,7 +58,7 @@ public static class TimelineEvaluator
             return null;
         }
 
-        var from = scene.ItemsOnLayer(item.Layer).FirstOrDefault(other => other.Id != item.Id && other.End == item.Start);
+        var from = SceneIndex.Of(scene).EndingAt(item.Layer, item.Start, item.Id);
         var duration = Math.Min(transition.Duration, Math.Min(item.Length, from?.Length ?? long.MaxValue));
         if (duration <= 0)
         {
@@ -73,7 +73,8 @@ public static class TimelineEvaluator
     private static IEnumerable<RenderNode> EvaluateLayer(Context context, Layer layer, long frame, TransitionRegistry transitions)
     {
         var scene = context.Scene;
-        var items = scene.ItemsOnLayer(layer.Id).ToList();
+        // このフレームに関わりうるアイテムだけ（始まりの順）
+        var items = SceneIndex.Of(scene).Near(layer.Id, frame).ToArray();
         var replaced = new HashSet<ItemId>();
         var transitionNodes = new List<(long Start, RenderNode Node)>();
         foreach (var item in items)
@@ -273,9 +274,9 @@ public static class TimelineEvaluator
         }
 
         var level = 0f;
-        foreach (var voice in scene.Items.Values.OfType<VoiceItem>())
+        foreach (var candidate in SceneIndex.Of(scene).VoicesNear(frame))
         {
-            if (voice.Character != character || !voice.Contains(frame) || scene.FindLayer(voice.Layer) is not { Muted: false })
+            if (candidate is not VoiceItem voice || voice.Character != character || !voice.Contains(frame) || scene.FindLayer(voice.Layer) is not { Muted: false })
             {
                 continue;
             }
