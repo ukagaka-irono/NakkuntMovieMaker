@@ -40,6 +40,9 @@ public sealed class AppSettings
 
     public bool Snap { get; set; } = true;
 
+    /// <summary>利用者が保存したテキストのプリセット</summary>
+    public List<SavedTextPreset> TextPresets { get; set; } = [];
+
     /// <summary>設定ファイルの場所</summary>
     public static string DefaultPath { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NakkuntMovieMaker", "settings.json");

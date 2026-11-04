@@ -76,6 +76,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
 
     public AppSettings Settings => _settings;
 
+    /// <summary>設定ファイルの場所</summary>
+    public string SettingsPath => _settingsPath;
+
     public ProjectDocument Document { get; private set; }
 
     public Project Project => Document.Current;

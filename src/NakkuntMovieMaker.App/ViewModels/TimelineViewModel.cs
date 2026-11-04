@@ -342,6 +342,40 @@ public sealed partial class TimelineViewModel : ObservableObject
         ScrollX = Math.Clamp(frame * PixelsPerFrame - (x - HeaderWidth), 0, MaxScrollX);
     }
 
+    /// <summary>テキスト・図形を置くときの長さ（秒）</summary>
+    public const int NewItemSeconds = 5;
+
+    /// <summary>図形の選択肢（背景はシーン全体を塗る）</summary>
+    public static IReadOnlyList<ShapeChoice> ShapeChoices { get; } =
+        [.. Enum.GetValues<ShapeKind>().Select(kind => new ShapeChoice(kind, ItemLabels.ShapeName(kind)))];
+
+    /// <summary>再生位置の空いているレイヤーにテキストを置く（プリセットを選べば、そのスタイルで）</summary>
+    [RelayCommand]
+    private Task AddTextAsync(TextPreset? preset)
+    {
+        var style = preset?.Style ?? TextStyle.Default;
+        var text = new TextItem(ItemId.New(), default, _session.CurrentFrame, NewItemLength(), "テキスト") { Style = style };
+        return PlaceAsync(text, "テキストの追加");
+    }
+
+    /// <summary>再生位置の空いているレイヤーに図形を置く</summary>
+    [RelayCommand]
+    private Task AddShapeAsync(ShapeChoice? choice)
+    {
+        var kind = choice?.Kind ?? ShapeKind.Rectangle;
+        var (width, height) = kind switch
+        {
+            ShapeKind.Background => (Scene.Format.Width, Scene.Format.Height),
+            ShapeKind.Line or ShapeKind.Arrow => (400.0, 40.0),
+            _ => (300.0, 300.0),
+        };
+        var fill = kind == ShapeKind.Background ? new SolidPaint(new RgbaColor(40, 44, 52)) : new SolidPaint(new RgbaColor(74, 210, 255));
+        var shape = new ShapeItem(ItemId.New(), default, _session.CurrentFrame, NewItemLength(), new ShapeStyle(kind, width, height, fill));
+
+        // 背景はいちばん下のレイヤーから空きを探す。ほかは選んでいるアイテムの上のレイヤーから
+        return PlaceAsync(shape, "図形の追加", kind == ShapeKind.Background ? 0 : null);
+    }
+
     /// <summary>シーン全体が見えるようにズームする</summary>
     [RelayCommand]
     private void ZoomToFit()
@@ -536,6 +570,30 @@ public sealed partial class TimelineViewModel : ObservableObject
 
     private bool HasSelection() => !_session.Selection.IsEmpty;
 
+    private long NewItemLength() => (long)Math.Round(Scene.Fps.ToDouble() * NewItemSeconds);
+
+    // アイテムを空いているレイヤーに置いて選ぶ（空きがなければレイヤーを足す）
+    private async Task PlaceAsync(Item item, string description, int? preferredLayer = null)
+    {
+        var project = _session.Project;
+        var sceneId = _session.SceneId;
+        var preferred = preferredLayer ?? (_session.SelectedItems.FirstOrDefault() is { } selected ? Scene.LayerIndex(selected.Layer) : 0);
+        var (layer, addLayer) = MediaItems.FindFreeLayer(project, sceneId, item.Start, item.Length, preferred);
+        var operations = new List<IOperation>();
+        if (addLayer is not null)
+        {
+            operations.Add(addLayer);
+            project = addLayer.Apply(project).Project;
+        }
+
+        var placed = item with { Layer = layer };
+        operations.Add(EditCommands.AddItem(project, sceneId, placed));
+        if (await RunAsync("置けません", (_, _) => Operations.Combine(description, operations)))
+        {
+            _session.Selection = [placed.Id];
+        }
+    }
+
     private bool CanPaste() => _clipboard is not null;
 
     // 分割する対象：選んでいるアイテム（なければ、再生位置にかかっているすべてのアイテム）
@@ -584,6 +642,12 @@ public sealed partial class TimelineViewModel : ObservableObject
             command.NotifyCanExecuteChanged();
         }
     }
+}
+
+/// <summary>図形の種類の選択肢</summary>
+public sealed record ShapeChoice(ShapeKind Kind, string Name)
+{
+    public override string ToString() => Name;
 }
 
 /// <summary>レイヤーの切り替え</summary>

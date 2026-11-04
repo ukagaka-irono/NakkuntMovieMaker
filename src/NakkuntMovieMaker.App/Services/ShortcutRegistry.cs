@@ -67,6 +67,7 @@ public sealed class ShortcutRegistry
         new("timeline.zoomOut", "タイムライン", "縮小", Gesture("Ctrl+OemMinus")),
         new("timeline.snap", "タイムライン", "スナップの切り替え", Gesture("N")),
         new("view.fullScreenPreview", "表示", "全画面プレビュー", Gesture("F11")),
+        new("item.addText", "追加", "テキストを追加", Gesture("Ctrl+T")),
         new("dialogue.focus", "セリフ", "セリフ入力欄へ", Gesture("Ctrl+Enter")),
         new("record.toggle", "録音", "録音の開始・停止", Gesture("Ctrl+R")),
     ];

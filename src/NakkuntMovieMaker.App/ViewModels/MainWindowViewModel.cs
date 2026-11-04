@@ -36,7 +36,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Preview = new PreviewViewModel(session);
         Timeline = new TimelineViewModel(session, dialogs);
         var fonts = PropertiesViewModel.SystemFonts();
-        Properties = new PropertiesViewModel(session, dialogs, fonts);
+        TextPresets = new TextPresets(session.Settings);
+        TextPresets.Changed += (_, _) => RefreshPresets();
+        RefreshPresets();
+        Properties = new PropertiesViewModel(session, dialogs, fonts, TextPresets);
         VoicePlayer = new VoicePlayer(session.DisableAudioDevice, () => session.Settings.OutputDevice);
         Dialogue = new DialogueViewModel(session, dialogs, VoicePlayer);
         Recording = new RecordingViewModel(session, dialogs, Preview, openInput);
@@ -92,6 +95,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         shortcuts.Bind("timeline.snap", Timeline.ToggleSnapCommand);
         shortcuts.Bind("dialogue.focus", Dialogue.FocusCommand);
         shortcuts.Bind("record.toggle", Recording.ToggleRecordCommand);
+        shortcuts.Bind("item.addText", Timeline.AddTextCommand);
     }
 
     public EditorSession Session { get; }
@@ -117,6 +121,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public CharactersViewModel Characters { get; }
 
     public AutosaveService Autosave { get; }
+
+    public TextPresets TextPresets { get; }
+
+    /// <summary>メニューの「追加 → テキスト」に並べるプリセット</summary>
+    public ObservableCollection<TextPreset> TextPresetList { get; } = [];
 
     public string Title => Session.Title;
 
@@ -302,6 +311,82 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         await _dialogs.ShowDialogAsync<object>(new Views.Dialogs.ExportDialog(), new ExportViewModel(Session, _dialogs));
     }
 
+    /// <summary>
+    /// 字幕ファイル（SRT）を読み込み、新しいレイヤーに並べる。セリフ入力欄でキャラクターを選んでいればセリフに（声はあとで作る）、
+    /// なければ字幕のプリセットのテキストにする。字幕の 0 秒は再生位置に置く
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportSubtitlesAsync()
+    {
+        if (await _dialogs.PickOpenFileAsync("字幕の読み込み", [FileKinds.Subtitles, FileKinds.All]) is not { } path)
+        {
+            return;
+        }
+
+        IReadOnlyList<Engine.Subtitles.SubtitleCue> cues;
+        try
+        {
+            cues = Engine.Subtitles.Srt.ReadFile(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException)
+        {
+            await _dialogs.ShowErrorAsync("字幕を読み込めません", ex.Message);
+            return;
+        }
+
+        if (cues.Count == 0)
+        {
+            await _dialogs.ShowErrorAsync("字幕を読み込めません", "字幕が 1 つも見つかりませんでした");
+            return;
+        }
+
+        var project = Session.Project;
+        var sceneId = Session.SceneId;
+        var addLayer = EditCommands.AddLayer(project, sceneId, Session.Scene.Layers.Count, $"字幕（{Path.GetFileNameWithoutExtension(path)}）");
+        project = addLayer.Apply(project).Project;
+        var layer = project.GetScene(sceneId).Layers[^1].Id;
+        var character = Dialogue.Character?.Id;
+        try
+        {
+            var (import, items) = Engine.Subtitles.SubtitleFiles.Import(project, sceneId, layer, cues, Session.CurrentFrame, character, TextPresets.BuiltIn[0].Style);
+            if (Session.Execute(Operations.Combine("字幕の読み込み", [addLayer, import])) is { } error)
+            {
+                await _dialogs.ShowErrorAsync("字幕を読み込めません", error);
+                return;
+            }
+
+            Session.Selection = [.. items];
+            Status = character is null
+                ? $"{items.Count} 個の字幕をテキストとして読み込みました"
+                : $"{items.Count} 個の字幕をセリフとして読み込みました（声は「声を作り直す」で作れます）";
+        }
+        catch (EditException ex)
+        {
+            await _dialogs.ShowErrorAsync("字幕を読み込めません", ex.Message);
+        }
+    }
+
+    /// <summary>セリフとテキストを字幕ファイル（SRT）に書き出す（範囲を指定していれば、その範囲）</summary>
+    [RelayCommand]
+    private async Task ExportSubtitlesAsync()
+    {
+        if (await _dialogs.PickSaveFileAsync("字幕の書き出し", Session.Project.Name + ".srt", [FileKinds.Subtitles]) is not { } path)
+        {
+            return;
+        }
+
+        var cues = Engine.Subtitles.SubtitleFiles.Export(Session.Scene, includeText: true, from: Session.RangeStart, to: Session.RangeEnd);
+        try
+        {
+            Engine.Subtitles.Srt.WriteFile(path, cues);
+            Status = $"{cues.Count} 個の字幕を {path} に書き出しました";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await _dialogs.ShowErrorAsync("字幕を書き出せません", ex.Message);
+        }
+    }
+
     /// <summary>再生位置のフレームを画像に書き出す</summary>
     [RelayCommand]
     private async Task ExportStillAsync()
@@ -386,6 +471,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(UndoHeader));
         OnPropertyChanged(nameof(RedoHeader));
         OnPropertyChanged(nameof(Title));
+    }
+
+    private void RefreshPresets()
+    {
+        TextPresetList.Clear();
+        foreach (var preset in TextPresets.All)
+        {
+            TextPresetList.Add(preset);
+        }
     }
 
     private void RefreshRecent()

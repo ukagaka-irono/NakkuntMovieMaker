@@ -774,6 +774,8 @@ public sealed class TimelineControl : Control
         new Separator(),
         Item("グループ化", vm.GroupCommand, "edit.group"),
         Item("グループ解除", vm.UngroupCommand, "edit.ungroup"),
+        new Separator(),
+        Item("テキストを追加", vm.AddTextCommand, "item.addText"),
     ]);
 
     private void ShowLayerMenu(TimelineViewModel vm, Layer layer, int index) => OpenMenu(

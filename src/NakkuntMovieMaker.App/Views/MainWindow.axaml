@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:NakkuntMovieMaker.App.ViewModels"
         xmlns:views="using:NakkuntMovieMaker.App.Views"
+        xmlns:services="using:NakkuntMovieMaker.App.Services"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1440" d:DesignHeight="900"
@@ -31,6 +32,8 @@
         <Separator />
         <MenuItem Header="書き出し(_E)…" Command="{Binding ExportCommand}" Tag="file.export" />
         <MenuItem Header="静止画の書き出し…" Command="{Binding ExportStillCommand}" />
+        <MenuItem Header="字幕（SRT）の書き出し…" Command="{Binding ExportSubtitlesCommand}" />
+        <MenuItem Header="字幕（SRT）の読み込み…" Command="{Binding ImportSubtitlesCommand}" />
         <Separator />
         <MenuItem Header="プロジェクトの設定(_P)…" Command="{Binding ProjectSettingsCommand}" Tag="file.projectSettings" />
         <Separator />
@@ -52,6 +55,27 @@
         <MenuItem Header="グループ化" Command="{Binding Timeline.GroupCommand}" Tag="edit.group" />
         <MenuItem Header="グループ解除" Command="{Binding Timeline.UngroupCommand}" Tag="edit.ungroup" />
         <MenuItem Header="すべて選択" Command="{Binding Timeline.SelectAllCommand}" Tag="edit.selectAll" />
+      </MenuItem>
+      <MenuItem Header="追加(_I)">
+        <MenuItem Header="テキスト" Command="{Binding Timeline.AddTextCommand}" Tag="item.addText" />
+        <MenuItem Header="プリセットのテキスト" ItemsSource="{Binding TextPresetList}">
+          <MenuItem.ItemContainerTheme>
+            <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" x:DataType="services:TextPreset">
+              <Setter Property="Header" Value="{Binding Name}" />
+              <Setter Property="Command" Value="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Timeline.AddTextCommand}" />
+              <Setter Property="CommandParameter" Value="{Binding}" />
+            </ControlTheme>
+          </MenuItem.ItemContainerTheme>
+        </MenuItem>
+        <MenuItem Header="図形" ItemsSource="{x:Static vm:TimelineViewModel.ShapeChoices}">
+          <MenuItem.ItemContainerTheme>
+            <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" x:DataType="vm:ShapeChoice">
+              <Setter Property="Header" Value="{Binding Name}" />
+              <Setter Property="Command" Value="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Timeline.AddShapeCommand}" />
+              <Setter Property="CommandParameter" Value="{Binding}" />
+            </ControlTheme>
+          </MenuItem.ItemContainerTheme>
+        </MenuItem>
       </MenuItem>
       <MenuItem Header="タイムライン(_L)">
         <MenuItem Header="マーカーを置く" Command="{Binding Timeline.AddMarkerCommand}" Tag="timeline.marker" />

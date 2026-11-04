@@ -38,8 +38,14 @@ public sealed partial class PropertiesViewModel : ObservableObject
     private readonly IReadOnlyList<string> _fonts;
     private string _layoutKey = "";
 
-    public PropertiesViewModel(EditorSession session, IDialogService dialogs, IReadOnlyList<string>? fonts = null)
+    private readonly TextPresets _presets;
+
+    /// <param name="presets">テキストのプリセット（省略すると、設定から作る）</param>
+    public PropertiesViewModel(EditorSession session, IDialogService dialogs, IReadOnlyList<string>? fonts = null, TextPresets? presets = null)
     {
+        _presets = presets ?? new TextPresets(session.Settings);
+        _presets.Changed += (_, _) => RefreshPresets();
+        RefreshPresets();
         _session = session;
         _dialogs = dialogs;
         _fonts = fonts ?? SystemFonts();
@@ -72,6 +78,73 @@ public sealed partial class PropertiesViewModel : ObservableObject
     public partial string Title { get; private set; } = "";
 
     public bool CanHaveEffects => Item is VisualItem;
+
+    /// <summary>テキストのアイテムを編集している（プリセットを使える）</summary>
+    public bool IsText => Item is TextItem;
+
+    public ObservableCollection<TextPreset> Presets { get; } = [];
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ApplyPresetCommand), nameof(RemovePresetCommand))]
+    public partial TextPreset? SelectedPreset { get; set; }
+
+    /// <summary>選んだプリセットのスタイルを、テキストに当てる</summary>
+    [RelayCommand(CanExecute = nameof(HasPreset))]
+    private void ApplyPreset()
+    {
+        if (SelectedPreset is { } preset)
+        {
+            ApplyToItem(item => item is TextItem text ? text with { Style = preset.Style } : item, $"プリセット（{preset.Name}）の適用");
+        }
+    }
+
+    /// <summary>今のテキストのスタイルを、名前を付けてプリセットにする</summary>
+    [RelayCommand]
+    private async Task SavePresetAsync()
+    {
+        if (Item is not TextItem text || await _dialogs.PromptAsync("プリセットの保存", "プリセットの名前", "") is not { } name)
+        {
+            return;
+        }
+
+        try
+        {
+            _presets.Save(name, text.Style);
+            _session.Settings.Save(_session.SettingsPath);
+            SelectedPreset = Presets.FirstOrDefault(preset => preset.Name == name.Trim());
+        }
+        catch (ArgumentException ex)
+        {
+            await _dialogs.ShowErrorAsync("プリセットを保存できません", ex.Message);
+        }
+    }
+
+    /// <summary>保存したプリセットを消す（組み込みのものは消せない）</summary>
+    [RelayCommand(CanExecute = nameof(CanRemovePreset))]
+    private void RemovePreset()
+    {
+        if (SelectedPreset is { BuiltIn: false } preset)
+        {
+            _presets.Remove(preset.Name);
+            _session.Settings.Save(_session.SettingsPath);
+        }
+    }
+
+    private bool HasPreset() => SelectedPreset is not null;
+
+    private bool CanRemovePreset() => SelectedPreset is { BuiltIn: false };
+
+    private void RefreshPresets()
+    {
+        var selected = SelectedPreset?.Name;
+        Presets.Clear();
+        foreach (var preset in _presets.All)
+        {
+            Presets.Add(preset);
+        }
+
+        SelectedPreset = Presets.FirstOrDefault(preset => preset.Name == selected);
+    }
 
     public static IReadOnlyList<EffectDefinition> EffectDefinitions { get; } = [.. EffectRegistry.Default.All.OrderBy(definition => definition.Name, StringComparer.CurrentCulture)];
 
@@ -114,6 +187,7 @@ public sealed partial class PropertiesViewModel : ObservableObject
             Title = "";
             Hint = selection.Count == 0 ? "アイテムを選ぶと、ここでプロパティを変えられます" : $"{selection.Count} 個のアイテムを選んでいます";
             OnPropertyChanged(nameof(CanHaveEffects));
+            OnPropertyChanged(nameof(IsText));
             return;
         }
 
@@ -135,6 +209,7 @@ public sealed partial class PropertiesViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(CanHaveEffects));
+        OnPropertyChanged(nameof(IsText));
     }
 
     // 入力欄の並びが変わる要素（アイテム・種類・エフェクトの並び・トランジションの有無・キャラクター）

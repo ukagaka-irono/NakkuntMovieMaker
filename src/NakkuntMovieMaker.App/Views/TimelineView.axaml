@@ -6,6 +6,21 @@
              x:DataType="vm:TimelineViewModel">
   <DockPanel>
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="{StaticResource Space1}" Margin="0,0,0,4">
+      <Button Classes="toolbar" Content="テキスト" Command="{Binding AddTextCommand}" ToolTip.Tip="再生位置にテキストを置く（Ctrl+T）" />
+      <DropDownButton Classes="toolbar" Content="図形" ToolTip.Tip="再生位置に図形を置く">
+        <DropDownButton.Flyout>
+          <MenuFlyout ItemsSource="{x:Static vm:TimelineViewModel.ShapeChoices}">
+            <MenuFlyout.ItemContainerTheme>
+              <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" x:DataType="vm:ShapeChoice">
+                <Setter Property="Header" Value="{Binding Name}" />
+                <Setter Property="Command" Value="{Binding $parent[UserControl].((vm:TimelineViewModel)DataContext).AddShapeCommand}" />
+                <Setter Property="CommandParameter" Value="{Binding}" />
+              </ControlTheme>
+            </MenuFlyout.ItemContainerTheme>
+          </MenuFlyout>
+        </DropDownButton.Flyout>
+      </DropDownButton>
+      <Border Width="8" />
       <Button Classes="toolbar" Content="分割" Command="{Binding SplitCommand}" ToolTip.Tip="再生位置で分割（S）" />
       <Button Classes="toolbar" Content="削除" Command="{Binding DeleteCommand}" ToolTip.Tip="選んだアイテムを削除（Delete）" />
       <Button Classes="toolbar" Content="詰めて削除" Command="{Binding RippleDeleteCommand}" ToolTip.Tip="削除して後ろを詰める（Shift+Delete）" />

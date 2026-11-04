@@ -6,6 +6,15 @@
              x:DataType="vm:PropertiesViewModel">
   <DockPanel>
     <TextBlock DockPanel.Dock="Top" Classes="panel-header" Text="{Binding Title}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasItem}" />
+    <!-- テキストのプリセット -->
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8" IsVisible="{Binding IsText}">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="{StaticResource Space1}" Margin="4,0,0,0">
+        <Button Classes="toolbar" Content="適用" Command="{Binding ApplyPresetCommand}" ToolTip.Tip="選んだプリセットのスタイルにする" />
+        <Button Classes="toolbar" Content="保存…" Command="{Binding SavePresetCommand}" ToolTip.Tip="今のスタイルを、名前を付けてプリセットにする" />
+        <Button Classes="toolbar" Content="削除" Command="{Binding RemovePresetCommand}" ToolTip.Tip="保存したプリセットを消す" />
+      </StackPanel>
+      <ComboBox ItemsSource="{Binding Presets}" SelectedItem="{Binding SelectedPreset}" HorizontalAlignment="Stretch" PlaceholderText="テキストのプリセット" />
+    </DockPanel>
     <DropDownButton DockPanel.Dock="Bottom" Content="エフェクトを追加" HorizontalAlignment="Stretch" Margin="0,8,0,0" IsVisible="{Binding CanHaveEffects}">
       <DropDownButton.Flyout>
         <MenuFlyout ItemsSource="{x:Static vm:PropertiesViewModel.EffectDefinitions}">
