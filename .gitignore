@@ -17,3 +17,6 @@ native/downloads/
 
 # プロジェクトのキャッシュと自動保存
 .nmm/
+
+# 配布物（dotnet publish の出力）
+artifacts/

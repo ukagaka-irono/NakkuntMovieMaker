@@ -9,7 +9,7 @@
 
   <!-- tools/build-native で作った ColorfulTalk のライブラリを、このプロジェクトを使うアプリの出力先にコピーする -->
   <ItemGroup Condition="Exists('$(NmmNativeDir)')">
-    <None Include="$(NmmNativeDir)*colorful_talk.*;$(NmmNativeDir)licenses/colorful-talk-LICENSE.txt"
+    <None Include="$(NmmNativeDir)*colorful_talk.*"
           Link="%(RecursiveDir)%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest"
           Visible="false" />
