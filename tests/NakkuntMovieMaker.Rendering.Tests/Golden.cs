@@ -9,6 +9,7 @@ namespace NakkuntMovieMaker.Rendering.Tests;
 /// ゴールデン画像（Golden/*.png）との比較。基準は、各チャンネルの差が 2 以下、かつ PSNR が 45dB 以上。
 /// 文字の形の作り方（Windows は DirectWrite、macOS は Core Text、Linux は FreeType）や、CPU の命令（x64 と arm64）で
 /// 結果が少し変わるので、OS ごとの画像（Golden/linux/*.png、Golden/macos/*.png）があれば、そちらと比べる。
+/// OS ごとの画像は、同じ OS でも版によって文字の輪郭が数段階ずれるので、ほぼ同じ（PSNR が 60dB 以上）なら差が 2 を超えても通す。
 /// ゴールデン画像がなければ作って失敗する（中身を目で確かめてからコミットする）。
 /// NMM_UPDATE_GOLDEN=1 で実行すると、すべて作り直す
 /// </summary>
@@ -16,14 +17,17 @@ internal static class Golden
 {
     private const int MaxChannelDifference = 2;
     private const double MinPsnr = 45;
+    private const double PlatformNearlyIdenticalPsnr = 60;
 
     public static void AssertMatches(BgraImage actual, string name, [CallerFilePath] string callerPath = "")
     {
         var folder = Path.Combine(Path.GetDirectoryName(callerPath)!, "Golden");
         var path = Path.Combine(folder, name + ".png");
+        var platformGolden = false;
         if (PlatformFolder is { } platform && File.Exists(Path.Combine(folder, platform, name + ".png")))
         {
             path = Path.Combine(folder, platform, name + ".png");
+            platformGolden = true;
         }
 
         if (Environment.GetEnvironmentVariable("NMM_UPDATE_GOLDEN") == "1")
@@ -51,7 +55,8 @@ internal static class Golden
         }
 
         var psnr = squaredError == 0 ? double.PositiveInfinity : 10 * Math.Log10(255.0 * 255.0 / (squaredError / actual.Pixels.Length));
-        if (maxDifference > MaxChannelDifference || psnr < MinPsnr)
+        var matches = (maxDifference <= MaxChannelDifference && psnr >= MinPsnr) || (platformGolden && psnr >= PlatformNearlyIdenticalPsnr);
+        if (!matches)
         {
             // 違いを確かめられるように、描いた結果を出力先に置く
             var actualPath = Path.Combine(AppContext.BaseDirectory, "golden-actual", PlatformFolder ?? "", name + ".png");
