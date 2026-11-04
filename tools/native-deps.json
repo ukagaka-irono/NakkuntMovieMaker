@@ -26,14 +26,14 @@
           "version": "9.0.2",
           "license": "LGPL-3.0-or-later",
           "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
-          "sha256": ""
+          "sha256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e"
         },
         {
           "name": "openh264",
           "version": "2.6.0",
           "license": "BSD-2-Clause",
           "url": "https://github.com/cisco/openh264/archive/refs/tags/v2.6.0.tar.gz",
-          "sha256": ""
+          "sha256": "558544ad358283a7ab2930d69a9ceddf913f4a51ee9bf1bfb9e377322af81a69"
         },
         {
           "name": "kvazaar",
