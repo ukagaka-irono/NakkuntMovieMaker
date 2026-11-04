@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using Avalonia.Platform.Storage;
 using NakkuntMovieMaker.App.Services;
 using NakkuntMovieMaker.App.ViewModels;
@@ -30,6 +31,8 @@ public sealed class TimelineControl : Control
     private static readonly string[] ToggleTips = ["表示", "ロック", "ミュート", "ソロ"];
 
     private readonly Dictionary<string, IBrush> _brushes = [];
+    private readonly Dictionary<(string Key, double Opacity), IBrush> _fadedBrushes = [];
+    private readonly GlyphLabels _itemLabels = new(Typeface.Default, 11);
     private readonly Dictionary<(string Text, double Size, IBrush Brush), FormattedText> _texts = [];
     private TimelineViewModel? _attached;
     private DragKind _drag;
@@ -55,6 +58,7 @@ public sealed class TimelineControl : Control
         {
             // テーマが変わったら、色を読み直す
             _brushes.Clear();
+            _fadedBrushes.Clear();
             _texts.Clear();
             InvalidateVisual();
         };
@@ -513,20 +517,24 @@ public sealed class TimelineControl : Control
             }
 
             var layer = scene.FindLayer(item.Layer);
-            var color = ItemColor(item);
             // 非表示・ロックのレイヤー、ミュートしたレイヤーの音は薄く描く
             var faded = layer is { Visible: false } or { Locked: true } || (layer is { Muted: true } && item is AudioItem);
-            var dim = faded ? 0.45 : 1;
-            context.FillRectangle(new SolidColorBrush(color, dim), rect, 3);
-            using (context.PushClip(rect))
+            context.FillRectangle(FadedBrush(ItemColorKey(item), faded ? 0.45 : 1), rect, 3);
+            var path = item switch
+            {
+                VideoItem video => vm.AssetPath(video.Asset),
+                ImageItem image => vm.AssetPath(image.Asset),
+                _ => null,
+            };
+            var audio = vm.AudioPath(item);
+            var title = _itemLabels.Get(vm.Label(item));
+
+            // 中身がアイテムからはみ出すときだけ切り抜く（切り抜きは重いので、文字が収まる多くのアイテムでは使わない）
+            var needsClip = path is not null || audio is not null || item.Transition is not null || item.Group is not null
+                            || Math.Max(rect.X + 4, area.Left + 4) + title.Width > rect.Right || title.Height + 3 > rect.Height;
+            using (needsClip ? context.PushClip(rect) : (DrawingContext.PushedState?)null)
             {
                 var textLeft = rect.X + 4;
-                var path = item switch
-                {
-                    VideoItem video => vm.AssetPath(video.Asset),
-                    ImageItem image => vm.AssetPath(image.Asset),
-                    _ => null,
-                };
                 if (path is not null && rect.Width > 48 && vm.GetThumbnail(path) is { } thumbnail)
                 {
                     var height = rect.Height - 2;
@@ -535,13 +543,12 @@ public sealed class TimelineControl : Control
                     textLeft += width + 2;
                 }
 
-                if (vm.AudioPath(item) is { } audio && rect.Width > 4)
+                if (audio is not null && rect.Width > 4)
                 {
                     DrawWaveform(context, vm, item, audio, rect);
                 }
 
-                var title = Text(vm.Label(item), 11, label);
-                context.DrawText(title, new Point(Math.Max(textLeft, area.Left + 4), rect.Y + 3));
+                _itemLabels.Draw(context, label, title, new Point(Math.Max(textLeft, area.Left + 4), rect.Y + 3));
 
                 // トランジション（先頭の三角）とグループ（右上の点）
                 if (item.Transition is not null)
@@ -810,7 +817,7 @@ public sealed class TimelineControl : Control
         menu.Open(this);
     }
 
-    private Color ItemColor(Item item) => ResourceColor(item switch
+    private static string ItemColorKey(Item item) => item switch
     {
         VideoItem => "ItemVideoColor",
         ImageItem => "ItemImageColor",
@@ -820,7 +827,7 @@ public sealed class TimelineControl : Control
         VoiceItem => "ItemVoiceColor",
         TachieItem => "ItemTachieColor",
         _ => "TimelineGridColor",
-    });
+    };
 
     private Color ResourceColor(string key) =>
         this.TryFindResource(key, ActualThemeVariant, out var value) && value is Color color ? color : Colors.Gray;
@@ -832,6 +839,18 @@ public sealed class TimelineControl : Control
         {
             brush = new SolidColorBrush(ResourceColor(key));
             _brushes[key] = brush;
+        }
+
+        return brush;
+    }
+
+    // アイテムの塗りのブラシ（色の名前と不透明度ごと。テーマが変わるまで使い回す）
+    private IBrush FadedBrush(string key, double opacity)
+    {
+        if (!_fadedBrushes.TryGetValue((key, opacity), out var brush))
+        {
+            brush = new ImmutableSolidColorBrush(ResourceColor(key), opacity);
+            _fadedBrushes[(key, opacity)] = brush;
         }
 
         return brush;
