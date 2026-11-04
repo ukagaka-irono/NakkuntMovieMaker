@@ -52,12 +52,13 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 | 映像 | 映像エフェクト 15 種類、トランジション 7 種類、テキスト（縁取り・影・背景・縦書き・一文字ずつの表示・プリセット）、図形 |
 | 音声 | ミキサー（音量・パン・フェード・キーフレーム）、音の高さを保った速度変更、ラウドネスの正規化、ダッキング、レベルメーター、録音 |
 | セリフ | キャラクター、セリフ入力欄、台本の一括貼り付け、ColorfulTalk（旧版。同梱）と SAPI（Windows）、セリフごとの収録、立ち絵（口パク・目パチ）、字幕（SRT） |
-| 書き出し | MP4（H.264・HEVC、ハードウェアエンコード）、プリセット、範囲、WAV、静止画 |
+| 書き出し | MP4（H.264・HEVC、ハードウェアエンコード）、プリセット、範囲、WAV、静止画。x264・x265 を使いたいときは、自分で入手した ffmpeg を設定の「全般」（コマンドラインは `--ffmpeg`）で指定できます |
 
 まだ確かめていないこと：
 
 - 本物のマイクでの録音は確かめていません（仮の入力デバイスでテストしています）。
 - 立ち絵は、YMM4 の「動く立ち絵」と同じフォルダ構成を想定していますが、実際の素材では確かめていません。
+- Linux の VA-API でのハードウェアエンコードは、GPU のある実機では確かめていません（使えないときは OpenH264 で書き出します）。
 
 性能の記録は [docs/performance.md](docs/performance.md) にあります。
 
@@ -528,4 +529,4 @@ AquesTalk には対応しません。
 NakkuntMovieMaker は [MIT ライセンス](LICENSE)です。
 
 同梱しているもの（FFmpeg は LGPL-3.0、miniaudio は Unlicense または MIT-0、ColorfulTalk は MIT、BIZ UDPゴシックは SIL Open Font License 1.1 など）のライセンスは、
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) にまとめています。FFmpeg は GPL の部品と x264 を含まない構成のものだけを同梱します。
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) にまとめています。FFmpeg は GPL の部品と x264 を含まない構成のものだけを同梱します（x264・x265 を使う外部の ffmpeg は、利用者が自分で入手して指定します）。
