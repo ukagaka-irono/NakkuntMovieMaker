@@ -287,11 +287,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Autosave.Start();
     }
 
-    /// <summary>設定（ショートカット・自動保存・出力デバイス）</summary>
+    /// <summary>設定（ショートカット・自動保存・出力デバイス・外部の ffmpeg）</summary>
     [RelayCommand]
     private async Task SettingsAsync()
     {
-        var settings = new SettingsViewModel(Shortcuts, Session.Settings);
+        var settings = new SettingsViewModel(Shortcuts, Session.Settings, _dialogs);
         if (await _dialogs.ShowDialogAsync<bool?>(new Views.Dialogs.SettingsDialog(), settings) == true)
         {
             settings.Apply(_settingsPath);

@@ -23,7 +23,7 @@ public sealed record LoudnessChoice(double? Target, string Name)
 
 /// <summary>
 /// 書き出しダイアログ。プリセット、出力の大きさとコーデックとビットレート、範囲（全体か、タイムラインで指定した範囲）、
-/// エンコーダー（ハードウェアを使うか）、ラウドネス、字幕（SRT）。拡張子が .wav なら音声だけを書き出す。
+/// エンコーダー（ハードウェアを使うか、設定で指定した外部の ffmpeg（x264・x265）を使うか）、ラウドネス、字幕（SRT）。拡張子が .wav なら音声だけを書き出す。
 /// 書き出し中は進み具合を出し、キャンセルできる
 /// </summary>
 public sealed partial class ExportViewModel : ObservableObject
@@ -31,6 +31,7 @@ public sealed partial class ExportViewModel : ObservableObject
     private readonly EditorSession _session;
     private readonly IDialogService _dialogs;
     private CancellationTokenSource? _cancellation;
+    private Task<(ExternalFfmpegInfo? Info, string? Error)>? _externalFfmpeg;
 
     public ExportViewModel(EditorSession session, IDialogService dialogs)
     {
@@ -42,6 +43,7 @@ public sealed partial class ExportViewModel : ObservableObject
         OutputPath = Path.Combine(folder, $"{session.Project.Name}.mp4");
         HasRange = session.RangeStart is not null || session.RangeEnd is not null;
         Range = HasRange ? ExportRange.Selection : ExportRange.Whole;
+        ExternalFfmpegPath = session.Settings.ExternalFfmpegPath;
     }
 
     public static IReadOnlyList<ExportPreset> Presets => ExportPresets.All;
@@ -62,6 +64,7 @@ public sealed partial class ExportViewModel : ObservableObject
     public partial string OutputPath { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EncoderList))]
     public partial bool Hevc { get; set; }
 
     [ObservableProperty]
@@ -80,7 +83,21 @@ public sealed partial class ExportViewModel : ObservableObject
 
     /// <summary>ハードウェアエンコーダーを使わない</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EncoderList))]
     public partial bool SoftwareOnly { get; set; }
+
+    /// <summary>設定で指定した外部の ffmpeg（指定していなければ null）</summary>
+    public string? ExternalFfmpegPath { get; }
+
+    public bool HasExternalFfmpeg => ExternalFfmpegPath is not null;
+
+    /// <summary>設定で指定した外部の ffmpeg（x264・x265）で書き出す</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EncoderList))]
+    public partial bool UseExternalFfmpeg { get; set; }
+
+    /// <summary>外部の ffmpeg を確かめている処理（使わないときは完了済み。テストで待つため）</summary>
+    public Task ExternalFfmpegCheck => _externalFfmpeg ?? Task.CompletedTask;
 
     [ObservableProperty]
     public partial ExportRange Range { get; set; }
@@ -146,9 +163,22 @@ public sealed partial class ExportViewModel : ObservableObject
     {
         get
         {
+            var codec = Hevc ? VideoCodecKind.Hevc : VideoCodecKind.H264;
+            if (UseExternalFfmpeg)
+            {
+                if (_externalFfmpeg is not { IsCompleted: true } probe)
+                {
+                    return "外部の ffmpeg を確かめています…";
+                }
+
+                var (info, error) = probe.Result;
+                return info is null ? error!
+                    : info.Supports(codec) ? $"{ExternalFfmpegInfo.EncoderFor(codec)}（ffmpeg {info.Version}）"
+                    : $"外部の ffmpeg には {ExternalFfmpegInfo.EncoderFor(codec)} が入っていません";
+            }
+
             try
             {
-                var codec = Hevc ? VideoCodecKind.Hevc : VideoCodecKind.H264;
                 var encoders = MediaWriter.AvailableEncoders(codec, SoftwareOnly ? EncoderPreference.Software : EncoderPreference.Auto);
                 return encoders.Count == 0 ? "使えるエンコーダーがありません" : string.Join("、", encoders);
             }
@@ -157,6 +187,38 @@ public sealed partial class ExportViewModel : ObservableObject
                 return $"FFmpeg を読み込めません（{ex.Message}）";
             }
         }
+    }
+
+    partial void OnUseExternalFfmpegChanged(bool value)
+    {
+        if (value && _externalFfmpeg is null)
+        {
+            _externalFfmpeg = ProbeExternalFfmpegAsync();
+        }
+    }
+
+    // 外部の ffmpeg の版とエンコーダー（ffmpeg を実行して調べるので、別のスレッドで一度だけ調べて覚えておく）
+    private async Task<(ExternalFfmpegInfo? Info, string? Error)> ProbeExternalFfmpegAsync()
+    {
+        (ExternalFfmpegInfo? Info, string? Error) result;
+        if (ExternalFfmpegPath is not { } path)
+        {
+            result = (null, "外部の ffmpeg を指定していません");
+        }
+        else
+        {
+            try
+            {
+                result = (await Task.Run(() => ExternalFfmpeg.Probe(path)), null);
+            }
+            catch (MediaException ex)
+            {
+                result = (null, ex.Message);
+            }
+        }
+
+        OnPropertyChanged(nameof(EncoderList));
+        return result;
     }
 
     public string? SizeError => Width % 2 != 0 || Height % 2 != 0 ? "幅と高さは偶数にしてください" : null;
@@ -178,6 +240,20 @@ public sealed partial class ExportViewModel : ObservableObject
         {
             await _dialogs.ShowErrorAsync("書き出せません", error);
             return;
+        }
+
+        ExternalFfmpegInfo? externalFfmpeg = null;
+        if (UseExternalFfmpeg && !IsAudioOnly)
+        {
+            _externalFfmpeg ??= ProbeExternalFfmpegAsync();
+            var (info, probeError) = await _externalFfmpeg;
+            if (info is null)
+            {
+                await _dialogs.ShowErrorAsync("書き出せません", probeError!);
+                return;
+            }
+
+            externalFfmpeg = info;
         }
 
         if (File.Exists(OutputPath) && !await _dialogs.ConfirmAsync("書き出し", $"{Path.GetFileName(OutputPath)} はすでにあります。上書きしますか？", "上書き"))
@@ -219,7 +295,8 @@ public sealed partial class ExportViewModel : ObservableObject
                     from,
                     to,
                     SoftwareOnly ? EncoderPreference.Software : EncoderPreference.Auto,
-                    Loudness.Target);
+                    Loudness.Target,
+                    ExternalFfmpeg: externalFfmpeg);
                 var progress = new Progress<ExportProgress>(report =>
                 {
                     Progress = report.Fraction;

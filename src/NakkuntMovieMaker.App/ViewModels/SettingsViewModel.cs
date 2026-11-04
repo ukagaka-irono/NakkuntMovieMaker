@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using NakkuntMovieMaker.App.Services;
 using NakkuntMovieMaker.Audio;
+using NakkuntMovieMaker.Media;
 
 namespace NakkuntMovieMaker.App.ViewModels;
 
@@ -27,17 +28,19 @@ public sealed partial class ShortcutEntry(ShortcutCommand command) : ObservableO
 
 /// <summary>
 /// 設定。キーボードショートカットの変更（行を選んで「キーを割り当てる」を押し、割り当てるキーを押す。ほかのコマンドが使っていたキーは、そちらから外す）と、
-/// 自動保存の間隔、音の出力デバイス。OK で設定ファイルに書く
+/// 自動保存の間隔、音の出力デバイス、書き出しに使う外部の ffmpeg（x264・x265）。OK で設定ファイルに書く
 /// </summary>
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ShortcutRegistry _shortcuts;
     private readonly AppSettings _settings;
+    private readonly IDialogService _dialogs;
 
-    public SettingsViewModel(ShortcutRegistry shortcuts, AppSettings settings)
+    public SettingsViewModel(ShortcutRegistry shortcuts, AppSettings settings, IDialogService dialogs)
     {
         _shortcuts = shortcuts;
         _settings = settings;
+        _dialogs = dialogs;
         foreach (var command in shortcuts.Commands.OrderBy(command => ShortcutRegistry.Defaults.ToList().IndexOf(command)))
         {
             Shortcuts.Add(new ShortcutEntry(command) { Gesture = shortcuts.GestureOf(command.Id) });
@@ -57,6 +60,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         OutputDevice = OutputDevices.FirstOrDefault(choice => choice.Name == settings.OutputDevice) ?? OutputDevices[0];
+        FfmpegPath = settings.ExternalFfmpegPath;
+        FfmpegCheck = CheckFfmpegAsync();
     }
 
     public ObservableCollection<ShortcutEntry> Shortcuts { get; } = [];
@@ -79,6 +84,69 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial InputDeviceChoice? OutputDevice { get; set; }
+
+    /// <summary>書き出しに使う外部の ffmpeg（使わなければ null）</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ClearFfmpegCommand))]
+    public partial string? FfmpegPath { get; private set; }
+
+    /// <summary>外部の ffmpeg を確かめた結果（版と、使えるエンコーダー）</summary>
+    [ObservableProperty]
+    public partial string FfmpegStatus { get; private set; } = "";
+
+    /// <summary>最後に始めた外部の ffmpeg の確認（テストで待つため）</summary>
+    public Task FfmpegCheck { get; private set; }
+
+    [RelayCommand]
+    private async Task BrowseFfmpegAsync()
+    {
+        if (await _dialogs.PickOpenFileAsync("外部の ffmpeg の実行ファイル", [FileKinds.All]) is { } path)
+        {
+            FfmpegPath = path;
+            FfmpegCheck = CheckFfmpegAsync();
+            await FfmpegCheck;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(HasFfmpeg))]
+    private void ClearFfmpeg()
+    {
+        FfmpegPath = null;
+        FfmpegCheck = CheckFfmpegAsync();
+    }
+
+    private bool HasFfmpeg() => FfmpegPath is not null;
+
+    // 版と、x264・x265 が入っているかを調べて表示する（実行に少し時間がかかるので、別のスレッドで）
+    private async Task CheckFfmpegAsync()
+    {
+        if (FfmpegPath is not { } path)
+        {
+            FfmpegStatus = "x264・x265 で書き出したいときに、外部の ffmpeg（自分で入手したもの。ソフトには同梱していません）を指定します";
+            return;
+        }
+
+        FfmpegStatus = "確かめています…";
+        try
+        {
+            var info = await Task.Run(() => ExternalFfmpeg.Probe(path));
+            if (FfmpegPath != path)
+            {
+                return;
+            }
+
+            FfmpegStatus = info.Encoders.Count == 0
+                ? $"ffmpeg {info.Version}：x264・x265 が入っていないため、書き出しには使えません"
+                : $"ffmpeg {info.Version}：{string.Join("・", info.Encoders.Select(name => name.Replace("lib", "", StringComparison.Ordinal)))} を使えます";
+        }
+        catch (MediaException ex)
+        {
+            if (FfmpegPath == path)
+            {
+                FfmpegStatus = ex.Message;
+            }
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private void Capture()
@@ -143,6 +211,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _settings.Shortcuts = _shortcuts.Overrides();
         _settings.AutosaveMinutes = (int)AutosaveMinutes;
         _settings.OutputDevice = OutputDevice?.Name;
+        _settings.ExternalFfmpegPath = FfmpegPath;
         _settings.Save(settingsPath);
     }
 

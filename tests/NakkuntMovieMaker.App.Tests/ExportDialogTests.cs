@@ -54,6 +54,53 @@ public sealed class ExportDialogTests : IDisposable
         Assert.Contains("00:00:00,500 --> 00:00:01,000", await File.ReadAllTextAsync(Path.Combine(_environment.Folder, "out", "動画.srt"), TestContext.Current.CancellationToken));
     });
 
+    // PATH にある ffmpeg（なければ null）
+    internal static string? FindFfmpegOnPath() =>
+        (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(folder => Path.Combine(folder, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg"))
+            .FirstOrDefault(File.Exists);
+
+    [Fact]
+    public Task ExportsWithTheExternalFfmpeg() => Ui.Run(async () =>
+    {
+        Fixtures.RequireFfmpeg();
+        var ffmpeg = FindFfmpegOnPath();
+        Assert.SkipWhen(ffmpeg is null || !ExternalFfmpeg.Probe(ffmpeg).Supports(VideoCodecKind.H264), "PATH に x264 を含む ffmpeg がないためスキップします");
+        using var session = CreateSession();
+
+        // 設定で指定していなければ選べない
+        Assert.False(new ExportViewModel(session, _dialogs).HasExternalFfmpeg);
+
+        session.Settings.ExternalFfmpegPath = ffmpeg;
+        var export = new ExportViewModel(session, _dialogs) { OutputPath = Path.Combine(_environment.Folder, "x264.mp4") };
+        Assert.True(export.HasExternalFfmpeg);
+        export.UseExternalFfmpeg = true;
+        await export.ExternalFfmpegCheck;
+        Assert.StartsWith("libx264（ffmpeg ", export.EncoderList);
+
+        await export.StartCommand.ExecuteAsync(null);
+
+        Assert.Empty(_dialogs.Errors);
+        Assert.Contains("libx264", export.Status);
+        var video = MediaProbe.Probe(export.OutputPath).Video!;
+        Assert.Equal(("h264", 60L), (video.Codec, video.FrameCount));
+    });
+
+    [Fact]
+    public Task ReportsAMissingExternalFfmpeg() => Ui.Run(async () =>
+    {
+        using var session = CreateSession();
+        session.Settings.ExternalFfmpegPath = Path.Combine(_environment.Folder, "ない", "ffmpeg.exe");
+        var export = new ExportViewModel(session, _dialogs) { OutputPath = Path.Combine(_environment.Folder, "x264.mp4"), UseExternalFfmpeg = true };
+
+        await export.ExternalFfmpegCheck;
+        Assert.Contains("実行できません", export.EncoderList);
+        await export.StartCommand.ExecuteAsync(null);
+
+        Assert.Contains("実行できません", Assert.Single(_dialogs.Errors));
+        Assert.False(File.Exists(export.OutputPath));
+    });
+
     [Fact]
     public Task ExportsTheSelectedRangeWithAPreset() => Ui.Run(async () =>
     {

@@ -32,7 +32,8 @@ public static class ExportPresets
 /// <summary>
 /// 動画の書き出しの設定。Width・Height は出力の大きさ（null ならシーンの大きさ。縦横比が違えば、黒い帯を付けて中央に置く）、
 /// From・To は書き出す範囲（フレーム、[From, To)。null ならシーン全体）、LoudnessTarget を指定すると、音全体のラウドネスを
-/// その値（LUFS）にそろえる（山は −1dBFS まで）。Workers は並列に描くスレッドの数（0 なら自動）
+/// その値（LUFS）にそろえる（山は −1dBFS まで）。Workers は並列に描くスレッドの数（0 なら自動）。
+/// ExternalFfmpeg を指定すると、同梱の FFmpeg ではなく、外部の ffmpeg（利用者が自分で入手したもの。x264・x265）で圧縮する（Encoder は使わない）
 /// </summary>
 public sealed record ExportOptions(
     string Path,
@@ -45,7 +46,8 @@ public sealed record ExportOptions(
     long? To = null,
     EncoderPreference Encoder = EncoderPreference.Auto,
     double? LoudnessTarget = null,
-    int Workers = 0)
+    int Workers = 0,
+    ExternalFfmpegInfo? ExternalFfmpeg = null)
 {
     public static ExportOptions FromPreset(string path, ExportPreset preset) =>
         new(path, preset.Codec, preset.Width, preset.Height, preset.VideoBitrateKbps, preset.AudioBitrateKbps);
@@ -114,10 +116,11 @@ public sealed class ExportPipeline : IDisposable
         var firstSample = TimeMath.FrameToSample(start, format.Fps, format.SampleRate);
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(options.Path))!);
-        var writer = MediaWriter.Create(
-            options.Path,
-            new VideoEncoderSettings(options.Codec, size.Width, size.Height, format.Fps, options.VideoBitrateKbps, options.Encoder),
-            new AudioEncoderSettings(format.SampleRate, options.AudioBitrateKbps));
+        var videoSettings = new VideoEncoderSettings(options.Codec, size.Width, size.Height, format.Fps, options.VideoBitrateKbps, options.Encoder);
+        var audioSettings = new AudioEncoderSettings(format.SampleRate, options.AudioBitrateKbps);
+        IMediaFileWriter writer = options.ExternalFfmpeg is { } ffmpeg
+            ? ExternalFfmpegWriter.Create(ffmpeg, options.Path, videoSettings, audioSettings)
+            : MediaWriter.Create(options.Path, videoSettings, audioSettings);
         var completed = false;
         try
         {

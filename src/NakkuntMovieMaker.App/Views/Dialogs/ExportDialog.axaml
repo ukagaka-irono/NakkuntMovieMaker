@@ -55,7 +55,9 @@
 
       <TextBlock Grid.Row="6" Classes="field-label" Text="エンコーダー" IsVisible="{Binding !IsAudioOnly}" />
       <StackPanel Grid.Row="6" Grid.Column="1" Spacing="2" IsVisible="{Binding !IsAudioOnly}">
-        <CheckBox Content="ハードウェアエンコーダーを使わない" IsChecked="{Binding SoftwareOnly}" />
+        <CheckBox Content="ハードウェアエンコーダーを使わない" IsChecked="{Binding SoftwareOnly}" IsEnabled="{Binding !UseExternalFfmpeg}" />
+        <CheckBox Content="外部の ffmpeg（x264・x265）で書き出す" IsChecked="{Binding UseExternalFfmpeg}" IsEnabled="{Binding HasExternalFfmpeg}"
+                  ToolTip.Tip="設定の「全般」で外部の ffmpeg を指定すると使えます" ToolTip.ShowOnDisabled="True" />
         <TextBlock Classes="secondary" Text="{Binding EncoderList}" TextWrapping="Wrap" />
       </StackPanel>
 

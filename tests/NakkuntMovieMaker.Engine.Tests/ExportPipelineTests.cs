@@ -133,6 +133,75 @@ public sealed class ExportPipelineTests : IDisposable
         AssertBlue(ColorAt(path, 45));
     }
 
+    // PATH にある ffmpeg（x264・x265 を含むもの）。なければスキップする
+    private static ExternalFfmpegInfo RequireExternalFfmpeg(VideoCodecKind codec)
+    {
+        ExternalFfmpegInfo? info = null;
+        try
+        {
+            info = ExternalFfmpeg.Probe("ffmpeg");
+        }
+        catch (MediaException)
+        {
+        }
+
+        Assert.SkipWhen(info is null || !info.Supports(codec), $"PATH に {ExternalFfmpegInfo.EncoderFor(codec)} を含む ffmpeg がないためスキップします");
+        return info!;
+    }
+
+    [Theory]
+    [InlineData(VideoCodecKind.H264, "h264", "libx264")]
+    [InlineData(VideoCodecKind.Hevc, "hevc", "libx265")]
+    public async Task ExportsWithAnExternalFfmpeg(VideoCodecKind codec, string codecName, string encoder)
+    {
+        RequireFfmpeg();
+        var ffmpeg = RequireExternalFfmpeg(codec);
+        using var pipeline = CreatePipeline();
+        var path = Output($"external-{codecName}.mp4");
+
+        var result = await pipeline.ExportVideoAsync(new ExportOptions(path, codec, ExternalFfmpeg: ffmpeg), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal((encoder, 60L), (result.VideoEncoder, result.Frames));
+        AssertStreams(path, codecName, 160, 90, 60);
+        AssertRed(ColorAt(path, 15));
+        AssertBlue(ColorAt(path, 45));
+
+        // 一時ファイルは残さない
+        Assert.Equal([path], Directory.GetFiles(Path.GetDirectoryName(path)!));
+
+        // 前半だけ鳴っている
+        using var audio = new MediaCache(Path.Combine(_folder, "cache")).OpenAudio(path, TestContext.Current.CancellationToken);
+        var samples = new float[audio.FrameCount * audio.Channels];
+        audio.Read(0, samples);
+        Assert.True(Rms(samples.AsSpan(0, 24000 * 2)) > 0.03, "前半が無音");
+        Assert.True(Rms(samples.AsSpan(60000 * 2)) < 0.001, "後半に音がある");
+    }
+
+    [Fact]
+    public async Task ReportsAnExternalFfmpegWithoutTheEncoder()
+    {
+        RequireFfmpeg();
+        var ffmpeg = RequireExternalFfmpeg(VideoCodecKind.H264) with { Encoders = [] };
+        using var pipeline = CreatePipeline();
+        var path = Output("no-x264.mp4");
+
+        var error = await Assert.ThrowsAsync<MediaException>(() => pipeline.ExportVideoAsync(
+            new ExportOptions(path, ExternalFfmpeg: ffmpeg), cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Contains("libx264", error.Message);
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public void RejectsAProgramThatIsNotFfmpeg()
+    {
+        var notFfmpeg = Path.Combine(_folder, "missing", "ffmpeg.exe");
+
+        var error = Assert.Throws<MediaException>(() => ExternalFfmpeg.Probe(notFfmpeg));
+
+        Assert.Contains("実行できません", error.Message);
+    }
+
     [Fact]
     public async Task ExportsOnlyTheRange()
     {

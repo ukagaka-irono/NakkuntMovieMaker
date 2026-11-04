@@ -33,6 +33,10 @@ internal static class ExportCommands
         var fromOption = new Option<string?>("--from") { Description = "書き出す範囲の始まり（フレーム番号、または 1.5s・00:01:02.5 のような時刻）" };
         var toOption = new Option<string?>("--to") { Description = "書き出す範囲の終わり（このフレームは含めない）" };
         var softwareOption = new Option<bool>("--software") { Description = "ハードウェアエンコーダーを使わない" };
+        var ffmpegOption = new Option<FileInfo?>("--ffmpeg")
+        {
+            Description = "外部の ffmpeg（自分で入手したもの）の実行ファイル。指定すると、それで書き出す（H.264 は x264、HEVC は x265）",
+        };
         var loudnessOption = new Option<double?>("--loudness") { Description = "音全体のラウドネスをそろえる値（LUFS。YouTube なら -14）" };
         var subtitlesOption = new Option<FileInfo?>("--subtitles") { Description = "セリフの字幕を SRT にも書き出す" };
         var sceneOption = SceneOption();
@@ -43,7 +47,7 @@ internal static class ExportCommands
         foreach (var option in new Option[]
                  {
                      outputOption, presetOption, codecOption, widthOption, heightOption, bitrateOption, audioBitrateOption, fromOption, toOption,
-                     softwareOption, loudnessOption, subtitlesOption, sceneOption, workersOption,
+                     softwareOption, ffmpegOption, loudnessOption, subtitlesOption, sceneOption, workersOption,
                  })
         {
             command.Options.Add(option);
@@ -98,8 +102,10 @@ internal static class ExportCommands
                 }
                 else
                 {
+                    var ffmpeg = parseResult.GetValue(ffmpegOption) is { } ffmpegFile ? ExternalFfmpeg.Probe(ffmpegFile.FullName) : null;
                     var options = ExportOptions.FromPreset(output, preset) with
                     {
+                        ExternalFfmpeg = ffmpeg,
                         Codec = codec,
                         From = from,
                         To = to,

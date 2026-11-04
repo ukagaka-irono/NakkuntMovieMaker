@@ -38,7 +38,7 @@
         </DockPanel>
       </TabItem>
       <TabItem Header="全般">
-        <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="12" Margin="0,12,0,0">
+        <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="12" Margin="0,12,0,0">
           <TextBlock Classes="field-label" Text="自動保存の間隔（分）" />
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource Space2}">
             <NumericUpDown Value="{Binding AutosaveMinutes}" Minimum="0" Maximum="60" Increment="1" FormatString="0" Width="120" />
@@ -47,6 +47,13 @@
           <TextBlock Grid.Row="1" Classes="field-label" Text="音の出力デバイス" />
           <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding OutputDevices}" SelectedItem="{Binding OutputDevice}" HorizontalAlignment="Stretch" />
           <TextBlock Grid.Row="2" Grid.Column="1" Classes="secondary" Text="出力デバイスは、次にプロジェクトを開いたときから使います" TextWrapping="Wrap" />
+          <TextBlock Grid.Row="3" Classes="field-label" Text="外部の ffmpeg" />
+          <DockPanel Grid.Row="3" Grid.Column="1">
+            <Button DockPanel.Dock="Right" Content="指定を外す" Command="{Binding ClearFfmpegCommand}" Margin="4,0,0,0" />
+            <Button DockPanel.Dock="Right" Content="参照…" Command="{Binding BrowseFfmpegCommand}" Margin="4,0,0,0" />
+            <TextBox Text="{Binding FfmpegPath}" IsReadOnly="True" />
+          </DockPanel>
+          <TextBlock Grid.Row="4" Grid.Column="1" Classes="secondary" Text="{Binding FfmpegStatus}" TextWrapping="Wrap" />
         </Grid>
       </TabItem>
     </TabControl>

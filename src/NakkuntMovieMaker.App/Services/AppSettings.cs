@@ -38,6 +38,9 @@ public sealed class AppSettings
 
     public bool Snap { get; set; } = true;
 
+    /// <summary>書き出しに使う外部の ffmpeg の実行ファイル（x264・x265 で書き出すとき。利用者が自分で入手したもの）。使わなければ null</summary>
+    public string? ExternalFfmpegPath { get; set; }
+
     /// <summary>利用者が保存したテキストのプリセット</summary>
     public List<SavedTextPreset> TextPresets { get; set; } = [];
 

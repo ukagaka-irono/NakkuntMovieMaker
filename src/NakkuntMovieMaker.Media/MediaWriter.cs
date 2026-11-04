@@ -39,7 +39,7 @@ public sealed record AudioEncoderSettings(int SampleRate = 48000, int BitrateKbp
 /// （Windows：QSV → NVENC → AMF → Media Foundation、macOS：VideoToolbox、最後はソフトウェア）。
 /// 色は BT.709・リミテッドレンジとしてタグを付け、MP4 は faststart（先頭に索引を置く）で書く
 /// </summary>
-public sealed unsafe class MediaWriter : IDisposable
+public sealed unsafe class MediaWriter : IMediaFileWriter
 {
     private readonly string _path;
     private AVFormatContext* _format;

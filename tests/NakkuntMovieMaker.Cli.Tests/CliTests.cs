@@ -72,6 +72,36 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
+    public void ExportsWithAnExternalFfmpeg()
+    {
+        RequireFfmpeg();
+        var ffmpeg = FindOnPath(OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
+        Assert.SkipWhen(ffmpeg is null || !ExternalFfmpeg.Probe(ffmpeg).Supports(VideoCodecKind.H264), "PATH に x264 を含む ffmpeg がないためスキップします");
+
+        var exitCode = Program.Main(["export", _entry, "-o", Output("x264.mp4"), "--ffmpeg", ffmpeg!, "--to", "10"]);
+
+        Assert.Equal(0, exitCode);
+        var info = MediaProbe.Probe(Output("x264.mp4"));
+        Assert.Equal(("h264", 10L, "aac"), (info.Video!.Codec, info.Video.FrameCount, info.Audio!.Codec));
+    }
+
+    [Fact]
+    public void ReportsAMissingExternalFfmpeg()
+    {
+        RequireFfmpeg();
+
+        var exitCode = Program.Main(["export", _entry, "-o", Output("x264.mp4"), "--ffmpeg", Path.Combine(_folder, "ない", "ffmpeg.exe")]);
+
+        Assert.Equal(1, exitCode);
+        Assert.False(File.Exists(Output("x264.mp4")));
+    }
+
+    private static string? FindOnPath(string name) =>
+        (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(folder => Path.Combine(folder, name))
+            .FirstOrDefault(File.Exists);
+
+    [Fact]
     public void ExportsWav()
     {
         RequireFfmpeg();

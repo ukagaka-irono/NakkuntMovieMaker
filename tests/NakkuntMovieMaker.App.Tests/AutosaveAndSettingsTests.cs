@@ -105,11 +105,48 @@ public sealed class AutosaveAndSettingsTests : IDisposable
     });
 
     [Fact]
+    public async Task ChoosesAnExternalFfmpeg()
+    {
+        var settings = new AppSettings();
+        var viewModel = new SettingsViewModel(new ShortcutRegistry(), settings, _dialogs);
+        await viewModel.FfmpegCheck;
+        Assert.Null(viewModel.FfmpegPath);
+        Assert.Contains("同梱していません", viewModel.FfmpegStatus);
+        Assert.False(viewModel.ClearFfmpegCommand.CanExecute(null));
+
+        // 実行できないファイル
+        var missing = Path.Combine(Path.GetTempPath(), "nmm-tests", Guid.NewGuid().ToString("N"), "ffmpeg.exe");
+        _dialogs.FilesToOpen.Enqueue(missing);
+        await viewModel.BrowseFfmpegCommand.ExecuteAsync(null);
+        Assert.Equal(missing, viewModel.FfmpegPath);
+        Assert.Contains("実行できません", viewModel.FfmpegStatus);
+
+        // 外すと、使わない
+        viewModel.ClearFfmpegCommand.Execute(null);
+        await viewModel.FfmpegCheck;
+        Assert.Null(viewModel.FfmpegPath);
+        Assert.Contains("同梱していません", viewModel.FfmpegStatus);
+
+        if (ExportDialogTests.FindFfmpegOnPath() is { } ffmpeg)
+        {
+            _dialogs.FilesToOpen.Enqueue(ffmpeg);
+            await viewModel.BrowseFfmpegCommand.ExecuteAsync(null);
+            Assert.StartsWith("ffmpeg ", viewModel.FfmpegStatus);
+            Assert.Contains("x264・x265 を使えます", viewModel.FfmpegStatus);
+
+            var path = Path.Combine(Path.GetTempPath(), "nmm-tests", Guid.NewGuid().ToString("N"), "settings.json");
+            viewModel.Apply(path);
+            Assert.Equal(ffmpeg, AppSettings.Load(path).ExternalFfmpegPath);
+            Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
+        }
+    }
+
+    [Fact]
     public void EditsShortcuts()
     {
         var registry = new ShortcutRegistry();
         var settings = new AppSettings();
-        var viewModel = new SettingsViewModel(registry, settings);
+        var viewModel = new SettingsViewModel(registry, settings, _dialogs);
         var split = viewModel.Shortcuts.Single(entry => entry.Command.Id == "edit.split");
         var save = viewModel.Shortcuts.Single(entry => entry.Command.Id == "file.save");
 
