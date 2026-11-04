@@ -11,7 +11,8 @@ namespace NakkuntMovieMaker.App.Tests;
 
 /// <summary>
 /// アイテムが 3,000 個あるタイムラインを、横にスクロールしながら描く時間（目標は 60fps = 16.7ms 以内）。
-/// テストを動かす PC で速さが違うので、ここでは 50ms を超えないことだけを確かめ、測った値を出力する
+/// テストを動かす PC で速さが違うので、ここでは 50ms を超えないことだけを確かめ、測った値を出力する。
+/// CI（GitHub Actions など）の共有のマシンは遅く、ほかの処理と取り合うので、極端に遅くないこと（200ms）だけを確かめる
 /// </summary>
 public sealed class TimelinePerformanceTests : IDisposable
 {
@@ -56,6 +57,7 @@ public sealed class TimelinePerformanceTests : IDisposable
 
         var perFrame = watch.Elapsed.TotalMilliseconds / Steps;
         TestContext.Current.TestOutputHelper?.WriteLine($"アイテム 3,000 個のタイムラインの 1 回の描画：{perFrame:0.0} ms");
-        Assert.True(perFrame < 50, $"1 回の描画に {perFrame:0.0} ms かかりました");
+        var limit = Environment.GetEnvironmentVariable("CI") is "true" or "1" ? 200 : 50;
+        Assert.True(perFrame < limit, $"1 回の描画に {perFrame:0.0} ms かかりました（上限 {limit} ms）");
     });
 }

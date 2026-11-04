@@ -46,6 +46,10 @@ public sealed class SapiEngineTests : IDisposable
 
     private static float Peak(VoiceAudio audio) => audio.Samples.Max(Math.Abs);
 
+    // 既定の声が日本語とは限らない（GitHub Actions の Windows には英語の声しかなく、日本語の文は読まずに無音になる）。
+    // 英語の文なら、英語の声でも日本語の声でも読める
+    private const string Sentence = "Hello. This is a test of the speech engine.";
+
     [Fact]
     public void ReportsAvailabilityAndVoices()
     {
@@ -68,7 +72,7 @@ public sealed class SapiEngineTests : IDisposable
     {
         RequireSapi();
 
-        var audio = Speak("こんにちは。テストです。", VoiceParams.Default);
+        var audio = Speak(Sentence, VoiceParams.Default);
 
         Assert.Equal(48000, audio.SampleRate);
         Assert.True(audio.Duration > TimeSpan.FromSeconds(0.3), $"短すぎる: {audio.Duration}");
@@ -79,7 +83,7 @@ public sealed class SapiEngineTests : IDisposable
     public void FollowsSpeedAndVolume()
     {
         RequireSapi();
-        const string text = "速さと音量を変えて読みます。";
+        const string text = Sentence;
 
         var normal = Speak(text, VoiceParams.Default);
         var fast = Speak(text, VoiceParams.Default with { Speed = 2 });

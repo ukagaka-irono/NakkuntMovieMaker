@@ -569,12 +569,58 @@ public sealed unsafe class VideoDecoder : IDisposable
                 continue;
             }
 
+            string? deviceName = null;
+            if (name == "vaapi")
+            {
+                // 同梱の Linux 版 FFmpeg は libva を初めて使うときに読み込み、見つからないとプロセスごと止まる（abort）。
+                // そのため、libva を読めて、DRM のデバイスを開けるときだけ、そのデバイスを指定して使う（X11 は使わない）
+                deviceName = VaapiRenderNode.Value;
+                if (deviceName is null)
+                {
+                    continue;
+                }
+            }
+
             AVBufferRef* device = null;
-            if (ffmpeg.av_hwdevice_ctx_create(&device, type, null, null, 0) >= 0)
+            if (ffmpeg.av_hwdevice_ctx_create(&device, type, deviceName, null, 0) >= 0)
             {
                 _hardwareDevice = device;
                 return name;
             }
+        }
+
+        return null;
+    }
+
+    private static readonly Lazy<string?> VaapiRenderNode = new(FindVaapiRenderNode);
+
+    // VA-API で使える DRM のレンダーノード（/dev/dri/renderD128 など）。libva がないか、開けるノードがなければ null
+    private static string? FindVaapiRenderNode()
+    {
+        if (!NativeLibrary.TryLoad("libva.so.2", out _) || !NativeLibrary.TryLoad("libva-drm.so.2", out _))
+        {
+            return null;
+        }
+
+        try
+        {
+            var nodes = Directory.Exists("/dev/dri") ? Directory.GetFiles("/dev/dri", "renderD*") : [];
+            Array.Sort(nodes, StringComparer.Ordinal);
+            foreach (var node in nodes)
+            {
+                try
+                {
+                    using var handle = File.OpenHandle(node, FileMode.Open, FileAccess.ReadWrite);
+                    return node;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // 権限がないノードは飛ばす
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
         }
 
         return null;
