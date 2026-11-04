@@ -36,7 +36,7 @@ public sealed record AudioEncoderSettings(int SampleRate = 48000, int BitrateKbp
 /// <summary>
 /// MP4（映像と音声）を書く。映像は BGRA の画像を 1 枚ずつ、音声はステレオの float32 を順に渡す。
 /// 映像のエンコーダーは、OS ごとの候補を順に開いてみて、最初に開けたものを使う
-/// （Windows：QSV → NVENC → AMF → Media Foundation、macOS：VideoToolbox、最後はソフトウェア）。
+/// （Windows：QSV → NVENC → AMF → Media Foundation、macOS：VideoToolbox、Linux：VA-API → NVENC、最後はソフトウェア）。
 /// 色は BT.709・リミテッドレンジとしてタグを付け、MP4 は faststart（先頭に索引を置く）で書く
 /// </summary>
 public sealed unsafe class MediaWriter : IMediaFileWriter
@@ -48,6 +48,7 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
     private AVStream* _videoStream;
     private AVStream* _audioStream;
     private AVFrame* _videoFrame;
+    private AVFrame* _hardwareFrame;
     private AVFrame* _audioFrame;
     private AVPacket* _packet;
     private SwsContext* _scaler;
@@ -140,7 +141,24 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
         }
 
         _videoFrame->pts = _videoPts++;
-        Encode(_video, _videoStream, _videoFrame);
+        if (_video->hw_frames_ctx is null)
+        {
+            Encode(_video, _videoStream, _videoFrame);
+            return;
+        }
+
+        // ハードウェアエンコーダー（VA-API）：GPU のフレームに写してから送る
+        ffmpeg.av_hwframe_get_buffer(_video->hw_frames_ctx, _hardwareFrame, 0).ThrowIfError("映像のフレームの準備");
+        try
+        {
+            ffmpeg.av_hwframe_transfer_data(_hardwareFrame, _videoFrame, 0).ThrowIfError("映像の転送");
+            ffmpeg.av_frame_copy_props(_hardwareFrame, _videoFrame).ThrowIfError("映像の転送");
+            Encode(_video, _videoStream, _hardwareFrame);
+        }
+        finally
+        {
+            ffmpeg.av_frame_unref(_hardwareFrame);
+        }
     }
 
     /// <summary>音声（ステレオのインターリーブ、-1〜1）を書く。エンコーダーの 1 フレーム分ずつまとめて送る</summary>
@@ -205,7 +223,7 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
             _scaler = null;
         }
 
-        foreach (var frame in new[] { _videoFrame, _audioFrame })
+        foreach (var frame in new[] { _videoFrame, _hardwareFrame, _audioFrame })
         {
             if (frame is not null)
             {
@@ -214,7 +232,7 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
             }
         }
 
-        _videoFrame = _audioFrame = null;
+        _videoFrame = _hardwareFrame = _audioFrame = null;
         if (_packet is not null)
         {
             var packet = _packet;
@@ -263,6 +281,7 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
             }
             else
             {
+                yield return $"{prefix}_vaapi";
                 yield return $"{prefix}_nvenc";
             }
         }
@@ -305,8 +324,15 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
             _videoStream->time_base = _video->time_base;
             _videoStream->avg_frame_rate = _video->framerate;
 
+            // ハードウェアのフレームを使うエンコーダーには、メインメモリ側の形式（NV12）で作ってから写す
+            var softwareFormat = _video->hw_frames_ctx is null ? _video->pix_fmt : (AVPixelFormat)((AVHWFramesContext*)_video->hw_frames_ctx->data)->sw_format;
+            if (_video->hw_frames_ctx is not null)
+            {
+                _hardwareFrame = ffmpeg.av_frame_alloc();
+            }
+
             _videoFrame = ffmpeg.av_frame_alloc();
-            _videoFrame->format = (int)_video->pix_fmt;
+            _videoFrame->format = (int)softwareFormat;
             _videoFrame->width = _video->width;
             _videoFrame->height = _video->height;
             _videoFrame->color_primaries = AVColorPrimaries.AVCOL_PRI_BT709;
@@ -318,7 +344,7 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
             // BGRA → YUV（BT.709・リミテッドレンジ）
             _scaler = ffmpeg.sws_getContext(
                 video.Width, video.Height, AVPixelFormat.AV_PIX_FMT_BGRA,
-                video.Width, video.Height, _video->pix_fmt,
+                video.Width, video.Height, softwareFormat,
                 (int)(SwsFlags.SWS_BILINEAR | SwsFlags.SWS_ACCURATE_RND | SwsFlags.SWS_FULL_CHR_H_INT), null, null, null);
             var coefficients = *(int4*)ffmpeg.sws_getCoefficients(ffmpeg.SWS_CS_ITU709);
             ffmpeg.sws_setColorspaceDetails(_scaler, coefficients, 1, coefficients, 0, 0, 1 << 16, 1 << 16);
@@ -358,9 +384,19 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
         var context = ffmpeg.avcodec_alloc_context3(codec);
         context->width = settings.Width;
         context->height = settings.Height;
+        if (name.EndsWith("_vaapi", StringComparison.Ordinal) && !TryAttachVaapiFrames(context, settings))
+        {
+            ffmpeg.avcodec_free_context(&context);
+            return null;
+        }
+
         context->time_base = new AVRational { num = (int)settings.FrameRate.Denominator, den = (int)settings.FrameRate.Numerator };
         context->framerate = new AVRational { num = (int)settings.FrameRate.Numerator, den = (int)settings.FrameRate.Denominator };
-        context->pix_fmt = PixelFormat(context, codec);
+        if (context->hw_frames_ctx is null)
+        {
+            context->pix_fmt = PixelFormat(context, codec);
+        }
+
         context->bit_rate = settings.BitrateKbps * 1000L;
         context->rc_max_rate = context->bit_rate * 2;
         context->rc_buffer_size = (int)Math.Min(int.MaxValue, context->bit_rate * 2);
@@ -382,6 +418,44 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
         }
 
         return context;
+    }
+
+    // VA-API のエンコーダーに、GPU のフレーム（NV12）の置き場を付ける。VA-API を使えなければ false
+    private static bool TryAttachVaapiFrames(AVCodecContext* context, VideoEncoderSettings settings)
+    {
+        if (Vaapi.RenderNode is not { } node)
+        {
+            return false;
+        }
+
+        AVBufferRef* device = null;
+        if (ffmpeg.av_hwdevice_ctx_create(&device, AVHWDeviceType.AV_HWDEVICE_TYPE_VAAPI, node, null, 0) < 0)
+        {
+            return false;
+        }
+
+        var frames = ffmpeg.av_hwframe_ctx_alloc(device);
+        ffmpeg.av_buffer_unref(&device);
+        if (frames is null)
+        {
+            return false;
+        }
+
+        var framesContext = (AVHWFramesContext*)frames->data;
+        framesContext->format = AVPixelFormat.AV_PIX_FMT_VAAPI;
+        framesContext->sw_format = AVPixelFormat.AV_PIX_FMT_NV12;
+        framesContext->width = settings.Width;
+        framesContext->height = settings.Height;
+        framesContext->initial_pool_size = 20;
+        if (ffmpeg.av_hwframe_ctx_init(frames) < 0)
+        {
+            ffmpeg.av_buffer_unref(&frames);
+            return false;
+        }
+
+        context->pix_fmt = AVPixelFormat.AV_PIX_FMT_VAAPI;
+        context->hw_frames_ctx = frames; // 参照は context が持つ（avcodec_free_context で外れる）
+        return true;
     }
 
     // エンコーダーが受け付ける形式のうち、NV12 があればそれ（ハードウェアエンコーダー向け）、なければ YUV420P

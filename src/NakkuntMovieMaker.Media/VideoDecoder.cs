@@ -572,9 +572,8 @@ public sealed unsafe class VideoDecoder : IDisposable
             string? deviceName = null;
             if (name == "vaapi")
             {
-                // 同梱の Linux 版 FFmpeg は libva を初めて使うときに読み込み、見つからないとプロセスごと止まる（abort）。
-                // そのため、libva を読めて、DRM のデバイスを開けるときだけ、そのデバイスを指定して使う（X11 は使わない）
-                deviceName = VaapiRenderNode.Value;
+                // libva を読めて、DRM のデバイスを開けるときだけ使う（Vaapi を参照）
+                deviceName = Vaapi.RenderNode;
                 if (deviceName is null)
                 {
                     continue;
@@ -587,40 +586,6 @@ public sealed unsafe class VideoDecoder : IDisposable
                 _hardwareDevice = device;
                 return name;
             }
-        }
-
-        return null;
-    }
-
-    private static readonly Lazy<string?> VaapiRenderNode = new(FindVaapiRenderNode);
-
-    // VA-API で使える DRM のレンダーノード（/dev/dri/renderD128 など）。libva がないか、開けるノードがなければ null
-    private static string? FindVaapiRenderNode()
-    {
-        if (!NativeLibrary.TryLoad("libva.so.2", out _) || !NativeLibrary.TryLoad("libva-drm.so.2", out _))
-        {
-            return null;
-        }
-
-        try
-        {
-            var nodes = Directory.Exists("/dev/dri") ? Directory.GetFiles("/dev/dri", "renderD*") : [];
-            Array.Sort(nodes, StringComparer.Ordinal);
-            foreach (var node in nodes)
-            {
-                try
-                {
-                    using var handle = File.OpenHandle(node, FileMode.Open, FileAccess.ReadWrite);
-                    return node;
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    // 権限がないノードは飛ばす
-                }
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
         }
 
         return null;
