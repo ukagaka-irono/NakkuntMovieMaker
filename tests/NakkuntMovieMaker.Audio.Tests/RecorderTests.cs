@@ -22,11 +22,15 @@ public sealed class RecorderTests : IDisposable
     public void WritesTheInputToWav()
     {
         using var input = new SimulatedInput(_time, Tone, latencyFrames: 0, periodFrames: 480);
+        var startedAt = _time.Elapsed;
         var recorder = Recorder.Start(input, Path.Combine(_folder, "take.wav"), startSample: 96000);
         Thread.Sleep(500);
         var result = recorder.Stop();
+        var elapsed = _time.Elapsed - startedAt;
 
-        Assert.InRange(result.Frames, 24000 - 4800, 24000 + 4800);
+        // Sleep は混んだマシン（CI など）では長めに眠るので、実際にたった時間の分（±0.1 秒）だけ録れていることを確かめる
+        var expected = (long)(elapsed.TotalSeconds * 48000);
+        Assert.InRange(result.Frames, expected - 4800, expected + 4800);
         Assert.Equal((48000, 1, 96000L, 0L), (result.SampleRate, result.Channels, result.PlacementSample, result.OverrunFrames));
         var samples = ReadWav(result.Path);
         Assert.Equal(result.Frames, samples.Length);
