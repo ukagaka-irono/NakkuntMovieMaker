@@ -47,7 +47,7 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 | 項目 | 状況 |
 | --- | --- |
 | Windows | 画面（Avalonia）を含めて使えます |
-| Linux・macOS | エンジンとコマンドライン（`nmm`）での書き出しまでを対象にしています。CI（Ubuntu・macOS arm64）で、ビルドと、書き出しを含むテストが通ります。macOS の FFmpeg は `tools/build-native.sh` がソースからビルドします。CI 以外の実機では、まだ確かめていません |
+| Linux・macOS | エンジンとコマンドライン（`nmm`）での書き出しまでを対象にしています。CI（Ubuntu・macOS arm64）で、ビルドと、書き出しを含むテストが通ります。FFmpeg はどの OS でも `tools/build-native` がソースからビルドします。CI 以外の実機では、まだ確かめていません |
 | 編集 | タイムライン（レイヤー・移動・トリム・分割・リップル・ロール・コピーと貼り付け・グループ化・元に戻す）、キーフレーム、合成モード、速度変更と逆再生 |
 | 映像 | 映像エフェクト 15 種類、トランジション 7 種類、テキスト（縁取り・影・背景・縦書き・一文字ずつの表示・プリセット）、図形 |
 | 音声 | ミキサー（音量・パン・フェード・キーフレーム）、音の高さを保った速度変更、ラウドネスの正規化、ダッキング、レベルメーター、録音 |
@@ -58,7 +58,7 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 
 - 本物のマイクでの録音は確かめていません（仮の入力デバイスでテストしています）。
 - 立ち絵は、YMM4 の「動く立ち絵」と同じフォルダ構成を想定していますが、実際の素材では確かめていません。
-- Linux の VA-API でのハードウェアエンコードは、GPU のある実機では確かめていません（使えないときは OpenH264 で書き出します）。
+- Linux の FFmpeg には VA-API を入れていません（libva がない環境でも FFmpeg を読み込めるようにするため）。Linux のハードウェアエンコードは NVENC だけで、GPU のある実機では確かめていません（使えないときは OpenH264・kvazaar で書き出します）。
 
 性能の記録は [docs/performance.md](docs/performance.md) にあります。
 
@@ -69,9 +69,13 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 - [.NET 10 SDK](https://dotnet.microsoft.com/)（`global.json` の版）
 - PowerShell 7（Windows）または bash（Linux・macOS）
 - CMake と C コンパイラ（`nmm_audio` のビルドに使います。Windows は Visual Studio の C++ ビルドツール）
+- FFmpeg のビルドに使うもの（FFmpeg は GPL の部品を含まない構成で、ソースからビルドします）
+  - Windows：[MSYS2](https://www.msys2.org/)（`C:\msys64`。ほかの場所なら環境変数 `MSYS2_ROOT` で指定）。MSYS2 のシェルで `pacman -S --needed make diffutils mingw-w64-ucrt-x86_64-{gcc,nasm,pkgconf,cmake,ninja,jq}` を実行して、必要なものを入れます
+  - Linux：make・pkg-config・nasm・jq・zlib の開発用ファイル（Ubuntu なら `sudo apt install build-essential pkg-config nasm jq zlib1g-dev`）
+  - macOS：Xcode のコマンドラインツールと pkgconf・jq（Homebrew）
 
 ```bash
-# FFmpeg（LGPL 版）・フォント・ColorfulTalk のソースの取得（版とハッシュは tools/native-deps.json で固定）と、nmm_audio・ColorfulTalk のビルド
+# フォントと、FFmpeg（LGPL 版）とその部品・ColorfulTalk のソースの取得（版とハッシュは tools/native-deps.json で固定）と、nmm_audio・ColorfulTalk・FFmpeg のビルド
 pwsh tools/fetch-native.ps1      # Linux・macOS は ./tools/fetch-native.sh
 pwsh tools/build-native.ps1      # Linux・macOS は ./tools/build-native.sh
 

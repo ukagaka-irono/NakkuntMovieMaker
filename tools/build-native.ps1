@@ -1,5 +1,6 @@
 #Requires -Version 7
-# native/nmm_audio と、tools/fetch-native で取得した ColorfulTalk をビルドして native/bin/<rid>/ に置く（Windows 用）。CMake と MSVC が必要
+# native/nmm_audio と、tools/fetch-native で取得した ColorfulTalk・FFmpeg をビルドして native/bin/<rid>/ に置く（Windows 用）。
+# CMake と MSVC、FFmpeg のために MSYS2 が必要（UCRT64 の gcc・nasm・pkgconf・cmake・ninja・jq と make・diffutils。入れ方は README）
 param(
     [string]$Rid = [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier
 )
@@ -33,3 +34,15 @@ New-Item -ItemType Directory -Force (Join-Path $outDir 'licenses') | Out-Null
 Copy-Item (Join-Path $colorfulSource 'LICENSE') (Join-Path $outDir 'licenses/colorful-talk-LICENSE.txt') -Force
 
 Write-Host "ColorfulTalk $($deps.colorfulTalk.version) を $outDir に配置しました"
+
+# FFmpeg（OpenH264・kvazaar・QSV・NVENC・AMF・MF 付き、GPL の部品なし）を、MSYS2 の UCRT64 の gcc でビルドする（tools/build-ffmpeg.sh）
+$msys = if ($env:MSYS2_ROOT) { $env:MSYS2_ROOT } else { 'C:\msys64' }
+$bash = Join-Path $msys 'usr/bin/bash.exe'
+if (-not (Test-Path $bash)) { throw "MSYS2 が見つかりません（$msys）。README の手順で入れるか、MSYS2_ROOT に場所を指定してください" }
+$env:MSYSTEM = 'UCRT64'
+$env:CHERE_INVOKING = '1'
+$env:NMM_ROOT = $root
+$env:NMM_RID = $Rid
+$env:NMM_OUT = $outDir
+& $bash -lc 'exec "$(cygpath -u "$NMM_ROOT")/tools/build-ffmpeg.sh" "$NMM_RID" "$(cygpath -u "$NMM_OUT")"'
+if ($LASTEXITCODE -ne 0) { throw 'FFmpeg のビルドに失敗しました' }

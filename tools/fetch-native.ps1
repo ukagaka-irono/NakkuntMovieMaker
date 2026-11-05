@@ -1,6 +1,6 @@
 #Requires -Version 7
-# 同梱するフォントと FFmpeg（LGPL・共有ライブラリ版）を取得して native/bin/<rid>/ に置く（Windows 用）。
-# ColorfulTalk（音声合成）のソースも取得する（ビルドは tools/build-native）
+# 同梱するフォントを取得して native/bin/<rid>/ に置く（Windows 用）。
+# FFmpeg（LGPL・共有ライブラリ）と、それに組み込む部品、ColorfulTalk（音声合成）のソースも取得する（ビルドは tools/build-native）
 # 取得するバージョンとハッシュは tools/native-deps.json で固定している
 param(
     [string]$Rid = [System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier
@@ -59,22 +59,33 @@ foreach ($source in $colorful.files) {
 }
 Write-Host "ColorfulTalk $($colorful.version) のソースを $colorfulDir に取得しました"
 
-$entry = $deps.ffmpeg.files.$Rid
-if (-not $entry) {
-    Write-Warning "FFmpeg の配布物が用意されていない RID です: $Rid"
+# FFmpeg と、FFmpeg に組み込む部品のソースを取得する（ビルドは tools/build-native）。rids がない部品は、すべての RID で使う
+if ($deps.ffmpeg.sourceBuild.rids -notcontains $Rid) {
+    Write-Warning "FFmpeg のビルドに対応していない RID です: $Rid"
     exit 0
 }
 
-$archive = Get-Verified $entry.url $entry.sha256
+$names = @()
+foreach ($source in $deps.ffmpeg.sourceBuild.sources) {
+    if ($source.rids -and $source.rids -notcontains $Rid) { continue }
+    $names += $source.name
+    $archive = Join-Path $downloads "$($source.name)-$($source.version)-$([System.IO.Path]::GetFileName($source.url))"
+    if (-not (Test-Path $archive)) {
+        Write-Host "ダウンロード: $($source.url)"
+        Invoke-WebRequest -Uri $source.url -OutFile $archive
+    }
 
-$extract = Join-Path $downloads "ffmpeg-$Rid"
-if (Test-Path $extract) { Remove-Item -Recurse -Force $extract }
-Expand-Archive -Path $archive -DestinationPath $extract
-$top = Get-ChildItem $extract -Directory | Select-Object -First 1
+    $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($hash -ne $source.sha256) {
+        Remove-Item $archive
+        throw "SHA-256 が一致しません: $archive（期待値 $($source.sha256)、実際 $hash）"
+    }
 
-Copy-Item (Join-Path $top.FullName "$($entry.libDir)/*.dll") $outDir -Force
-$licenses = Join-Path $outDir 'licenses'
-New-Item -ItemType Directory -Force $licenses | Out-Null
-Copy-Item (Join-Path $top.FullName 'LICENSE.txt') (Join-Path $licenses 'ffmpeg-LICENSE.txt') -Force
+    $sourceDir = Join-Path $downloads "src-$Rid-$($source.name)"
+    if (Test-Path $sourceDir) { Remove-Item -Recurse -Force $sourceDir }
+    New-Item -ItemType Directory -Force $sourceDir | Out-Null
+    tar -xf $archive -C $sourceDir --strip-components 1
+    if ($LASTEXITCODE -ne 0) { throw "展開に失敗しました: $archive" }
+}
 
-Write-Host "FFmpeg $($deps.ffmpeg.version)（$($deps.ffmpeg.license)）を $outDir に配置しました"
+Write-Host "FFmpeg $($deps.ffmpeg.version) と部品（$(($names | Select-Object -Skip 1) -join ' ')）のソースを取得しました（ビルドは tools/build-native.ps1）"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 同梱するフォントと FFmpeg（LGPL・共有ライブラリ版）を取得して native/bin/<rid>/ に置く（Linux・macOS 用）。
-# ColorfulTalk（音声合成）のソースも取得する（ビルドは tools/build-native）
+# 同梱するフォントを取得して native/bin/<rid>/ に置く（Linux・macOS 用）。
+# FFmpeg（LGPL・共有ライブラリ）と、それに組み込む部品、ColorfulTalk（音声合成）のソースも取得する（ビルドは tools/build-native）
 # 取得するバージョンとハッシュは tools/native-deps.json で固定している。jq が必要
 set -euo pipefail
 
@@ -76,70 +76,53 @@ for i in $(seq 0 $((colorful_count - 1))); do
 done
 echo "ColorfulTalk $(jq -r '.colorfulTalk.version' "$deps") のソースを $colorful_dir に取得しました"
 
-# BtbN の配布物がない RID（macOS）は、FFmpeg と OpenH264・kvazaar のソースを取得する（ビルドは tools/build-native）
-if jq -e --arg rid "$rid" '.ffmpeg.sourceBuild.rids | index($rid)' "$deps" >/dev/null; then
-  missing_hash=0
-  source_count="$(jq '.ffmpeg.sourceBuild.sources | length' "$deps")"
-  for i in $(seq 0 $((source_count - 1))); do
-    name="$(jq -r ".ffmpeg.sourceBuild.sources[$i].name" "$deps")"
-    source_url="$(jq -r ".ffmpeg.sourceBuild.sources[$i].url" "$deps")"
-    source_sha256="$(jq -r ".ffmpeg.sourceBuild.sources[$i].sha256" "$deps")"
-    archive="$downloads/$name-$(jq -r ".ffmpeg.sourceBuild.sources[$i].version" "$deps")-$(basename "$source_url")"
-    if [ ! -f "$archive" ]; then
-      echo "ダウンロード: $source_url"
-      curl -fL --retry 3 -o "$archive" "$source_url"
-    fi
+# FFmpeg と、FFmpeg に組み込む部品のソースを取得する（ビルドは tools/build-native）。rids がない部品は、すべての RID で使う
+if ! jq -e --arg rid "$rid" '.ffmpeg.sourceBuild.rids | index($rid)' "$deps" >/dev/null; then
+  echo "警告: FFmpeg のビルドに対応していない RID です: $rid" >&2
+  exit 0
+fi
 
-    actual="$(sha256_of "$archive")"
-    if [ -z "$source_sha256" ]; then
-      # ハッシュをまだ決めていない（版を上げたとき）。表示して、最後に失敗させる
-      echo "SHA-256 が未設定です: $name の SHA-256 は $actual" >&2
-      rm -f "$archive"
-      missing_hash=1
-      continue
-    fi
+missing_hash=0
+names=()
+source_count="$(jq '.ffmpeg.sourceBuild.sources | length' "$deps")"
+for i in $(seq 0 $((source_count - 1))); do
+  if ! jq -e --arg rid "$rid" ".ffmpeg.sourceBuild.sources[$i] | .rids == null or (.rids | index(\$rid) != null)" "$deps" >/dev/null; then
+    continue
+  fi
+  name="$(jq -r ".ffmpeg.sourceBuild.sources[$i].name" "$deps")"
+  names+=("$name")
+  source_url="$(jq -r ".ffmpeg.sourceBuild.sources[$i].url" "$deps")"
+  source_sha256="$(jq -r ".ffmpeg.sourceBuild.sources[$i].sha256" "$deps")"
+  archive="$downloads/$name-$(jq -r ".ffmpeg.sourceBuild.sources[$i].version" "$deps")-$(basename "$source_url")"
+  if [ ! -f "$archive" ]; then
+    echo "ダウンロード: $source_url"
+    curl -fL --retry 3 -o "$archive" "$source_url"
+  fi
 
-    if [ "$actual" != "$source_sha256" ]; then
-      rm -f "$archive"
-      echo "SHA-256 が一致しません: $archive（期待値 $source_sha256、実際 $actual）" >&2
-      exit 1
-    fi
+  actual="$(sha256_of "$archive")"
+  if [ -z "$source_sha256" ]; then
+    # ハッシュをまだ決めていない（版を上げたとき）。表示して、最後に失敗させる
+    echo "SHA-256 が未設定です: $name の SHA-256 は $actual" >&2
+    rm -f "$archive"
+    missing_hash=1
+    continue
+  fi
 
-    source_dir="$downloads/src-$rid-$name"
-    rm -rf "$source_dir"
-    mkdir -p "$source_dir"
-    tar -xf "$archive" -C "$source_dir" --strip-components 1
-  done
-
-  if [ "$missing_hash" = 1 ]; then
-    echo "tools/native-deps.json に SHA-256 を書いてから、もう一度実行してください" >&2
+  if [ "$actual" != "$source_sha256" ]; then
+    rm -f "$archive"
+    echo "SHA-256 が一致しません: $archive（期待値 $source_sha256、実際 $actual）" >&2
     exit 1
   fi
 
-  echo "FFmpeg $(jq -r '.ffmpeg.version' "$deps") と OpenH264・kvazaar のソースを取得しました（ビルドは tools/build-native.sh）"
-  exit 0
+  source_dir="$downloads/src-$rid-$name"
+  rm -rf "$source_dir"
+  mkdir -p "$source_dir"
+  tar -xf "$archive" -C "$source_dir" --strip-components 1
+done
+
+if [ "$missing_hash" = 1 ]; then
+  echo "tools/native-deps.json に SHA-256 を書いてから、もう一度実行してください" >&2
+  exit 1
 fi
 
-url="$(jq -r --arg rid "$rid" '.ffmpeg.files[$rid].url // empty' "$deps")"
-if [ -z "$url" ]; then
-  echo "警告: FFmpeg の配布物が用意されていない RID です: $rid" >&2
-  exit 0
-fi
-sha256="$(jq -r --arg rid "$rid" '.ffmpeg.files[$rid].sha256' "$deps")"
-lib_dir="$(jq -r --arg rid "$rid" '.ffmpeg.files[$rid].libDir' "$deps")"
-version="$(jq -r '.ffmpeg.version' "$deps")"
-
-fetch_verified "$url" "$sha256"
-archive="$verified"
-
-extract="$downloads/ffmpeg-$rid"
-rm -rf "$extract"
-mkdir -p "$extract"
-tar -xf "$archive" -C "$extract"
-top="$(find "$extract" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-
-cp -a "$top/$lib_dir"/*.so* "$out_dir/"
-mkdir -p "$out_dir/licenses"
-cp "$top/LICENSE.txt" "$out_dir/licenses/ffmpeg-LICENSE.txt"
-
-echo "FFmpeg $version を $out_dir に配置しました"
+echo "FFmpeg $(jq -r '.ffmpeg.version' "$deps") と部品（${names[*]:1}）のソースを取得しました（ビルドは tools/build-native.sh）"

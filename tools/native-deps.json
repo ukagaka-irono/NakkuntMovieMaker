@@ -1,30 +1,19 @@
 {
   "ffmpeg": {
     "version": "9.0.2",
-    "license": "LGPL-3.0-or-later",
-    "source": "https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-09-30-13-08",
-    "files": {
-      "win-x64": {
-        "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n9.0.2-17-g2a571b6068-win64-lgpl-shared-9.0.zip",
-        "sha256": "7157177b8a6cb2174c1650ba8c71b363f2c78cba5330f88c4c02cf5b2b880646",
-        "libDir": "bin"
-      },
-      "linux-x64": {
-        "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n9.0.2-17-g2a571b6068-linux64-lgpl-shared-9.0.tar.xz",
-        "sha256": "7a1ba2af36e5beeb98151e766a903b1d115f2206a86571f17f873cd7292c424f",
-        "libDir": "lib"
-      }
-    },
+    "license": "LGPL-2.1-or-later",
     "sourceBuild": {
-      "_comment": "BtbN の配布物がない RID（macOS）は、ソースからビルドする（GPL の部品なし・共有ライブラリ）。tools/fetch-native で取得し、tools/build-native でビルドする",
+      "_comment": "FFmpeg は、どの RID もソースからビルドする（GPL の部品なし・共有ライブラリ）。tools/fetch-native でソースを取得し、tools/build-native（FFmpeg の部分は tools/build-ffmpeg.sh）でビルドする。rids がない部品はすべての RID で使う。licenseFile は配布物の licenses/<name>-LICENSE.txt にするファイル",
       "rids": [
+        "win-x64",
+        "linux-x64",
         "osx-arm64"
       ],
       "sources": [
         {
           "name": "ffmpeg",
           "version": "9.0.2",
-          "license": "LGPL-3.0-or-later",
+          "license": "LGPL-2.1-or-later",
           "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
           "sha256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e"
         },
@@ -33,14 +22,50 @@
           "version": "2.6.0",
           "license": "BSD-2-Clause",
           "url": "https://github.com/cisco/openh264/archive/refs/tags/v2.6.0.tar.gz",
-          "sha256": "558544ad358283a7ab2930d69a9ceddf913f4a51ee9bf1bfb9e377322af81a69"
+          "sha256": "558544ad358283a7ab2930d69a9ceddf913f4a51ee9bf1bfb9e377322af81a69",
+          "licenseFile": "LICENSE"
         },
         {
           "name": "kvazaar",
           "version": "2.3.2",
           "license": "BSD-3-Clause",
           "url": "https://github.com/ultravideo/kvazaar/releases/download/v2.3.2/kvazaar-2.3.2.tar.xz",
-          "sha256": "35e506a6d2be9ae343f17787eb80fa214492b276e9c88b6e93749050ae380070"
+          "sha256": "35e506a6d2be9ae343f17787eb80fa214492b276e9c88b6e93749050ae380070",
+          "licenseFile": "LICENSE"
+        },
+        {
+          "name": "nv-codec-headers",
+          "version": "13.0.19.1",
+          "license": "MIT",
+          "rids": [
+            "win-x64",
+            "linux-x64"
+          ],
+          "url": "https://github.com/FFmpeg/nv-codec-headers/releases/download/n13.0.19.1/nv-codec-headers-13.0.19.1.tar.gz",
+          "sha256": "eab9d02d461035a4baded23d4f2e2834e5b17934820b79cea45baaf0c85383eb",
+          "licenseHeaders": "include/ffnvcodec"
+        },
+        {
+          "name": "amf",
+          "version": "1.5.3",
+          "license": "MIT",
+          "rids": [
+            "win-x64"
+          ],
+          "url": "https://github.com/GPUOpen-LibrariesAndSDKs/AMF/releases/download/v1.5.3/AMF-headers-v1.5.3.tar.gz",
+          "sha256": "0f521ad98041f8001147cded4a660127f18b1c27a801a5cd691bda1fa48381be",
+          "licenseHeaders": "AMF"
+        },
+        {
+          "name": "libvpl",
+          "version": "2.17.0",
+          "license": "MIT",
+          "rids": [
+            "win-x64"
+          ],
+          "url": "https://github.com/intel/libvpl/archive/refs/tags/v2.17.0.tar.gz",
+          "sha256": "4de3e2faf1e8307fb282e4a43f443191810f6a6b0a484fffa7995ba1c814c6ec",
+          "licenseFile": "LICENSE"
         }
       ]
     }

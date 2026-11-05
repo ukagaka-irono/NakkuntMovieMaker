@@ -21,20 +21,29 @@ jobs:
         with:
           global-json-file: global.json
 
+      # FFmpeg はソースからビルドするので（数分かかる）、ソースの版とビルドの手順が同じあいだは前の結果を使う
+      - name: FFmpeg のビルドのキャッシュ
+        uses: actions/cache@v5
+        with:
+          path: native/build/*-ffmpeg
+          key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/native-deps.json', 'tools/build-ffmpeg.sh') }}
+
+      # Windows の FFmpeg は、ランナーに入っている MSYS2 の UCRT64 の gcc でビルドする
+      - name: FFmpeg のビルドに使うものを入れる（Windows）
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: C:\msys64\usr\bin\bash.exe -lc 'pacman -S --needed --noconfirm make diffutils mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-jq'
+
+      - name: FFmpeg のビルドに使うものを入れる（Linux）
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y nasm zlib1g-dev
+
       - name: ネイティブライブラリの取得とビルド（Windows）
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           ./tools/fetch-native.ps1
           ./tools/build-native.ps1
-
-      # macOS の FFmpeg はソースからビルドするので（数分かかる）、ソースの版とビルドの手順が同じあいだは前の結果を使う
-      - name: macOS の FFmpeg のビルドのキャッシュ
-        if: runner.os == 'macOS'
-        uses: actions/cache@v5
-        with:
-          path: native/build/osx-arm64-ffmpeg
-          key: ffmpeg-osx-arm64-${{ hashFiles('tools/native-deps.json', 'tools/build-native.sh') }}
 
       - name: ネイティブライブラリの取得とビルド（Linux・macOS）
         if: runner.os != 'Windows'
