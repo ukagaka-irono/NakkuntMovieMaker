@@ -49,6 +49,9 @@ public sealed class PlaybackController : IDisposable
     private long _prefetchAnchor = long.MinValue;
     private long _lastShown = long.MinValue;
     private long _lastDropped = long.MinValue;
+
+    // 前に取り出したフレームが間に合わなかった（描くのが遅れている）
+    private bool _behind;
     private long _shown;
     private long _dropped;
 
@@ -236,8 +239,10 @@ public sealed class PlaybackController : IDisposable
             playing = _playing;
             if (playing && (current < _prefetchAnchor || current >= _prefetchAnchor + _options.PrefetchFrames / 2))
             {
+                // 遅れているときは、描き終わるころの位置から先読みする（今のフレームから描くと、描き終わったときにはもう過ぎていて、
+                // 先読みし直すたびに同じことを繰り返し、追いつけなくなる）
                 _prefetchAnchor = current;
-                _frames.Prefetch(current, _options.PrefetchFrames);
+                _frames.Prefetch(_behind ? current + _options.PrefetchFrames / 4 : current, _options.PrefetchFrames);
             }
         }
 
@@ -245,6 +250,7 @@ public sealed class PlaybackController : IDisposable
         {
             lock (_gate)
             {
+                _behind = false;
                 if (current != _lastShown)
                 {
                     _lastShown = current;
@@ -259,6 +265,7 @@ public sealed class PlaybackController : IDisposable
         {
             lock (_gate)
             {
+                _behind = true;
                 if (current != _lastDropped)
                 {
                     _lastDropped = current;
@@ -318,6 +325,7 @@ public sealed class PlaybackController : IDisposable
         _mixedSample = sample;
         _levelCount = 0;
         _prefetchAnchor = long.MinValue;
+        _behind = false;
         if (_output is not null)
         {
             _playedAtStart = _output.FramesPlayed;

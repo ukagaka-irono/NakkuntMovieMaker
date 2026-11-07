@@ -20,6 +20,7 @@ public sealed unsafe class GpuAllocator : IDisposable
     private readonly VmaAllocator _allocator;
     private long _liveAllocations;
     private long _allocatedBytes;
+    private long _peakAllocatedBytes;
     private bool _disposed;
 
     /// <param name="budgetBytes">使ってよい GPU のメモリ（null なら、ヒープの大きさから決める既定値）</param>
@@ -56,6 +57,9 @@ public sealed unsafe class GpuAllocator : IDisposable
 
     /// <summary>確保している量（バイト）</summary>
     public long AllocatedBytes => Interlocked.Read(ref _allocatedBytes);
+
+    /// <summary>確保した量の最大（バイト。性能の測定に使う）</summary>
+    public long PeakAllocatedBytes => Interlocked.Read(ref _peakAllocatedBytes);
 
     /// <summary>キャッシュに使ってよい量の目安（GPU のメモリの半分、最大 1GB。内蔵の GPU はメインメモリと共有なので控えめにする）</summary>
     public long BudgetBytes { get; }
@@ -150,7 +154,14 @@ public sealed unsafe class GpuAllocator : IDisposable
     private void Track(int count, long bytes)
     {
         Interlocked.Add(ref _liveAllocations, count);
-        Interlocked.Add(ref _allocatedBytes, bytes);
+        var total = Interlocked.Add(ref _allocatedBytes, bytes);
+        for (var peak = Interlocked.Read(ref _peakAllocatedBytes); total > peak; peak = Interlocked.Read(ref _peakAllocatedBytes))
+        {
+            if (Interlocked.CompareExchange(ref _peakAllocatedBytes, total, peak) == peak)
+            {
+                break;
+            }
+        }
     }
 
     private VkImageView CreateView(VkImage image, VkFormat format)

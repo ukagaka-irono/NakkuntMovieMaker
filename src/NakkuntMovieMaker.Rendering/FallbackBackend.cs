@@ -17,6 +17,9 @@ public sealed class FallbackBackend(IRenderBackend primary, IRenderBackend fallb
 
     public bool HasFallenBack => Volatile.Read(ref _fellBack) != 0;
 
+    /// <summary>まず使う描画（GPU 版）</summary>
+    public IRenderBackend Primary => _primary;
+
     public RenderResult Render(FramePlan plan, IMediaSource media, RenderRequest request, CancellationToken cancellationToken = default)
     {
         var current = _current;

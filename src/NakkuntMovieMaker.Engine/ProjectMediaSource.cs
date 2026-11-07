@@ -552,6 +552,12 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         }
     }
 
+    // GPU 版に YUV の平面で渡すときのデコードの方法。H.264 はソフトウェアでデコードする。
+    // ハードウェアでデコードすると、メインメモリへの写し（d3d11va）が描画と同じ GPU を待つため、1080p60 で 1 枚 6〜10ms、4K で 22ms かかり、
+    // ソフトウェア（2〜4ms・4K で 8ms。CPU のスレッドを使う）より遅い。描画の速さも、3 スレッドで 44fps から 109fps になった（docs/performance.md の J-41）。
+    // ほかの形式（HEVC の 10 ビットなど）はソフトウェアだと重いので、これまでどおりハードウェアを先に試す
+    private static HardwareDecoding PlanesDecoding(string? codec) => codec == "h264" ? HardwareDecoding.Disabled : HardwareDecoding.Auto;
+
     private DecoderSlot? OpenDecoder(AssetId asset, int step)
     {
         if (VideoPath(asset) is not { } source)
@@ -563,7 +569,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         {
             var video = (Width: source.Width, Height: source.Height);
             var options = step == PlanesStep
-                ? new VideoDecoderOptions(Output: VideoFrameOutput.Planes)
+                ? new VideoDecoderOptions(Output: VideoFrameOutput.Planes, Hardware: PlanesDecoding(Info(source.Path)?.Video?.Codec))
                 : new VideoDecoderOptions(MaxSize(video.Width, step), MaxSize(video.Height, step), Quality: _quality);
             return new DecoderSlot(VideoDecoder.Open(source.Path, options), source.Width, source.Height);
         }

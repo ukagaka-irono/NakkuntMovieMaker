@@ -92,6 +92,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     /// <summary>エフェクトを GPU でかけたノードの数（これまでの合計。テストと計測用）</summary>
     public long GpuEffectNodes => Interlocked.Read(ref _gpuEffectNodes);
 
+    /// <summary>GPU のメモリを確保した量の最大（バイト）</summary>
+    public long PeakGpuMemoryBytes => _allocator.PeakAllocatedBytes;
+
     /// <summary>
     /// 動画を、描画と同じ GPU でデコードできない理由（まだ試していないか、できるなら null）。Vulkan Video に対応していない GPU など
     /// </summary>

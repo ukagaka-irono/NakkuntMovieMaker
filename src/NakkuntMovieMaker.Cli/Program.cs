@@ -104,7 +104,7 @@ internal static class Program
         var folderOption = new Option<DirectoryInfo?>("--folder") { Description = "素材とキャッシュを置く作業フォルダ（省略すると一時フォルダ）" };
         var onlyOption = new Option<string[]>("--only")
         {
-            Description = $"測る場面だけを指定する（{string.Join("・", RenderBenchmark.Scenarios.Select(scenario => scenario.Name))}・seek。--project のときは playback・export・voice・recording）",
+            Description = $"測る場面だけを指定する（{string.Join("・", RenderBenchmark.Scenarios.Select(scenario => scenario.Name))}・seek・playback60・proxy60。--project のときは playback・export・voice・recording）",
             AllowMultipleArgumentsPerToken = true,
         };
         var projectOption = new Option<FileInfo?>("--project") { Description = "このプロジェクトで、再生・書き出し・声の合成・録音の速さを測る" };
@@ -156,6 +156,19 @@ internal static class Program
                 }
             }
 
+            // 60fps の再生（M2 の目標）：フル解像度・8 レイヤー＋動画＋3 レイヤーにエフェクト、プロキシを使って 1/2 解像度
+            foreach (var (name, scale, proxy) in new[] { ("playback60", 1.0, false), ("proxy60", 0.5, true) })
+            {
+                if (only is not null && only.Contains(name) && (benchmark.HasVideo || !proxy))
+                {
+                    var result = benchmark.MeasurePlayback(scale, effects: !proxy, fps: 60, useProxies: proxy);
+                    var gpu = result.PeakGpuMemoryBytes is { } bytes ? $"、GPU のメモリの最大 {bytes / 1024 / 1024} MB" : "";
+                    Console.WriteLine(
+                        $"60fps の再生（{(proxy ? "プロキシ・1/2 解像度" : "フル解像度・3 レイヤーにエフェクト")}）：表示 {result.Shown}、飛ばした {result.Dropped}（{result.DroppedPercent:0.0}%、最初の 1 秒より後は {result.DroppedAfterFirstSecond}）、"
+                        + $"{result.Elapsed.TotalSeconds:0.0} 秒、メモリの最大 {result.PeakWorkingSetBytes / 1024 / 1024} MB{gpu}");
+                }
+            }
+
             if (only is not null && !only.Contains("seek"))
             {
                 return 0;
@@ -182,7 +195,8 @@ internal static class Program
             if (Selected("playback") || Selected(name))
             {
                 var result = benchmark.MeasurePlayback(scale);
-                Console.WriteLine($"再生（{(scale == 1 ? "フル" : "1/2")} 解像度）：表示 {result.Shown}、飛ばした {result.Dropped}（{result.DroppedPercent:0.0}%）、{result.Elapsed.TotalSeconds:0.0} 秒、メモリの最大 {result.PeakWorkingSetBytes / 1024 / 1024} MB");
+                var gpu = result.PeakGpuMemoryBytes is { } bytes ? $"、GPU のメモリの最大 {bytes / 1024 / 1024} MB" : "";
+                Console.WriteLine($"再生（{(scale == 1 ? "フル" : "1/2")} 解像度）：表示 {result.Shown}、飛ばした {result.Dropped}（{result.DroppedPercent:0.0}%）、{result.Elapsed.TotalSeconds:0.0} 秒、メモリの最大 {result.PeakWorkingSetBytes / 1024 / 1024} MB{gpu}");
             }
         }
 

@@ -45,12 +45,14 @@ public sealed class RenderBenchmark
     private readonly string _folder;
     private readonly string? _video;
     private readonly IRenderBackend _backend;
+    private readonly RendererOptions? _renderer;
 
     /// <param name="folder">素材とキャッシュを置く作業フォルダ</param>
     /// <param name="video">使う動画（1080p の H.264 を想定）。null なら動画のレイヤーは空にする</param>
     /// <param name="renderer">描画の方式（null なら自動）</param>
     public RenderBenchmark(string folder, string? video, RendererOptions? renderer = null)
     {
+        _renderer = renderer;
         _backend = RenderBackendFactory.Create(renderer).Backend;
         _folder = Path.GetFullPath(folder);
         _video = video is null ? null : Path.GetFullPath(video);
@@ -123,12 +125,27 @@ public sealed class RenderBenchmark
         return (Measure(false), HasVideo ? Measure(true) : double.NaN);
     }
 
+    /// <summary>
+    /// fps のシーン（10 秒）を、プレビューと同じく再生して、飛ばしたフレームを数える（M2 の目標：フル解像度・8 レイヤー＋動画＋3 レイヤーにエフェクトで 60fps）。
+    /// useProxies なら、動画のプロキシを先に作り、すべての動画にプロキシを使う（4K の素材を 1/2 でプレビューするときの目標）
+    /// </summary>
+    public PlaybackBenchResult MeasurePlayback(double scale, bool effects, int fps, bool useProxies = false, CancellationToken cancellationToken = default)
+    {
+        var (project, _) = CreateProject(effects, fps: fps);
+        if (useProxies)
+        {
+            project = project with { Proxies = new ProjectProxySettings(ProxyMode.AllVideos) };
+        }
+
+        return new ProjectBenchmark(project, _folder, _renderer).MeasurePlayback(scale, useProxies, cancellationToken);
+    }
+
     private BgraImage Render(Scene scene, long frame, IMediaSource media, double scale, CancellationToken cancellationToken) =>
         _backend.Render(TimelineEvaluator.Evaluate(scene, frame), media, scale, cancellationToken);
 
-    private (Project Project, Scene Scene) CreateProject(bool effects, bool includeVideo = true)
+    private (Project Project, Scene Scene) CreateProject(bool effects, bool includeVideo = true, int fps = 30)
     {
-        var project = Project.CreateNew("ベンチマーク", new SceneFormat(Width, Height, 30, 48000), 8);
+        var project = Project.CreateNew("ベンチマーク", new SceneFormat(Width, Height, fps, 48000), 8);
         var scene = project.Root;
         var layers = scene.Layers.Select(layer => layer.Id).ToArray();
         var assets = ImmutableDictionary.CreateBuilder<AssetId, Asset>();
@@ -140,7 +157,7 @@ public sealed class RenderBenchmark
             return asset.Id;
         }
 
-        const long length = 600;
+        var length = 10L * fps;
         var blur = effects ? new[] { Effect(BuiltInEffects.Blur, ("radius", 12.0)) } : [];
         var adjust = effects ? new[] { Effect(BuiltInEffects.ColorAdjust, ("brightness", 10.0), ("contrast", 20.0), ("saturation", 30.0)) } : [];
         var moving = Animatable.FromKeys(new Keyframe<double>(0, -400), new Keyframe<double>(length, 400));
