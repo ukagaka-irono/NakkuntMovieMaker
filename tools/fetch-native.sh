@@ -36,7 +36,7 @@ fetch_verified() {
   actual="$(sha256_of "$verified")"
   if [ "$actual" != "$sha256" ]; then
     rm -f "$verified"
-    echo "SHA-256 が一致しません: $verified（期待値 $sha256、実際 $actual）" >&2
+    echo "SHA-256 が一致しません: ${verified}（期待値 ${sha256}、実際 ${actual}）" >&2
     exit 1
   fi
 }
@@ -62,7 +62,7 @@ fetch_archive() {
   fi
   if [ "$actual" != "$sha256" ]; then
     rm -f "$archive"
-    echo "SHA-256 が一致しません: $archive（期待値 $sha256、実際 $actual）" >&2
+    echo "SHA-256 が一致しません: ${archive}（期待値 ${sha256}、実際 ${actual}）" >&2
     exit 1
   fi
 }
@@ -108,7 +108,7 @@ for i in $(seq 0 $((colorful_count - 1))); do
   actual="$(sha256_of "$target")"
   if [ "$actual" != "$expected" ]; then
     rm -f "$target"
-    echo "SHA-256 が一致しません: $target（期待値 $expected、実際 $actual）" >&2
+    echo "SHA-256 が一致しません: ${target}（期待値 ${expected}、実際 ${actual}）" >&2
     exit 1
   fi
 done
@@ -123,7 +123,7 @@ elif fetch_archive slang "$slang_version" "$(jq -r '.url' <<<"$slang_host")" "$(
   slang_dir="$root/native/tools/$host_rid/slang"
   extract_to "$slang_dir" 0
   "$slang_dir/bin/slangc" -version >/dev/null
-  echo "Slang $slang_version（slangc）を $slang_dir に配置しました"
+  echo "Slang ${slang_version}（slangc）を $slang_dir に配置しました"
 fi
 
 # MoltenVK（macOS の実行時のライブラリ）

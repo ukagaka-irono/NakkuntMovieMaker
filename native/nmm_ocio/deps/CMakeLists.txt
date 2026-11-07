@@ -94,7 +94,15 @@ nmm_ocio_dependency(expat CMAKE_ARGS
     -DEXPAT_SHARED_LIBS=OFF
     -DEXPAT_MSVC_STATIC_CRT=ON)
 
+# yaml-cpp 0.8.0 の emitterutils.cpp は <cstdint> を読み込まずに uint16_t を使うので、GCC 13 以降でビルドできない。
+# ソースは変えずに、コンパイラの -include で読み込ませる（MSVC は別のヘッダー経由で読むので要らない）
+if(WIN32)
+    set(yaml_cpp_flags "")
+else()
+    set(yaml_cpp_flags "-DCMAKE_CXX_FLAGS=-include cstdint")
+endif()
 nmm_ocio_dependency(yaml-cpp CMAKE_ARGS
+    ${yaml_cpp_flags}
     -DYAML_BUILD_SHARED_LIBS=OFF
     -DYAML_CPP_BUILD_TESTS=OFF
     -DYAML_CPP_BUILD_TOOLS=OFF

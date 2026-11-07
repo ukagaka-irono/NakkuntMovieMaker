@@ -57,7 +57,7 @@ if [ "$(cat "$ocio_root/.stamp" 2>/dev/null || true)" != "$ocio_stamp" ]; then
   cmake --build "$ocio_root/build" --config Release
   echo "$ocio_stamp" > "$ocio_root/.stamp"
 else
-  echo "OpenColorIO $(jq -r '.ocio.version' "$deps") は前のビルドを使います（$ocio_prefix）"
+  echo "OpenColorIO $(jq -r '.ocio.version' "$deps") は前のビルドを使います（${ocio_prefix}）"
 fi
 
 ocio_shim_build="$root/native/build/$rid-nmm_ocio"
