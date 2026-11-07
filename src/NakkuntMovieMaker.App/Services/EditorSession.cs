@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CommunityToolkit.Mvvm.ComponentModel;
+using NakkuntMovieMaker.ColorManagement;
 using NakkuntMovieMaker.Core.Assets;
 using NakkuntMovieMaker.Core.Editing;
 using NakkuntMovieMaker.Core.Model;
@@ -9,6 +10,7 @@ using NakkuntMovieMaker.Engine.Playback;
 using NakkuntMovieMaker.Engine.Tachie;
 using NakkuntMovieMaker.Media;
 using NakkuntMovieMaker.Rendering;
+using NakkuntMovieMaker.Rendering.Color;
 using NakkuntMovieMaker.Rendering.Skia;
 using NakkuntMovieMaker.Text;
 using NakkuntMovieMaker.Voice;
@@ -398,6 +400,24 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
         }
     }
 
+    // プレビューの表示の変換（利用者ごとの設定）。変換できなければ、変換せずに表示する
+    private static ColorLut? PreviewTransform(Project project, AppSettings settings)
+    {
+        if (settings.PreviewColorSpace is not { } destination || !Ocio.TryLoad(out _))
+        {
+            return null;
+        }
+
+        try
+        {
+            return ColorTransforms.Shared.Output(project.Color.OcioConfig, destination);
+        }
+        catch (OcioException)
+        {
+            return null;
+        }
+    }
+
     // 1 つのプロジェクトのフォルダに結びついた、素材・描画・再生・音声合成
     private sealed class Workspace : IDisposable
     {
@@ -416,7 +436,7 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
             Media = new ProjectMediaSource(project, folder, Cache);
             var timeline = new TimelineContext(project.Characters, new TachieLoader(folder), new ProjectLipSync(Media))
         {
-            Color = FrameColor.From(project.Color),
+            Color = FrameColor.From(project.Color).WithOutput(PreviewTransform(project, session.Settings)),
         };
             Frames = new FrameScheduler(session.Scene, Backend, Media, timeline: timeline) { Scale = session.Settings.PreviewScale };
             _connection = Frames.Connect(session.Document, session.SceneId);

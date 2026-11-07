@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using NakkuntMovieMaker.Core.Collections;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Media;
+using NakkuntMovieMaker.Rendering.Color;
 using NakkuntMovieMaker.Rendering.Effects;
 using NakkuntMovieMaker.Rendering.Skia;
 using NakkuntMovieMaker.Text;
@@ -25,6 +26,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     private static readonly GpuBindingKind[] ClearBindings = [GpuBindingKind.StorageBuffer];
     internal static readonly GpuBindingKind[] CompositeBindings = [GpuBindingKind.StorageBuffer, GpuBindingKind.StorageBuffer];
     private static readonly GpuBindingKind[] ConvertBindings = [GpuBindingKind.StorageBuffer, GpuBindingKind.StorageBuffer];
+    private static readonly GpuBindingKind[] OutputBindings = [GpuBindingKind.StorageBuffer, GpuBindingKind.StorageBuffer, GpuBindingKind.StorageBuffer];
 
     private readonly VulkanDevice _device;
     private readonly bool _ownsDevice;
@@ -34,6 +36,8 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     private readonly TexturePool _pool;
     private readonly GpuCache<BgraImage> _sources;
     private readonly GpuCache<EffectKey> _effectResults;
+    private readonly GpuCache<ColorLut> _outputLuts;
+    private GpuBuffer? _emptyLut;
     private readonly ConcurrentDictionary<EffectKey, byte> _effectKnown = new();
     private long _gpuEffectNodes;
     private long _cpuLayers;
@@ -62,6 +66,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             _pool = new TexturePool(_allocator, _allocator.BudgetBytes / 4);
             _sources = new GpuCache<BgraImage>(_allocator.BudgetBytes / 2);
             _effectResults = new GpuCache<EffectKey>(_allocator.BudgetBytes / 4);
+            _outputLuts = new GpuCache<ColorLut>(64L << 20);
             _cpu = new SkiaCpuBackend(layouts: layouts);
         }
         catch
@@ -120,7 +125,8 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
         var linear = plan.Color.IsLinear;
         var background = linear ? LinearPremultiplied(plan.Background) : Premultiplied(plan.Background);
-        var task = _scheduler.RunAsync(context => Record(context, operations, background, width, height, linear), cancellationToken);
+        var outputLut = plan.Color.Output;
+        var task = _scheduler.RunAsync(context => Record(context, operations, background, width, height, linear, outputLut), cancellationToken);
         return task.GetAwaiter().GetResult();
     }
 
@@ -135,6 +141,8 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         _scheduler.Dispose();
         _sources.Dispose();
         _effectResults.Dispose();
+        _outputLuts.Dispose();
+        _emptyLut?.Dispose();
         _pool.Dispose();
         _shaders.Dispose();
         _allocator.Dispose();
@@ -327,11 +335,12 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     }
 
     // GPU のスレッドで：作業用の画像を背景で塗り、ノードを順に重ねて、BGRA にして読み戻す
-    private VulkanRenderResult Record(GpuCommandContext context, List<object> steps, Vector4 background, int width, int height, bool linear)
+    private VulkanRenderResult Record(GpuCommandContext context, List<object> steps, Vector4 background, int width, int height, bool linear, ColorLut? output)
     {
         _linear = linear;
         _sources.Collect(_scheduler.CompletedValue);
         _effectResults.Collect(_scheduler.CompletedValue);
+        _outputLuts.Collect(_scheduler.CompletedValue);
 
         // 作業用の画像は、どの GPU でも使えるようにバッファーにする（1 画素 8 バイト）。この仕事が終わったら捨てる
         var work = _allocator.CreateBuffer((ulong)width * (ulong)height * 8, VkBufferUsageFlags.StorageBuffer, GpuBufferKind.DeviceLocal);
@@ -348,8 +357,25 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         }
 
         var readback = _allocator.CreateBuffer((ulong)(width * height * 4), VkBufferUsageFlags.StorageBuffer, GpuBufferKind.Readback);
-        var convert = _shaders.Get("to_bgra8", ConvertBindings, sizeof(ConvertParams));
-        convert.Dispatch(context, [work, readback], new ConvertParams { Width = width, Height = height, EncodeSrgb = linear ? 1 : 0 }, ComputePipeline.Groups(width, 8), ComputePipeline.Groups(height, 8));
+        var convert = _shaders.Get("to_bgra8", OutputBindings, sizeof(ConvertParams));
+        var parameters = new ConvertParams { Width = width, Height = height, EncodeSrgb = linear ? 1 : 0 };
+        GpuBuffer lut;
+        if (output is not null)
+        {
+            lut = OutputLut(context, output);
+            parameters.UseLut = 1;
+            parameters.ShaperLength = output.Shaper.Length;
+            parameters.CubeSize = output.Cube.Size;
+            parameters.CubeOffset = output.Shaper.Length;
+            parameters.LutEncodeSrgb = output.EncodeSrgb ? 1 : 0;
+        }
+        else
+        {
+            // 変換がなくても、何かのバッファーをつないでおく
+            lut = _emptyLut ??= CreateEmptyLut();
+        }
+
+        convert.Dispatch(context, [work, readback, lut], parameters, ComputePipeline.Groups(width, 8), ComputePipeline.Groups(height, 8));
         GpuBarriers.AfterCompute(context);
         return new VulkanRenderResult(context.Fence, readback, width, height);
     }
@@ -478,6 +504,32 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         };
         composite.Dispatch(context, [work, result.Buffer], parameters, ComputePipeline.Groups(region.Width, 8), ComputePipeline.Groups(region.Height, 8));
         GpuBarriers.AfterCompute(context);
+    }
+
+    // 出力の変換の表（シェーパーと 3D LUT を 1 つのバッファーに続けて置く）。同じ変換なら、GPU に送り直さない
+    private GpuBuffer OutputLut(GpuCommandContext context, ColorLut lut)
+    {
+        if (_outputLuts.TryGet<GpuBuffer>(lut, context.Value, out var cached))
+        {
+            return cached;
+        }
+
+        var cube = lut.Cube.Table;
+        var buffer = _allocator.CreateBuffer((ulong)((lut.Shaper.Length + cube.Length * 3) * sizeof(float)), VkBufferUsageFlags.StorageBuffer, GpuBufferKind.Upload);
+        var floats = MemoryMarshal.Cast<byte, float>(buffer.Span);
+        lut.Shaper.CopyTo(floats);
+        MemoryMarshal.Cast<Vector3, float>(cube).CopyTo(floats[lut.Shaper.Length..]);
+        buffer.Flush();
+        _outputLuts.Add(lut, buffer, buffer.Bytes, context.Value);
+        return buffer;
+    }
+
+    private GpuBuffer CreateEmptyLut()
+    {
+        var buffer = _allocator.CreateBuffer(16, VkBufferUsageFlags.StorageBuffer, GpuBufferKind.Upload);
+        buffer.Span.Clear();
+        buffer.Flush();
+        return buffer;
     }
 
     // 素材の画素を GPU のバッファーにする。静止画は覚えておき、動画のフレームと CPU で描いた画像は、この仕事が終わったら捨てる
@@ -614,6 +666,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     private struct ConvertParams
     {
         public int Width, Height, EncodeSrgb;
+        public int UseLut, ShaperLength, CubeSize, CubeOffset, LutEncodeSrgb;
     }
 }
 

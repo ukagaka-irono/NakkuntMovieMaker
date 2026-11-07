@@ -13,6 +13,8 @@ public sealed class GoldenImageTests
 
     public static TheoryData<string> LinearScenes => new(RenderScenes.LinearNames);
 
+    public static TheoryData<string> OutputScenes => new(RenderScenes.OutputNames);
+
     [Theory]
     [MemberData(nameof(Scenes))]
     public void MatchesTheGoldenImage(string name)
@@ -31,6 +33,10 @@ public sealed class GoldenImageTests
     [Theory]
     [MemberData(nameof(LinearScenes))]
     public void MatchesTheLinearGoldenImage(string name) => MatchesTheGoldenImage(name);
+
+    [Theory]
+    [MemberData(nameof(OutputScenes))]
+    public void MatchesTheOutputTransformGoldenImage(string name) => MatchesTheGoldenImage(name);
 
     [Fact]
     public void DefaultColorDrawsLikeM1()

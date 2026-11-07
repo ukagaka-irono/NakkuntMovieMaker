@@ -1,11 +1,13 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using NakkuntMovieMaker.Audio;
+using NakkuntMovieMaker.ColorManagement;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Core.Time;
 using NakkuntMovieMaker.Engine.Tachie;
 using NakkuntMovieMaker.Media;
 using NakkuntMovieMaker.Rendering;
+using NakkuntMovieMaker.Rendering.Color;
 using NakkuntMovieMaker.Rendering.Skia;
 
 namespace NakkuntMovieMaker.Engine.Export;
@@ -82,7 +84,7 @@ public sealed class ExportPipeline : IDisposable
         _media = new ProjectMediaSource(project, projectFolder, new MediaCache(Path.Combine(projectFolder, ".nmm", "cache")), ConversionQuality.Accurate);
         _timeline = new TimelineContext(project.Characters, new TachieLoader(projectFolder), new ProjectLipSync(_media))
         {
-            Color = FrameColor.From(project.Color),
+            Color = FrameColor.From(project.Color).WithOutput(ExportTransform(project.Color)),
         };
     }
 
@@ -259,4 +261,22 @@ public sealed class ExportPipeline : IDisposable
     }
 
     private sealed record Output(int Width, int Height, double Scale);
+
+    // 書き出しの変換（プロジェクトの色の設定）。変換できなければ、書き出しを始めずに理由を伝える
+    private static ColorLut? ExportTransform(ProjectColorSettings settings)
+    {
+        if (settings.ExportColorSpace is not { } destination)
+        {
+            return null;
+        }
+
+        try
+        {
+            return ColorTransforms.Shared.Output(settings.OcioConfig, destination);
+        }
+        catch (OcioException ex)
+        {
+            throw new InvalidOperationException($"書き出しの色の変換（{destination}）を準備できません：{ex.Message}", ex);
+        }
+    }
 }

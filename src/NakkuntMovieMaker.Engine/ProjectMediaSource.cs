@@ -1,10 +1,12 @@
 using System.Collections.Concurrent;
 using NakkuntMovieMaker.Audio;
+using NakkuntMovieMaker.ColorManagement;
 using NakkuntMovieMaker.Core.Assets;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Core.Time;
 using NakkuntMovieMaker.Media;
 using NakkuntMovieMaker.Rendering;
+using NakkuntMovieMaker.Rendering.Color;
 
 namespace NakkuntMovieMaker.Engine;
 
@@ -30,13 +32,18 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
     private readonly ConcurrentDictionary<(string Path, int Step), SourceImage?> _files = new();
     private readonly ConcurrentDictionary<(AssetId Asset, int Step), DecoderSlot?> _decoders = new();
     private readonly ConcurrentDictionary<AssetId, Lazy<PcmAudio?>> _audio = new();
+    private readonly ConcurrentDictionary<AssetId, ColorLut?> _inputLuts = new();
+    private readonly ConcurrentDictionary<AssetId, string> _inputErrors = new();
+    private readonly ColorTransforms _transforms;
     private readonly ConcurrentDictionary<string, Lazy<PcmAudio?>> _voices = new(StringComparer.Ordinal);
     private long _imageBytes;
 
     /// <param name="quality">動画の RGB への変換の質（プレビューは速さ、書き出しは質を優先する）</param>
-    public ProjectMediaSource(Project project, string projectFolder, MediaCache cache, ConversionQuality quality = ConversionQuality.Fast)
+    public ProjectMediaSource(
+        Project project, string projectFolder, MediaCache cache, ConversionQuality quality = ConversionQuality.Fast, ColorTransforms? transforms = null)
     {
         _project = project;
+        _transforms = transforms ?? ColorTransforms.Shared;
         _projectFolder = projectFolder;
         _cache = cache;
         _quality = quality;
@@ -92,7 +99,13 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         {
             try
             {
-                return new SourceImage(slot.Decoder.GetFrame(time).Image, slot.Decoder.SourceWidth, slot.Decoder.SourceHeight);
+                var image = slot.Decoder.GetFrame(time).Image;
+                if (InputLut(asset) is { } lut)
+                {
+                    image = ColorLutImage.Apply(lut, image);
+                }
+
+                return new SourceImage(image, slot.Decoder.SourceWidth, slot.Decoder.SourceHeight);
             }
             catch (Exception ex) when (ex is MediaException or ObjectDisposedException)
             {
@@ -108,12 +121,30 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
     public void Update(Project project)
     {
         var previous = Interlocked.Exchange(ref _project, project);
+
+        // 色の構成が変わったら、色を変換した画像をすべて作り直す
+        if (previous.Color.OcioConfig != project.Color.OcioConfig)
+        {
+            foreach (var id in _inputLuts.Keys)
+            {
+                ForgetConvertedImages(id);
+            }
+        }
+
         foreach (var (id, asset) in previous.Assets)
         {
             if (project.Assets.TryGetValue(id, out var current) && current.Path == asset.Path)
             {
+                if (current.ColorSpace != asset.ColorSpace)
+                {
+                    ForgetConvertedImages(id);
+                }
+
                 continue;
             }
+
+            _inputLuts.TryRemove(id, out _);
+            _inputErrors.TryRemove(id, out _);
 
             foreach (var key in _images.Keys.Where(key => key.Asset == id))
             {
@@ -239,7 +270,63 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
             }
         });
 
-    private SourceImage? LoadImage(AssetId asset, int step) => PathOf(asset) is { } path ? LoadImageFile(path, step) : null;
+    /// <summary>素材の入力の色空間を変換できなかった理由（変換しないか、できたなら null）</summary>
+    public string? InputColorError(AssetId asset)
+    {
+        InputLut(asset);
+        return _inputErrors.GetValueOrDefault(asset);
+    }
+
+    private SourceImage? LoadImage(AssetId asset, int step)
+    {
+        if (PathOf(asset) is not { } path || LoadImageFile(path, step) is not { } image)
+        {
+            return null;
+        }
+
+        return InputLut(asset) is { } lut ? image with { Image = ColorLutImage.Apply(lut, image.Image) } : image;
+    }
+
+    // 素材の入力の色空間（Asset.ColorSpace）から作業用の sRGB への変換。指定がない・変換できないときは null（そのまま描く）
+    private ColorLut? InputLut(AssetId asset)
+    {
+        var project = _project;
+        if (!project.Assets.TryGetValue(asset, out var info) || info.ColorSpace is not { } space)
+        {
+            return null;
+        }
+
+        return _inputLuts.GetOrAdd(asset, id =>
+        {
+            if (!Ocio.TryLoad(out var error))
+            {
+                _inputErrors[id] = error ?? "OpenColorIO を使えません";
+                return null;
+            }
+
+            try
+            {
+                _inputErrors.TryRemove(id, out _);
+                return _transforms.Input(project.Color.OcioConfig, space);
+            }
+            catch (OcioException ex)
+            {
+                _inputErrors[id] = ex.Message;
+                return null;
+            }
+        });
+    }
+
+    // 色の変換が変わった素材の、変換した画像（覚えている画像と、変換の表）を捨てる
+    private void ForgetConvertedImages(AssetId id)
+    {
+        _inputLuts.TryRemove(id, out _);
+        _inputErrors.TryRemove(id, out _);
+        foreach (var key in _images.Keys.Where(key => key.Asset == id))
+        {
+            _images.TryRemove(key, out _);
+        }
+    }
 
     private SourceImage? LoadImageFile(string path, int step)
     {

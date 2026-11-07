@@ -25,6 +25,12 @@ public sealed class AppSettings
     /// <summary>プレビューの解像度（1・0.5・0.25）</summary>
     public double PreviewScale { get; set; } = 0.5;
 
+    /// <summary>
+    /// プレビューを表示するモニターの色空間（OpenColorIO の構成の中の名前。"Display P3 - Display" など）。
+    /// null なら変換しない（sRGB のモニターとして表示する）
+    /// </summary>
+    public string? PreviewColorSpace { get; set; }
+
     public string? OutputDevice { get; set; }
 
     public string? InputDevice { get; set; }

@@ -58,9 +58,17 @@ public static class RenderScenes
         "linear/transition-wipe",
     ];
 
+    /// <summary>出力の変換（プレビューの表示・書き出しの変換）をかける場面。ゴールデン画像は Golden/output にある</summary>
+    public static IReadOnlyList<string> OutputNames { get; } =
+    [
+        "output/composition",
+        "output/transition-crossfade",
+    ];
+
     public static RenderScene Create(string name) => name switch
     {
         _ when name.StartsWith("linear/", StringComparison.Ordinal) => Linear(name),
+        _ when name.StartsWith("output/", StringComparison.Ordinal) => Output(name),
         "composition" => Composition(name, 1),
         "composition-half" => Composition(name, 0.5),
         "shapes" => Shapes(name),
@@ -72,6 +80,13 @@ public static class RenderScenes
 
     private static RenderScene Make(string name, Scene scene, TestMedia media, long frame = 0, RgbaColor? background = null, double scale = 1, bool fonts = false, IDisposable? resources = null) =>
         new(name, TimelineEvaluator.Evaluate(scene, frame, background), media, scale, fonts, resources);
+
+    // 同じ場面を描いてから、テスト用の出力の変換をかける
+    private static RenderScene Output(string name)
+    {
+        var scene = Create(name["output/".Length..]);
+        return new RenderScene(name, scene.Plan with { Color = scene.Plan.Color.WithOutput(TestLuts.Grade) }, scene.Media, scene.Scale, scene.RequiresFonts, scene);
+    }
 
     // 同じ場面を、リニアのモードで描く
     private static RenderScene Linear(string name)

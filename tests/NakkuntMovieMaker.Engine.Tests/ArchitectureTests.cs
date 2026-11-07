@@ -12,6 +12,8 @@ public class ArchitectureTests
         "NakkuntMovieMaker.Text",
         "NakkuntMovieMaker.Rendering",
         "NakkuntMovieMaker.Rendering.Skia",
+        "NakkuntMovieMaker.Rendering.Vulkan",
+        "NakkuntMovieMaker.ColorManagement",
         "NakkuntMovieMaker.Audio",
         "NakkuntMovieMaker.Voice",
         "NakkuntMovieMaker.Voice.ColorfulTalk",

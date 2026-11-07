@@ -2,6 +2,7 @@ using System.Numerics;
 using NakkuntMovieMaker.Core.Collections;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Core.Time;
+using NakkuntMovieMaker.Rendering.Color;
 using NakkuntMovieMaker.Rendering.Effects;
 
 namespace NakkuntMovieMaker.Rendering;
@@ -19,9 +20,11 @@ public sealed record FramePlan(int Width, int Height, RgbaColor Background, Equa
 
 /// <summary>
 /// フレームを描くときの色の設定。Compositing がリニアなら、合成（重ねる・混ぜる・トランジション）をリニアの Rec.709 で計算する。
-/// 素材・文字・図形の色と、出力は sRGB のまま。エフェクトの中の計算（色の処理・ぼかし）は、どちらでも sRGB で行う
+/// 素材・文字・図形の色と、出力は sRGB のまま。エフェクトの中の計算（色の処理・ぼかし）は、どちらでも sRGB で行う。
+/// Output は、描き終えた画像（sRGB）にかける色の変換（プレビューの表示の変換・書き出しの変換）。null なら変換しない。
+/// 比べるときは、同じ変換のインスタンス（ColorTransforms が覚えているもの）なら同じとみなす
 /// </summary>
-public sealed record FrameColor(CompositingSpace Compositing = CompositingSpace.Srgb)
+public sealed record FrameColor(CompositingSpace Compositing = CompositingSpace.Srgb, ColorLut? Output = null)
 {
     public static FrameColor Default { get; } = new();
 
@@ -35,6 +38,9 @@ public sealed record FrameColor(CompositingSpace Compositing = CompositingSpace.
         ArgumentNullException.ThrowIfNull(settings);
         return settings.Compositing == CompositingSpace.Linear ? Linear : Default;
     }
+
+    /// <summary>出力の変換を付けたもの</summary>
+    public FrameColor WithOutput(ColorLut? output) => output is null && Output is null ? this : this with { Output = output };
 }
 
 /// <summary>描画の木の節</summary>

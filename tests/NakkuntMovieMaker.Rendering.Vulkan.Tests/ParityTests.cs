@@ -25,7 +25,7 @@ public sealed class ParityTests : IDisposable
         }
     }
 
-    public static TheoryData<string> Scenes => new(RenderScenes.Names.Concat(RenderScenes.LinearNames));
+    public static TheoryData<string> Scenes => new(RenderScenes.Names.Concat(RenderScenes.LinearNames).Concat(RenderScenes.OutputNames));
 
     public void Dispose()
     {

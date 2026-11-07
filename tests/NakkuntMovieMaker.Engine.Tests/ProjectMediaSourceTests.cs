@@ -1,3 +1,4 @@
+using NakkuntMovieMaker.ColorManagement;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Core.Time;
 using NakkuntMovieMaker.Engine.Benchmarks;
@@ -22,13 +23,66 @@ public sealed class ProjectMediaSourceTests : IDisposable
 
     private static string Fixture(string name) => Path.Combine(AppContext.BaseDirectory, "Fixtures", name);
 
-    // 素材を 1 つ登録したプロジェクトと、その素材の ID
-    private (ProjectMediaSource Media, AssetId Asset) Open(string storedPath, AssetKind kind)
+    private static void RequireOcio()
     {
-        var asset = new Asset(AssetId.New(), kind, storedPath);
+        var loaded = Ocio.TryLoad(out var error);
+        Assert.SkipWhen(!loaded && Environment.GetEnvironmentVariable("NMM_REQUIRE_OCIO") != "1", $"nmm_ocio を読み込めないためスキップします（{error}）");
+        Assert.True(loaded, error);
+    }
+
+    // 素材を 1 つ登録したプロジェクトと、その素材の ID
+    private (ProjectMediaSource Media, AssetId Asset) Open(string storedPath, AssetKind kind, string? colorSpace = null)
+    {
+        var asset = new Asset(AssetId.New(), kind, storedPath, ColorSpace: colorSpace);
         var project = Project.CreateNew("テスト", SceneFormat.Landscape1080p30);
         project = project with { Assets = project.Assets.Add(asset.Id, asset) };
         return (new ProjectMediaSource(project, _folder, new MediaCache(Path.Combine(_folder, ".nmm", "cache"))), asset.Id);
+    }
+
+    [Fact]
+    public void ImagesWithoutAColorSpaceAreNotConverted()
+    {
+        // 既定（入力の色空間の指定なし）では、色を変換しない（OpenColorIO がなくても描ける）
+        RequireFfmpeg();
+        var (media, asset) = Open(Fixture("green-64x48.png"), AssetKind.Image);
+        using var _ = media;
+
+        var image = media.GetImage(asset, 1)!;
+
+        Assert.Equal(image.Image.Pixels, new MediaCache(Path.Combine(_folder, ".nmm", "cache")).GetImage(Fixture("green-64x48.png"), 64, 48).Pixels);
+        Assert.Null(media.InputColorError(asset));
+    }
+
+    [Fact]
+    public void ConvertsImagesFromTheirInputColorSpace()
+    {
+        // ガンマ 2.2 の素材は、作業用の sRGB にすると、中間の明るさが少し変わる（純色の 255 は変わらない）
+        RequireFfmpeg();
+        RequireOcio();
+        var (plain, plainAsset) = Open(Fixture("green-64x48.png"), AssetKind.Image);
+        var (converted, convertedAsset) = Open(Fixture("green-64x48.png"), AssetKind.Image, "Gamma 2.2 Encoded Rec.709");
+        using var a = plain;
+        using var b = converted;
+
+        var before = plain.GetImage(plainAsset, 1)!.Image;
+        var after = converted.GetImage(convertedAsset, 1)!.Image;
+
+        Assert.Null(converted.InputColorError(convertedAsset));
+        Assert.Equal(before.Pixels.Length, after.Pixels.Length);
+        Assert.NotEqual(before.Pixels, after.Pixels);
+        Assert.All(Enumerable.Range(0, before.Pixels.Length / 4), i => Assert.InRange(after.Pixels[i * 4 + 1] - before.Pixels[i * 4 + 1], -12, 12));
+    }
+
+    [Fact]
+    public void ReportsUnknownInputColorSpaces()
+    {
+        RequireFfmpeg();
+        RequireOcio();
+        var (media, asset) = Open(Fixture("green-64x48.png"), AssetKind.Image, "存在しない色空間");
+        using var _ = media;
+
+        Assert.NotNull(media.GetImage(asset, 1)); // 変換できなければ、そのまま描く
+        Assert.Contains("存在しない色空間", media.InputColorError(asset));
     }
 
     [Fact]

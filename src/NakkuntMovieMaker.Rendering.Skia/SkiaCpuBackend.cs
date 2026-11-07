@@ -1,6 +1,7 @@
 using System.Numerics;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Media;
+using NakkuntMovieMaker.Rendering.Color;
 using NakkuntMovieMaker.Rendering.Skia.Effects;
 using NakkuntMovieMaker.Rendering.Skia.Transitions;
 using NakkuntMovieMaker.Text;
@@ -70,7 +71,14 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         }
 
         var (width, height) = OutputSize(plan, scale);
-        return RenderInto(plan.Nodes, plan, media, scale, new PixelRegion(0, 0, width, height), plan.Background, cancellationToken);
+        var image = RenderInto(plan.Nodes, plan, media, scale, new PixelRegion(0, 0, width, height), plan.Background, cancellationToken);
+        if (plan.Color.Output is { } output)
+        {
+            // 出力の変換（プレビューの表示・書き出し）は、描き終えた sRGB の画像にかける
+            ColorLutImage.ApplyInPlace(output, image);
+        }
+
+        return image;
     }
 
     /// <summary>出力の大きさ（GPU 版も同じ大きさにする）</summary>

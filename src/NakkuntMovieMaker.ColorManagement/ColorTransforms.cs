@@ -244,6 +244,55 @@ public sealed class ColorTransforms : IDisposable
         });
     }
 
+    /// <summary>
+    /// 素材（入力の色空間 source）を、作業用の sRGB にする変換。HDR（PQ・HLG）のディスプレイの色空間はトーンマップし、
+    /// ほかのディスプレイの色空間は sRGB のディスプレイへ、シーンの色空間は作業用の sRGB へ、そのまま変換する。何もしない変換なら null
+    /// </summary>
+    public ColorLut? Input(string? configName, string source)
+    {
+        var config = Config(configName);
+        var canonical = config.CanonicalColorSpace(source) ?? throw new OcioException($"色空間「{source}」が構成「{config.Name}」にありません");
+        if (!config.Displays.Contains(canonical))
+        {
+            return Transform(configName, canonical, WorkingColorSpaces.Srgb);
+        }
+
+        if (IsHdr(canonical) && HdrView(config, canonical) is { } hdrView && SdrView(config) is { } sdrView)
+        {
+            return ToneMap(configName, canonical, hdrView, SrgbDisplay, sdrView);
+        }
+
+        return Transform(configName, canonical, SrgbDisplay);
+    }
+
+    /// <summary>
+    /// 描き終えた画像（作業用の sRGB）を、色空間 destination にする変換（書き出し・プレビューの表示）。
+    /// ディスプレイの色空間へは sRGB のディスプレイから変換する。何もしない変換なら null
+    /// </summary>
+    public ColorLut? Output(string? configName, string destination)
+    {
+        var config = Config(configName);
+        var canonical = config.CanonicalColorSpace(destination) ?? throw new OcioException($"色空間「{destination}」が構成「{config.Name}」にありません");
+        return Transform(configName, config.Displays.Contains(canonical) ? SrgbDisplay : WorkingColorSpaces.Srgb, canonical);
+    }
+
+    private const string SrgbDisplay = "sRGB - Display";
+
+    private static bool IsHdr(string display) =>
+        display.Contains("PQ", StringComparison.Ordinal) || display.Contains("HDR", StringComparison.Ordinal)
+        || display.Contains("ST2084", StringComparison.Ordinal) || display.Contains("HLG", StringComparison.Ordinal);
+
+    // HDR のディスプレイのビュー（"HDR" を含むもの。Rec.2020 があればそれ）
+    private static string? HdrView(OcioConfig config, string display)
+    {
+        var views = config.Views(display).Where(view => view.Contains("HDR", StringComparison.Ordinal)).ToList();
+        return views.FirstOrDefault(view => view.Contains("Rec.2020", StringComparison.Ordinal)) ?? views.FirstOrDefault();
+    }
+
+    // sRGB のディスプレイの SDR のビュー
+    private static string? SdrView(OcioConfig config) =>
+        config.Views(SrgbDisplay).FirstOrDefault(view => view.Contains("SDR", StringComparison.Ordinal)) ?? config.DefaultView(SrgbDisplay);
+
     // トーンマップでつなぐシーンの色空間
     private const string SceneLinear = "ACEScg";
 
