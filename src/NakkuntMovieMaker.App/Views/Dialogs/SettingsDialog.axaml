@@ -56,6 +56,28 @@
           <TextBlock Grid.Row="4" Grid.Column="1" Classes="secondary" Text="{Binding FfmpegStatus}" TextWrapping="Wrap" />
         </Grid>
       </TabItem>
+      <TabItem Header="描画">
+        <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="12" Margin="0,12,0,0">
+          <TextBlock Classes="field-label" Text="描画の方式" />
+          <ComboBox Grid.Column="1" ItemsSource="{Binding Renderers}" SelectedItem="{Binding Renderer}" HorizontalAlignment="Stretch" />
+          <TextBlock Grid.Row="1" Classes="field-label" Text="使う GPU" />
+          <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding GpuDevices}" SelectedItem="{Binding GpuDevice}" IsEnabled="{Binding UsesGpu}"
+                    HorizontalAlignment="Stretch" />
+          <TextBlock Grid.Row="2" Classes="field-label" Text="GPU のメモリの上限（MB）" />
+          <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource Space2}">
+            <NumericUpDown Value="{Binding GpuMemoryLimit}" Minimum="0" Maximum="16384" Increment="128" FormatString="0" Width="120"
+                           IsEnabled="{Binding UsesGpu}" />
+            <TextBlock Classes="secondary" Text="0 にすると自動（GPU のメモリの半分、最大 1024MB）" VerticalAlignment="Center" />
+          </StackPanel>
+          <TextBlock Grid.Row="3" Classes="field-label" Text="試験的な機能" />
+          <CheckBox Grid.Row="3" Grid.Column="1" IsChecked="{Binding ExperimentalVulkanVideo}" IsEnabled="{Binding UsesGpu}"
+                    Content="動画を Vulkan Video でデコードする（GPU によっては、アプリが止まります）" />
+          <TextBlock Grid.Row="4" Grid.Column="1" Classes="secondary" Text="描画の設定は、次にプロジェクトを開いたときから使います" TextWrapping="Wrap" />
+          <TextBlock Grid.Row="5" Classes="field-label" Text="今の描画" />
+          <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding CurrentRenderer}" VerticalAlignment="Center" TextWrapping="Wrap" />
+          <TextBlock Grid.Row="6" Grid.Column="1" Classes="warning" Text="{Binding RendererProblem}" IsVisible="{Binding HasRendererProblem}" />
+        </Grid>
+      </TabItem>
     </TabControl>
   </DockPanel>
 </Window>

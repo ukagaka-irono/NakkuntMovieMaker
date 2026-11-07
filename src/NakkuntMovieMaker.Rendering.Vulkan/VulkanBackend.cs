@@ -59,13 +59,13 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     /// <param name="layouts">文字の配置のキャッシュ（大きさを測る処理と共有するとき）</param>
     /// <exception cref="VulkanException">GPU を使えない</exception>
     /// <param name="ownsDevice">渡した device も、破棄するときに一緒に破棄するか</param>
-    public VulkanBackend(VulkanDevice? device = null, TextLayoutCache? layouts = null, bool ownsDevice = false, string? pipelineCachePath = null)
+    public VulkanBackend(VulkanDevice? device = null, TextLayoutCache? layouts = null, bool ownsDevice = false, string? pipelineCachePath = null, long? memoryBudgetBytes = null)
     {
         _ownsDevice = device is null || ownsDevice;
         _device = device ?? VulkanDevice.Create();
         try
         {
-            _allocator = new GpuAllocator(_device);
+            _allocator = new GpuAllocator(_device, memoryBudgetBytes);
             _scheduler = new GpuScheduler(_device);
             _shaders = new ShaderLibrary(_device, pipelineCachePath);
             _pool = new TexturePool(_allocator, _allocator.BudgetBytes / 4);

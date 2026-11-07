@@ -107,6 +107,15 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
     /// <summary>プレビューの描画（素材の大きさを測るのにも使う）</summary>
     public IRenderBackend Backend => _workspace!.Backend;
 
+    /// <summary>描画の方式の名前（「Vulkan（GPU の名前）」・「Skia（CPU）」）。プロジェクトを開いていなければ null</summary>
+    public string? RendererName => _workspace?.Backend.Info.Name;
+
+    /// <summary>望んだ描画の方式を使えずに CPU に切り替えた理由（切り替えていなければ null）</summary>
+    public string? RendererProblem => _workspace?.RendererProblem;
+
+    /// <summary>描画の方式が変わった（GPU が使えなくなって CPU に切り替えたなど。描画のスレッドから呼ばれることがある）</summary>
+    public event EventHandler? RendererChanged;
+
     /// <summary>プレビュー上でアイテムの大きさを測る（描画と文字の配置のキャッシュを共有する）</summary>
     public ContentMeasurer Measurer => _workspace!.Measurer;
 
@@ -429,17 +438,36 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
             var folder = session.ProjectFolder;
             Cache = new MediaCache(Path.Combine(folder, ".nmm", "cache"));
             var layouts = new TextLayoutCache();
-            // GPU の準備の途中で止まったら、次の起動で CPU を使えるように、設定のファイルの隣に目印を置く
+            // 設定の描画の方式で作る。GPU の準備の途中で止まったら、次の起動で CPU を使えるように、設定のファイルの隣に目印を置く
             var marker = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(session._settingsPath)) ?? ".", "gpu-starting");
-            Backend = RenderBackendFactory.Create(RendererOptions.Default with { CrashMarkerPath = marker }, layouts).Backend;
+            var settings = session.Settings;
+            var options = new RendererOptions(
+                RendererOptions.ParsePreference(settings.Renderer) ?? RendererPreference.Auto,
+                settings.RendererDevice,
+                marker,
+                settings.ExperimentalVulkanVideo,
+                settings.GpuMemoryLimitMegabytes);
+            var selection = RenderBackendFactory.Create(options, layouts);
+            Backend = selection.Backend;
+            RendererProblem = selection.FallbackReason;
+            if (Backend is FallbackBackend fallback)
+            {
+                // 描いている途中で GPU が使えなくなったら、CPU に切り替えたことを知らせる
+                fallback.FellBack += reason =>
+                {
+                    RendererProblem = reason;
+                    session.RendererChanged?.Invoke(session, EventArgs.Empty);
+                };
+            }
+
             Measurer = new ContentMeasurer(layouts);
             // プレビューでは、プロジェクトの設定に合う動画にプロキシを使う（書き出しは別の素材の読み出しで、元の素材を読む）
             Proxies = new ProxyQueue(Cache);
             Media = new ProjectMediaSource(project, folder, Cache, proxies: Proxies);
             var timeline = new TimelineContext(project.Characters, new TachieLoader(folder), new ProjectLipSync(Media))
-        {
-            Color = FrameColor.From(project.Color).WithOutput(PreviewTransform(project, session.Settings)),
-        };
+            {
+                Color = FrameColor.From(project.Color).WithOutput(PreviewTransform(project, session.Settings)),
+            };
             Frames = new FrameScheduler(session.Scene, Backend, Media, timeline: timeline) { Scale = session.Settings.PreviewScale };
             _connection = Frames.Connect(session.Document, session.SceneId);
             Playback = new PlaybackController(
@@ -454,6 +482,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
         public MediaCache Cache { get; }
 
         public IRenderBackend Backend { get; }
+
+        /// <summary>望んだ描画の方式を使えなかった理由</summary>
+        public string? RendererProblem { get; private set; }
 
         public ContentMeasurer Measurer { get; }
 

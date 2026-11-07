@@ -118,7 +118,12 @@
     </Menu>
 
     <Border DockPanel.Dock="Bottom" Padding="8,2" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0">
-      <TextBlock Classes="secondary" Text="{Binding Status}" />
+      <DockPanel>
+        <!-- 今の描画の方式。望んだ方式を使えずに CPU で描いているときは警告の色で、理由をツールチップに出す -->
+        <TextBlock DockPanel.Dock="Right" Classes="secondary" Classes.warning="{Binding HasRendererProblem}" Text="{Binding RendererLabel}"
+                   ToolTip.Tip="{Binding RendererProblem}" TextWrapping="NoWrap" Margin="12,0,0,0" />
+        <TextBlock Classes="secondary" Text="{Binding Status}" />
+      </DockPanel>
     </Border>
 
     <Grid x:Name="Workspace" Margin="4" RowDefinitions="*,4,360" ColumnDefinitions="320,4,*,4,360">

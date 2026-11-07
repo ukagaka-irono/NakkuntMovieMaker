@@ -22,7 +22,8 @@ public sealed unsafe class GpuAllocator : IDisposable
     private long _allocatedBytes;
     private bool _disposed;
 
-    public GpuAllocator(VulkanDevice device)
+    /// <param name="budgetBytes">使ってよい GPU のメモリ（null なら、ヒープの大きさから決める既定値）</param>
+    public GpuAllocator(VulkanDevice device, long? budgetBytes = null)
     {
         Device = device;
         var functions = new VmaVulkanFunctions
@@ -45,7 +46,7 @@ public sealed unsafe class GpuAllocator : IDisposable
         }
 
         _allocator = allocator;
-        BudgetBytes = DefaultBudget(device);
+        BudgetBytes = budgetBytes ?? DefaultBudget(device);
     }
 
     public VulkanDevice Device { get; }

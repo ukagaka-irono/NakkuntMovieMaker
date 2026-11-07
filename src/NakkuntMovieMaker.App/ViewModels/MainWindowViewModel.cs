@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using NakkuntMovieMaker.App.Services;
 using NakkuntMovieMaker.Core.Editing;
@@ -56,7 +57,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             RefreshEditState();
             RefreshRecent();
+            RefreshRenderer();
         };
+        // 描いている途中で GPU が使えなくなって CPU に切り替えた（描画のスレッドから呼ばれる）
+        session.RendererChanged += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            RefreshRenderer();
+            Status = $"GPU で描けなくなったので、CPU で描いています（{Session.RendererProblem}）";
+        });
         RefreshRecent();
 
         shortcuts.Bind("file.new", NewProjectCommand);
@@ -135,6 +143,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>状態の表示（画面の下）</summary>
     [ObservableProperty]
     public partial string Status { get; set; } = "準備完了";
+
+    /// <summary>状態バーに出す、今の描画の方式</summary>
+    public string RendererLabel => Session.RendererName is { } name ? $"描画：{name}" : "";
+
+    /// <summary>望んだ描画の方式を使えずに CPU に切り替えた理由（なければ null）</summary>
+    public string? RendererProblem => Session.RendererProblem;
+
+    public bool HasRendererProblem => RendererProblem is not null;
 
     public string UndoHeader => Session.Document.UndoDescription is { } description ? $"元に戻す（{description}）" : "元に戻す";
 
@@ -287,11 +303,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Autosave.Start();
     }
 
-    /// <summary>設定（ショートカット・自動保存・出力デバイス・外部の ffmpeg）</summary>
+    /// <summary>設定（ショートカット・自動保存・出力デバイス・外部の ffmpeg・描画）</summary>
     [RelayCommand]
     private async Task SettingsAsync()
     {
-        var settings = new SettingsViewModel(Shortcuts, Session.Settings, _dialogs);
+        var settings = new SettingsViewModel(Shortcuts, Session.Settings, _dialogs, Session.RendererName, Session.RendererProblem);
         if (await _dialogs.ShowDialogAsync<bool?>(new Views.Dialogs.SettingsDialog(), settings) == true)
         {
             settings.Apply(_settingsPath);
@@ -421,6 +437,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Recording.Dispose();
         VoicePlayer.Dispose();
         Session.Dispose();
+    }
+
+    private void RefreshRenderer()
+    {
+        OnPropertyChanged(nameof(RendererLabel));
+        OnPropertyChanged(nameof(RendererProblem));
+        OnPropertyChanged(nameof(HasRendererProblem));
     }
 
     private bool CanUndo() => Session.Document.CanUndo;

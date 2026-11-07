@@ -25,6 +25,18 @@ public sealed class AppSettings
     /// <summary>プレビューの解像度（1・0.5・0.25）</summary>
     public double PreviewScale { get; set; } = 0.5;
 
+    /// <summary>描画の方式（"auto"・"vulkan"・"cpu"）。null なら自動</summary>
+    public string? Renderer { get; set; }
+
+    /// <summary>GPU 版で使う GPU の名前。null なら自動で選ぶ</summary>
+    public string? RendererDevice { get; set; }
+
+    /// <summary>GPU 版で、動画を Vulkan Video でデコードする（試験的。落ちることがある）</summary>
+    public bool ExperimentalVulkanVideo { get; set; }
+
+    /// <summary>GPU 版が使ってよいメモリ（MB）。null なら自動（GPU のメモリの半分・最大 1GB）</summary>
+    public int? GpuMemoryLimitMegabytes { get; set; }
+
     /// <summary>
     /// プレビューを表示するモニターの色空間（OpenColorIO の構成の中の名前。"Display P3 - Display" など）。
     /// null なら変換しない（sRGB のモニターとして表示する）

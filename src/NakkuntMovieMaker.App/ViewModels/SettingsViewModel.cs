@@ -4,7 +4,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using NakkuntMovieMaker.App.Services;
 using NakkuntMovieMaker.Audio;
+using NakkuntMovieMaker.Engine;
 using NakkuntMovieMaker.Media;
+using NakkuntMovieMaker.Rendering.Vulkan;
 
 namespace NakkuntMovieMaker.App.ViewModels;
 
@@ -28,7 +30,7 @@ public sealed partial class ShortcutEntry(ShortcutCommand command) : ObservableO
 
 /// <summary>
 /// 設定。キーボードショートカットの変更（行を選んで「キーを割り当てる」を押し、割り当てるキーを押す。ほかのコマンドが使っていたキーは、そちらから外す）と、
-/// 自動保存の間隔、音の出力デバイス、書き出しに使う外部の ffmpeg（x264・x265）。OK で設定ファイルに書く
+/// 自動保存の間隔、音の出力デバイス、書き出しに使う外部の ffmpeg（x264・x265）、描画（方式・GPU・メモリの上限）。OK で設定ファイルに書く
 /// </summary>
 public sealed partial class SettingsViewModel : ObservableObject
 {
@@ -36,7 +38,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly AppSettings _settings;
     private readonly IDialogService _dialogs;
 
-    public SettingsViewModel(ShortcutRegistry shortcuts, AppSettings settings, IDialogService dialogs)
+    /// <param name="currentRenderer">今使っている描画の方式の名前（プロジェクトを開いていなければ null）</param>
+    /// <param name="rendererProblem">望んだ描画の方式を使えずに CPU に切り替えた理由</param>
+    public SettingsViewModel(
+        ShortcutRegistry shortcuts, AppSettings settings, IDialogService dialogs, string? currentRenderer = null, string? rendererProblem = null)
     {
         _shortcuts = shortcuts;
         _settings = settings;
@@ -62,11 +67,67 @@ public sealed partial class SettingsViewModel : ObservableObject
         OutputDevice = OutputDevices.FirstOrDefault(choice => choice.Name == settings.OutputDevice) ?? OutputDevices[0];
         FfmpegPath = settings.ExternalFfmpegPath;
         FfmpegCheck = CheckFfmpegAsync();
+
+        Renderer = Renderers.FirstOrDefault(choice => choice.Name == RendererOptions.ParsePreference(settings.Renderer)?.ToString().ToLowerInvariant())
+            ?? Renderers[0];
+        GpuDevices.Add(new InputDeviceChoice(null, "自動で選ぶ"));
+        foreach (var device in VulkanDevice.ListDevices().Where(device => device.Suitable && device.Type != VulkanDeviceType.Software))
+        {
+            GpuDevices.Add(new InputDeviceChoice(device.Name, device.Name));
+        }
+
+        // 設定にある GPU が今は見つからなくても、選んだままにしておく
+        if (settings.RendererDevice is { } name && GpuDevices.All(choice => choice.Name != name))
+        {
+            GpuDevices.Add(new InputDeviceChoice(name, $"{name}（見つかりません）"));
+        }
+
+        GpuDevice = GpuDevices.First(choice => choice.Name == settings.RendererDevice);
+        GpuMemoryLimit = settings.GpuMemoryLimitMegabytes ?? 0;
+        ExperimentalVulkanVideo = settings.ExperimentalVulkanVideo;
+        CurrentRenderer = currentRenderer ?? "（プロジェクトを開いていません）";
+        RendererProblem = rendererProblem;
     }
 
     public ObservableCollection<ShortcutEntry> Shortcuts { get; } = [];
 
     public ObservableCollection<InputDeviceChoice> OutputDevices { get; } = [];
+
+    /// <summary>描画の方式（Name は設定に書く値）</summary>
+    public IReadOnlyList<InputDeviceChoice> Renderers { get; } =
+    [
+        new("auto", "自動（使える GPU があれば GPU）"),
+        new("vulkan", "GPU（Vulkan）"),
+        new("cpu", "CPU"),
+    ];
+
+    /// <summary>GPU 版で使う GPU（Name が null なら自動で選ぶ）</summary>
+    public ObservableCollection<InputDeviceChoice> GpuDevices { get; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UsesGpu))]
+    public partial InputDeviceChoice Renderer { get; set; }
+
+    /// <summary>GPU を使う方式を選んでいる（GPU の項目を変えられる）</summary>
+    public bool UsesGpu => Renderer.Name != "cpu";
+
+    [ObservableProperty]
+    public partial InputDeviceChoice GpuDevice { get; set; }
+
+    /// <summary>GPU 版が使ってよいメモリ（MB）。0 なら自動</summary>
+    [ObservableProperty]
+    public partial decimal GpuMemoryLimit { get; set; }
+
+    [ObservableProperty]
+    public partial bool ExperimentalVulkanVideo { get; set; }
+
+    /// <summary>今使っている描画の方式</summary>
+    public string CurrentRenderer { get; }
+
+    /// <summary>望んだ描画の方式を使えなかった理由（なければ null）</summary>
+    public string? RendererProblem { get; }
+
+    public bool HasRendererProblem => RendererProblem is not null;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CaptureCommand), nameof(ClearCommand), nameof(ResetCommand))]
@@ -212,6 +273,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         _settings.AutosaveMinutes = (int)AutosaveMinutes;
         _settings.OutputDevice = OutputDevice?.Name;
         _settings.ExternalFfmpegPath = FfmpegPath;
+        _settings.Renderer = Renderer.Name == "auto" ? null : Renderer.Name;
+        _settings.RendererDevice = GpuDevice.Name;
+        _settings.GpuMemoryLimitMegabytes = GpuMemoryLimit > 0 ? (int)GpuMemoryLimit : null;
+        _settings.ExperimentalVulkanVideo = ExperimentalVulkanVideo;
         _settings.Save(settingsPath);
     }
 

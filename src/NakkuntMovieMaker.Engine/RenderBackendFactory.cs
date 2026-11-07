@@ -25,10 +25,15 @@ public enum RendererPreference
 /// <remarks>
 /// ExperimentalVulkanVideo なら、GPU 版で、動画を描画と同じ GPU の Vulkan Video でデコードし、フレームをコピーせずに使う（試験的な機能。
 /// 基準の PC では、FFmpeg とドライバーの不具合で落ちる動画があるので、既定では使わない）。
-/// 使わないときは、ハードウェアでデコードしたフレームを YUV の平面のままメインメモリに写して GPU に送り、GPU で RGB にする
+/// 使わないときは、ハードウェアでデコードしたフレームを YUV の平面のままメインメモリに写して GPU に送り、GPU で RGB にする。
+/// GpuMemoryLimitMegabytes は、GPU 版が使ってよいメモリ（null なら、GPU のメモリの半分・最大 1GB）
 /// </remarks>
 public sealed record RendererOptions(
-    RendererPreference Preference = RendererPreference.Auto, string? Device = null, string? CrashMarkerPath = null, bool ExperimentalVulkanVideo = false)
+    RendererPreference Preference = RendererPreference.Auto,
+    string? Device = null,
+    string? CrashMarkerPath = null,
+    bool ExperimentalVulkanVideo = false,
+    int? GpuMemoryLimitMegabytes = null)
 {
     public static RendererOptions Default { get; } = new();
 
@@ -76,7 +81,11 @@ public static class RenderBackendFactory
             VulkanBackend gpu;
             try
             {
-                gpu = new VulkanBackend(VulkanDevice.Create(new VulkanDeviceOptions(options.Device, VideoDecode: options.ExperimentalVulkanVideo)), layouts, ownsDevice: true);
+                gpu = new VulkanBackend(
+                    VulkanDevice.Create(new VulkanDeviceOptions(options.Device, VideoDecode: options.ExperimentalVulkanVideo)),
+                    layouts,
+                    ownsDevice: true,
+                    memoryBudgetBytes: options.GpuMemoryLimitMegabytes is { } megabytes ? megabytes * (1L << 20) : null);
             }
             catch (VulkanException ex)
             {
