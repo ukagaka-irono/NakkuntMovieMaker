@@ -1,0 +1,30 @@
+<Project>
+  <!--
+    Slang のシェーダー（NmmShader）を、ビルドのときに slangc で SPIR-V にして、アセンブリに埋め込む（名前は NakkuntMovieMaker.Shaders.<ファイル名>.spv）。
+    シェーダーは、どれも main という名前のコンピュートシェーダー。共通の関数は Shaders/Library の .slang（import で使う）。
+    slangc は tools/fetch-native が native/tools/<rid>/slang に置く
+  -->
+  <ItemGroup>
+    <NmmShaderLibrary Include="$(MSBuildThisFileDirectory)Shaders/Library/*.slang" />
+  </ItemGroup>
+
+  <Target Name="NmmCompileShaders"
+          Condition="'@(NmmShader)' != ''"
+          BeforeTargets="AssignTargetPaths"
+          Inputs="@(NmmShader);@(NmmShaderLibrary);$(MSBuildThisFileFullPath)"
+          Outputs="@(NmmShader->'$(IntermediateOutputPath)shaders/%(Filename).spv')">
+    <PropertyGroup>
+      <_NmmExe Condition="'$(OS)' == 'Windows_NT'">.exe</_NmmExe>
+      <NmmSlangc Condition="'$(NmmSlangc)' == ''">$(MSBuildThisFileDirectory)../../native/tools/$(NmmNativeRid)/slang/bin/slangc$(_NmmExe)</NmmSlangc>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(NmmSlangc)')" Text="Slang のコンパイラ（slangc）がありません: $(NmmSlangc)。先に tools/fetch-native を実行してください" />
+    <MakeDir Directories="$(IntermediateOutputPath)shaders" />
+    <Exec Command="&quot;$(NmmSlangc)&quot; &quot;%(NmmShader.FullPath)&quot; -I &quot;$(MSBuildThisFileDirectory)Shaders/Library&quot; -target spirv -profile spirv_1_3 -entry main -stage compute -O2 -warnings-as-errors all -o &quot;$(IntermediateOutputPath)shaders/%(NmmShader.Filename).spv&quot;" />
+  </Target>
+
+  <Target Name="NmmEmbedShaders" Condition="'@(NmmShader)' != ''" AfterTargets="NmmCompileShaders" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <EmbeddedResource Include="@(NmmShader->'$(IntermediateOutputPath)shaders/%(Filename).spv')" LogicalName="NakkuntMovieMaker.Shaders.%(Filename).spv" />
+    </ItemGroup>
+  </Target>
+</Project>

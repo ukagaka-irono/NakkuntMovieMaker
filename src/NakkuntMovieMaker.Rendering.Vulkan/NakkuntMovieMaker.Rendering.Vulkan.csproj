@@ -13,4 +13,12 @@
     <ProjectReference Include="../NakkuntMovieMaker.Rendering/NakkuntMovieMaker.Rendering.csproj" />
     <ProjectReference Include="../NakkuntMovieMaker.Rendering.Skia/NakkuntMovieMaker.Rendering.Skia.csproj" />
   </ItemGroup>
+
+  <!-- シェーダー（Shaders/*.slang）は Shaders.targets で SPIR-V にして埋め込む -->
+  <ItemGroup>
+    <NmmShader Include="Shaders/*.slang" />
+    <None Include="Shaders/**/*.slang" />
+  </ItemGroup>
+
+  <Import Project="Shaders.targets" />
 </Project>

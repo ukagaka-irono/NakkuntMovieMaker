@@ -12,4 +12,12 @@
   <ItemGroup>
     <Using Include="NakkuntMovieMaker.Rendering.TestSupport" />
   </ItemGroup>
+
+  <!-- テスト用のシェーダー（共通の関数は本体の Shaders/Library を使う） -->
+  <ItemGroup>
+    <NmmShader Include="Shaders/*.slang" />
+    <None Include="Shaders/*.slang" />
+  </ItemGroup>
+
+  <Import Project="../../src/NakkuntMovieMaker.Rendering.Vulkan/Shaders.targets" />
 </Project>

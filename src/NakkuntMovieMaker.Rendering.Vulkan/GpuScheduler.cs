@@ -50,6 +50,9 @@ public sealed unsafe class GpuCommandContext
 
     public void OnCompleted(Action action) => _slot.Completions.Add(action);
 
+    /// <summary>この仕事の間だけ使うディスクリプターセット（記録の場所を使い回すときに、まとめて返す）</summary>
+    public VkDescriptorSet AllocateDescriptorSet(VkDescriptorSetLayout layout) => _slot.AllocateDescriptorSet(Device, layout);
+
     internal void Finish() => _scheduler.Submit(_slot.End(Device), signal: Value);
 }
 
@@ -231,7 +234,11 @@ public sealed unsafe class GpuScheduler : IDisposable
     /// <summary>コマンドを記録する場所（コマンドプールと、そこから取ったコマンドバッファー）</summary>
     internal sealed class Slot
     {
+        // 1 つの仕事で使うディスクリプターの上限（1 フレームの描画に十分な数）
+        private const uint MaxSets = 4096;
+
         private readonly VkCommandPool _pool;
+        private readonly VkDescriptorPool _descriptors;
         private readonly List<VkCommandBuffer> _buffers = [];
         private int _used;
         private VkCommandBuffer _current;
@@ -242,6 +249,23 @@ public sealed unsafe class GpuScheduler : IDisposable
             VkCommandPool pool;
             Check(device.DeviceApi.vkCreateCommandPool(&info, null, &pool), "コマンドプールの作成");
             _pool = pool;
+
+            var sizes = stackalloc VkDescriptorPoolSize[3];
+            sizes[0] = new VkDescriptorPoolSize { type = VkDescriptorType.StorageBuffer, descriptorCount = MaxSets * 2 };
+            sizes[1] = new VkDescriptorPoolSize { type = VkDescriptorType.StorageImage, descriptorCount = MaxSets * 2 };
+            sizes[2] = new VkDescriptorPoolSize { type = VkDescriptorType.CombinedImageSampler, descriptorCount = MaxSets * 2 };
+            var descriptorInfo = new VkDescriptorPoolCreateInfo { maxSets = MaxSets, poolSizeCount = 3, pPoolSizes = sizes };
+            VkDescriptorPool descriptors;
+            Check(device.DeviceApi.vkCreateDescriptorPool(&descriptorInfo, null, &descriptors), "ディスクリプタープールの作成");
+            _descriptors = descriptors;
+        }
+
+        public VkDescriptorSet AllocateDescriptorSet(VulkanDevice device, VkDescriptorSetLayout layout)
+        {
+            var allocate = new VkDescriptorSetAllocateInfo { descriptorPool = _descriptors, descriptorSetCount = 1, pSetLayouts = &layout };
+            VkDescriptorSet set;
+            Check(device.DeviceApi.vkAllocateDescriptorSets(&allocate, &set), "ディスクリプターの確保");
+            return set;
         }
 
         public ulong LastValue { get; set; }
@@ -251,6 +275,7 @@ public sealed unsafe class GpuScheduler : IDisposable
         public void Reset(VulkanDevice device)
         {
             Check(device.DeviceApi.vkResetCommandPool(_pool, VkCommandPoolResetFlags.None), "コマンドプールのリセット");
+            Check(device.DeviceApi.vkResetDescriptorPool(_descriptors, 0), "ディスクリプタープールのリセット");
             _used = 0;
         }
 
@@ -286,6 +311,10 @@ public sealed unsafe class GpuScheduler : IDisposable
             Completions.Clear();
         }
 
-        public void Dispose(VulkanDevice device) => device.DeviceApi.vkDestroyCommandPool(_pool, null);
+        public void Dispose(VulkanDevice device)
+        {
+            device.DeviceApi.vkDestroyCommandPool(_pool, null);
+            device.DeviceApi.vkDestroyDescriptorPool(_descriptors, null);
+        }
     }
 }

@@ -33,6 +33,21 @@ public static unsafe class GpuBarriers
         image.Layout = layout;
     }
 
+    /// <summary>コンピュートシェーダーの書き込みが終わってから、後のシェーダー・転送・CPU が読めるようにする</summary>
+    public static void AfterCompute(GpuCommandContext context)
+    {
+        var barrier = new VkMemoryBarrier
+        {
+            srcAccessMask = VkAccessFlags.ShaderWrite,
+            dstAccessMask = VkAccessFlags.ShaderRead | VkAccessFlags.ShaderWrite | VkAccessFlags.TransferRead | VkAccessFlags.HostRead,
+        };
+        context.Device.DeviceApi.vkCmdPipelineBarrier(
+            context.CommandBuffer,
+            VkPipelineStageFlags.ComputeShader,
+            VkPipelineStageFlags.ComputeShader | VkPipelineStageFlags.Transfer | VkPipelineStageFlags.Host,
+            0, 1, &barrier, 0, null, 0, null);
+    }
+
     /// <summary>バッファーへの書き込み（転送）が終わってから、CPU が読めるようにする</summary>
     public static void TransferToHost(GpuCommandContext context)
     {
