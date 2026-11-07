@@ -1,4 +1,5 @@
 using System.Numerics;
+using NakkuntMovieMaker.Rendering.Color;
 using NakkuntMovieMaker.Rendering.Effects;
 
 namespace NakkuntMovieMaker.Rendering.Skia.Effects;
@@ -89,7 +90,7 @@ internal sealed class MonochromeEffect : ICpuEffect
         public void Apply(ref Vector4 color, int x, int y)
         {
             var rgb = new Vector3(color.X, color.Y, color.Z);
-            var mono = new Vector3(PixelOps.Luma(color)) * Tint;
+            var mono = new Vector3(RenderMath.Luma(color)) * Tint;
             var mixed = Vector3.Lerp(rgb, mono, Strength);
             color = new Vector4(mixed, color.W);
         }
@@ -130,7 +131,7 @@ internal sealed class ChromaKeyEffect : ICpuEffect
         {
             var rgb = new Vector3(color.X, color.Y, color.Z);
             var chroma = Chroma(rgb);
-            var keep = PixelOps.SmoothStep(Tolerance, Tolerance + Softness, Vector2.Distance(chroma, Key));
+            var keep = RenderMath.SmoothStep(Tolerance, Tolerance + Softness, Vector2.Distance(chroma, Key));
             var along = Vector2.Dot(chroma, KeyDirection);
             if (along > 0 && Spill > 0)
             {
@@ -169,7 +170,7 @@ internal sealed class ColorKeyEffect : ICpuEffect
         {
             // 距離は 0（同じ色）〜 1（白と黒）にそろえる
             var distance = Vector3.Distance(new Vector3(color.X, color.Y, color.Z), Key) / MathF.Sqrt(3);
-            color.W *= PixelOps.SmoothStep(Tolerance, Tolerance + Softness, distance);
+            color.W *= RenderMath.SmoothStep(Tolerance, Tolerance + Softness, distance);
         }
     }
 }
@@ -199,9 +200,9 @@ internal sealed class NoiseEffect : ICpuEffect
             // 画像が広がっても同じ場所に同じ乱数が出るよう、ピクセル座標で乱数を決める
             var px = x + Left;
             var py = y + Top;
-            var r = PixelOps.Hash(Seed, px, py, 0) * 2 - 1;
-            var g = Monochrome ? r : PixelOps.Hash(Seed, px, py, 1) * 2 - 1;
-            var b = Monochrome ? r : PixelOps.Hash(Seed, px, py, 2) * 2 - 1;
+            var r = RenderMath.Hash(Seed, px, py, 0) * 2 - 1;
+            var g = Monochrome ? r : RenderMath.Hash(Seed, px, py, 1) * 2 - 1;
+            var b = Monochrome ? r : RenderMath.Hash(Seed, px, py, 2) * 2 - 1;
             color += new Vector4(r, g, b, 0) * Amount;
         }
     }

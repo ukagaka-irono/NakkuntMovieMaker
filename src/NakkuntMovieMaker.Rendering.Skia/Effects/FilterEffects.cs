@@ -9,17 +9,11 @@ namespace NakkuntMovieMaker.Rendering.Skia.Effects;
 
 internal static class Blurs
 {
-    /// <summary>半径（ローカル座標）を、ピクセル座標での σ にする</summary>
-    public static float Sigma(double radius, float scale) => (float)(radius * scale / 3);
-
-    /// <summary>σ のぼかしが届く範囲（ピクセル）</summary>
-    public static int Margin(float sigma) => sigma <= 0 ? 0 : (int)Math.Ceiling(sigma * 3);
-
     /// <summary>画像を、まわりに広げてぼかしたもの（元の画像はそのまま）</summary>
     public static EffectImage Blurred(EffectImage input, float sigma)
     {
         var bounds = input.PixelBounds;
-        bounds.Inflate(Margin(sigma), Margin(sigma));
+        bounds.Inflate(RenderMath.BlurMargin(sigma), RenderMath.BlurMargin(sigma));
         var blurred = EffectImage.Create(bounds, input.Scale);
         using var canvas = blurred.OpenPixelCanvas();
         using var paint = new SKPaint();
@@ -43,7 +37,7 @@ internal sealed class BlurEffect : ICpuEffect
 
     public EffectImage Apply(EffectImage input, EffectParameters p, EffectContext context)
     {
-        var sigma = Blurs.Sigma(p.GetNumber("radius"), input.Scale);
+        var sigma = RenderMath.BlurSigma(p.GetNumber("radius"), input.Scale);
         return sigma < 0.05f ? input : Blurs.Blurred(input, sigma);
     }
 }
@@ -56,7 +50,7 @@ internal sealed unsafe class SharpenEffect : ICpuEffect
     public EffectImage Apply(EffectImage input, EffectParameters p, EffectContext context)
     {
         var amount = p.GetFloat("amount") / 100f;
-        var sigma = Blurs.Sigma(p.GetNumber("radius"), input.Scale);
+        var sigma = RenderMath.BlurSigma(p.GetNumber("radius"), input.Scale);
         if (amount <= 0 || sigma < 0.05f)
         {
             return input;
@@ -98,7 +92,7 @@ internal sealed class DropShadowEffect : ICpuEffect
     {
         var dx = p.GetFloat("offsetX") * input.Scale;
         var dy = p.GetFloat("offsetY") * input.Scale;
-        var sigma = Blurs.Sigma(p.GetNumber("blur"), input.Scale);
+        var sigma = RenderMath.BlurSigma(p.GetNumber("blur"), input.Scale);
         var color = Blurs.ToSkia(p.GetColor("color"), p.GetFloat("opacity") / 100f);
         if (color.Alpha == 0)
         {
@@ -108,7 +102,7 @@ internal sealed class DropShadowEffect : ICpuEffect
         var bounds = input.PixelBounds;
         var shadow = bounds;
         shadow.Offset((int)Math.Floor(dx), (int)Math.Floor(dy));
-        shadow.Inflate(Blurs.Margin(sigma) + 1, Blurs.Margin(sigma) + 1);
+        shadow.Inflate(RenderMath.BlurMargin(sigma) + 1, RenderMath.BlurMargin(sigma) + 1);
         bounds.Union(shadow);
 
         var output = EffectImage.Create(bounds, input.Scale);
@@ -130,7 +124,7 @@ internal sealed class GlowEffect : ICpuEffect
     public EffectImage Apply(EffectImage input, EffectParameters p, EffectContext context)
     {
         var strength = p.GetFloat("strength") / 100f;
-        var sigma = Blurs.Sigma(p.GetNumber("radius"), input.Scale);
+        var sigma = RenderMath.BlurSigma(p.GetNumber("radius"), input.Scale);
         if (strength <= 0 || sigma < 0.05f)
         {
             return input;
@@ -177,8 +171,8 @@ internal sealed unsafe class BorderEffect : ICpuEffect
             return input;
         }
 
-        var sigma = Blurs.Sigma(p.GetNumber("blur"), input.Scale);
-        var margin = (int)Math.Ceiling(width) + 1 + Blurs.Margin(sigma);
+        var sigma = RenderMath.BlurSigma(p.GetNumber("blur"), input.Scale);
+        var margin = (int)Math.Ceiling(width) + 1 + RenderMath.BlurMargin(sigma);
         var output = input.Expand(margin);
 
         // 縁の形（不透明度）を距離から作る

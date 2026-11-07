@@ -91,7 +91,7 @@ internal sealed class MaskEffect : ICpuEffect
             var height = p.GetFloat("height");
             var rect = new SKRect(-width / 2, -height / 2, width / 2, height / 2);
             using var paint = new SKPaint { Color = SKColors.White, IsAntialias = true };
-            var sigma = Blurs.Sigma(p.GetNumber("feather"), 1);
+            var sigma = RenderMath.BlurSigma(p.GetNumber("feather"), 1);
             if (sigma >= 0.05f)
             {
                 // ローカル座標のキャンバスなので、σ もローカル座標で指定する（Skia が倍率を掛ける）

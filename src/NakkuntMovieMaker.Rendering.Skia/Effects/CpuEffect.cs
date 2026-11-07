@@ -88,30 +88,4 @@ internal static unsafe class PixelOps
             }
         });
     }
-
-    /// <summary>BT.709 の輝度</summary>
-    public static float Luma(Vector4 color) => color.X * 0.2126f + color.Y * 0.7152f + color.Z * 0.0722f;
-
-    /// <summary>0 以上 1 未満の、(seed, x, y, channel) から決まる乱数</summary>
-    public static float Hash(uint seed, int x, int y, int channel)
-    {
-        var h = seed * 0x9E3779B1u ^ (uint)x * 0x85EBCA77u ^ (uint)y * 0xC2B2AE3Du ^ (uint)channel * 0x27D4EB2Fu;
-        h ^= h >> 15;
-        h *= 0x2C1B3C6Du;
-        h ^= h >> 12;
-        h *= 0x297A2D39u;
-        h ^= h >> 15;
-        return (h >> 8) * (1f / (1 << 24));
-    }
-
-    public static float SmoothStep(float edge0, float edge1, float x)
-    {
-        if (edge1 <= edge0)
-        {
-            return x < edge0 ? 0 : 1;
-        }
-
-        var t = Math.Clamp((x - edge0) / (edge1 - edge0), 0, 1);
-        return t * t * (3 - 2 * t);
-    }
 }

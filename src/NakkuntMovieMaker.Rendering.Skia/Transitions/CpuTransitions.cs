@@ -83,14 +83,12 @@ internal static class CpuTransitions
     public static SKShader Uniform(float alpha) =>
         SKShader.CreateColor(SKColors.White.WithAlpha((byte)Math.Round(Math.Clamp(alpha, 0, 1) * 255)));
 
-    /// <summary>向き（後のアイテムが入ってくる側）を、出力の上での単位ベクトルにする</summary>
-    public static SKPoint Direction(string direction) => direction switch
+    /// <summary>向き（後のアイテムが入ってくる側）を、出力の上での単位ベクトルにする（RenderMath と同じ）</summary>
+    public static SKPoint Direction(string direction)
     {
-        "fromRight" => new SKPoint(1, 0),
-        "fromTop" => new SKPoint(0, -1),
-        "fromBottom" => new SKPoint(0, 1),
-        _ => new SKPoint(-1, 0),
-    };
+        var vector = RenderMath.TransitionDirection(direction);
+        return new SKPoint(vector.X, vector.Y);
+    }
 
     // 描いたものに、シェーダーの不透明度を掛ける
     private static void Mask(SKCanvas canvas, SKRect bounds, SKShader mask)

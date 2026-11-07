@@ -2,13 +2,13 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Numerics;
 
-namespace NakkuntMovieMaker.Rendering.Skia.Effects;
+namespace NakkuntMovieMaker.Rendering.Color;
 
 /// <summary>
 /// .cube 形式の 3D LUT（Adobe・DaVinci Resolve などが書き出すもの）。色は三重線形補間で引く。
-/// 読み込んだ LUT は、ファイルの場所と更新日時ごとに覚えておく
+/// 読み込んだ LUT は、ファイルの場所と更新日時ごとに覚えておく。GPU の描画は Table を 3D テクスチャにして、Sample と同じ補間で引く
 /// </summary>
-internal sealed class CubeLut
+public sealed class CubeLut
 {
     private static readonly ConcurrentDictionary<(string Path, DateTime Modified), CubeLut?> Cache = new();
 
@@ -25,6 +25,18 @@ internal sealed class CubeLut
         var range = domainMax - domainMin;
         _domainScale = new Vector3(1 / range.X, 1 / range.Y, 1 / range.Z);
     }
+
+    /// <summary>1 辺の格子の数</summary>
+    public int Size => _size;
+
+    /// <summary>格子の色（赤が一番速く変わる順。要素の数は Size³）</summary>
+    public ReadOnlySpan<Vector3> Table => _table;
+
+    /// <summary>入力の範囲の下限</summary>
+    public Vector3 DomainMin => _domainMin;
+
+    /// <summary>入力の範囲の幅の逆数（(rgb − DomainMin) × DomainScale が 0〜1 になる）</summary>
+    public Vector3 DomainScale => _domainScale;
 
     /// <summary>LUT を読む。ファイルがない・読めない・形式が違うときは null</summary>
     public static CubeLut? TryLoad(string path)
