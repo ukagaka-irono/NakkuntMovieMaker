@@ -103,7 +103,11 @@ public sealed partial class ProjectSettingsViewModel : ObservableObject
     public bool IsOcioUnavailable { get; } = !ColorChoices.IsAvailable;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsLinear))]
     public partial CompositingChoice Compositing { get; set; }
+
+    /// <summary>リニアで合成する（見た目が変わることの注意を出す）</summary>
+    public bool IsLinear => Compositing.Space == CompositingSpace.Linear;
 
     [ObservableProperty]
     public partial ColorSpaceChoice OcioConfig { get; set; }

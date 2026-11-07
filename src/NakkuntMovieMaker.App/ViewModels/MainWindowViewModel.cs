@@ -63,7 +63,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         session.RendererChanged += (_, _) => Dispatcher.UIThread.Post(() =>
         {
             RefreshRenderer();
-            Status = $"GPU で描けなくなったので、CPU で描いています（{Session.RendererProblem}）";
+            Status = $"GPU で描けなくなりました：{Session.RendererProblem}（CPU で描いています）";
         });
         RefreshRecent();
 
@@ -145,7 +145,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public partial string Status { get; set; } = "準備完了";
 
     /// <summary>状態バーに出す、今の描画の方式</summary>
-    public string RendererLabel => Session.RendererName is { } name ? $"描画：{name}" : "";
+    public string RendererLabel => Session.RendererName is { } name ? $"描画の方式：{name}" : "";
 
     /// <summary>望んだ描画の方式を使えずに CPU に切り替えた理由（なければ null）</summary>
     public string? RendererProblem => Session.RendererProblem;

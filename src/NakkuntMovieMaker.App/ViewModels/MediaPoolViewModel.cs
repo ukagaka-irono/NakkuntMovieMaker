@@ -249,7 +249,7 @@ public sealed partial class MediaPoolViewModel : ObservableObject
         }
     }
 
-    private bool HasPicture() => Selected is { IsAudio: false };
+    private bool HasPicture() => Selected is { IsAudio: false, IsMissing: false };
 
     /// <summary>選んだ動画のプロキシを作る（プロジェクトのプロキシの設定に関わらず作る）</summary>
     [RelayCommand(CanExecute = nameof(HasVideo))]
@@ -263,7 +263,7 @@ public sealed partial class MediaPoolViewModel : ObservableObject
         }
     }
 
-    /// <summary>選んだ動画のプロキシを消す（作っている途中ならやめる）</summary>
+    /// <summary>選んだ動画のプロキシを削除する（作っている途中ならやめる）</summary>
     [RelayCommand(CanExecute = nameof(HasVideo))]
     private async Task DeleteProxyAsync()
     {
@@ -278,7 +278,7 @@ public sealed partial class MediaPoolViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await _dialogs.ShowErrorAsync("プロキシを消せません", ex.Message);
+            await _dialogs.ShowErrorAsync("プロキシを削除できません", ex.Message);
         }
 
         _proxyFailures.Remove(Path.GetFullPath(entry.FullPath));
@@ -324,7 +324,7 @@ public sealed partial class MediaPoolViewModel : ObservableObject
     }
 
     private string? ProxyErrorOf(AssetEntry entry) =>
-        _proxyFailures.TryGetValue(Path.GetFullPath(entry.FullPath), out var reason) ? $"プロキシを作れません（{reason}）" : null;
+        _proxyFailures.TryGetValue(Path.GetFullPath(entry.FullPath), out var reason) ? $"プロキシを作れません：{reason}" : null;
 
     // 候補を、プロジェクトの構成の色空間にする（構成が変わったときだけ作り直す）
     private void RefreshInputColorSpaces()
@@ -393,11 +393,6 @@ public sealed partial class MediaPoolViewModel : ObservableObject
             {
                 entry.Details = "見つかりません";
             }
-            else if (entry.IsVideo)
-            {
-                entry.ProxyStatus = ProxyStatusOf(entry, null);
-                entry.ProxyError = ProxyErrorOf(entry);
-            }
             else if (_previews.TryGetValue((asset.Id, fullPath), out var preview))
             {
                 (entry.Thumbnail, entry.Details) = preview;
@@ -405,6 +400,12 @@ public sealed partial class MediaPoolViewModel : ObservableObject
             else
             {
                 pending.Add(entry);
+            }
+
+            if (entry.IsVideo && !entry.IsMissing)
+            {
+                entry.ProxyStatus = ProxyStatusOf(entry, null);
+                entry.ProxyError = ProxyErrorOf(entry);
             }
 
             Assets.Add(entry);

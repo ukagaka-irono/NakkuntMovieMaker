@@ -28,6 +28,12 @@ public sealed partial class ShortcutEntry(ShortcutCommand command) : ObservableO
     public bool IsChanged => !Equals(Gesture, Command.DefaultGesture);
 }
 
+/// <summary>描画の方式の候補（Value は設定に書く値）</summary>
+public sealed record RendererChoice(string Value, string Name)
+{
+    public override string ToString() => Name;
+}
+
 /// <summary>
 /// 設定。キーボードショートカットの変更（行を選んで「キーを割り当てる」を押し、割り当てるキーを押す。ほかのコマンドが使っていたキーは、そちらから外す）と、
 /// 自動保存の間隔、音の出力デバイス、書き出しに使う外部の ffmpeg（x264・x265）、描画（方式・GPU・メモリの上限・プレビューの表示の色空間）。
@@ -69,7 +75,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         FfmpegPath = settings.ExternalFfmpegPath;
         FfmpegCheck = CheckFfmpegAsync();
 
-        Renderer = Renderers.FirstOrDefault(choice => choice.Name == RendererOptions.ParsePreference(settings.Renderer)?.ToString().ToLowerInvariant())
+        Renderer = Renderers.FirstOrDefault(choice => choice.Value == RendererOptions.ParsePreference(settings.Renderer)?.ToString().ToLowerInvariant())
             ?? Renderers[0];
         GpuDevices.Add(new InputDeviceChoice(null, "自動で選ぶ"));
         foreach (var device in VulkanDevice.ListDevices().Where(device => device.Suitable && device.Type != VulkanDeviceType.Software))
@@ -96,8 +102,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public ObservableCollection<InputDeviceChoice> OutputDevices { get; } = [];
 
-    /// <summary>描画の方式（Name は設定に書く値）</summary>
-    public IReadOnlyList<InputDeviceChoice> Renderers { get; } =
+    /// <summary>描画の方式</summary>
+    public IReadOnlyList<RendererChoice> Renderers { get; } =
     [
         new("auto", "自動（使える GPU があれば GPU）"),
         new("vulkan", "GPU（Vulkan）"),
@@ -109,10 +115,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(UsesGpu))]
-    public partial InputDeviceChoice Renderer { get; set; }
+    public partial RendererChoice Renderer { get; set; }
 
     /// <summary>GPU を使う方式を選んでいる（GPU の項目を変えられる）</summary>
-    public bool UsesGpu => Renderer.Name != "cpu";
+    public bool UsesGpu => Renderer.Value != "cpu";
 
     [ObservableProperty]
     public partial InputDeviceChoice GpuDevice { get; set; }
@@ -282,7 +288,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _settings.AutosaveMinutes = (int)AutosaveMinutes;
         _settings.OutputDevice = OutputDevice?.Name;
         _settings.ExternalFfmpegPath = FfmpegPath;
-        _settings.Renderer = Renderer.Name == "auto" ? null : Renderer.Name;
+        _settings.Renderer = Renderer.Value == "auto" ? null : Renderer.Value;
         _settings.RendererDevice = GpuDevice.Name;
         _settings.GpuMemoryLimitMegabytes = GpuMemoryLimit > 0 ? (int)GpuMemoryLimit : null;
         _settings.ExperimentalVulkanVideo = ExperimentalVulkanVideo;

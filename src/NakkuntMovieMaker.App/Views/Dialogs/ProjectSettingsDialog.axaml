@@ -49,9 +49,9 @@
     </Grid>
 
     <TextBlock Classes="secondary" Text="フレームレートを変えると、アイテムの位置と長さは同じ時刻になるように合わせます" IsVisible="{Binding !IsNew}" TextWrapping="Wrap" MaxWidth="420" />
-    <TextBlock Classes="secondary" Text="リニアで合成すると、半透明の重なりやぼかしの縁が明るめになります" TextWrapping="Wrap" MaxWidth="420" />
+    <TextBlock Classes="secondary" Text="リニアで合成すると、半透明の重なりやぼかしの縁が明るめになります" IsVisible="{Binding IsLinear}" TextWrapping="Wrap" MaxWidth="420" />
     <TextBlock Classes="secondary" Text="プロキシ（編集用の軽い動画）はプレビューだけで使い、書き出しでは元の動画を使います" TextWrapping="Wrap" MaxWidth="420" />
-    <TextBlock Classes="warning" Text="OpenColorIO を読み込めないため、色空間は選べません" IsVisible="{Binding IsOcioUnavailable}" TextWrapping="Wrap" MaxWidth="420" />
+    <TextBlock Classes="warning" Text="OpenColorIO を読み込めないため、色空間は選べません" IsVisible="{Binding IsOcioUnavailable}" MaxWidth="420" />
     <TextBlock Classes="warning" Text="{Binding Error}" IsVisible="{Binding !IsValid}" />
 
     <StackPanel Classes="dialog-buttons">

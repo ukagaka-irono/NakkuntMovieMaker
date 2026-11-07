@@ -30,7 +30,7 @@
               </MenuItem.ItemContainerTheme>
             </MenuItem>
             <MenuItem Header="プロキシを作る" Command="{Binding CreateProxyCommand}" />
-            <MenuItem Header="プロキシを消す" Command="{Binding DeleteProxyCommand}" />
+            <MenuItem Header="プロキシを削除する" Command="{Binding DeleteProxyCommand}" />
             <Separator />
             <MenuItem Header="一覧から外す" Command="{Binding RemoveCommand}" />
           </ContextMenu>
