@@ -35,6 +35,8 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
     private readonly ConcurrentDictionary<AssetId, ColorLut?> _inputLuts = new();
     private readonly ConcurrentDictionary<AssetId, string> _inputErrors = new();
     private readonly ConcurrentDictionary<AssetId, byte> _planesUnsupported = new();
+    private readonly ConcurrentDictionary<(AssetId Asset, HardwareVideoDevice Device), DecoderSlot?> _gpuDecoders = new();
+    private readonly ConcurrentDictionary<AssetId, byte> _gpuUnsupported = new();
 
     // 平面のまま渡すデコーダーの段階の番号（縮小しない）
     private const int PlanesStep = -1;
@@ -128,6 +130,86 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         }
     }
 
+    /// <summary>
+    /// 動画のフレームを、描画と同じ GPU でデコードしたフレームのまま（Vulkan Video）。GPU でデコードできない動画は null
+    /// （一度できなかった素材は、それからは試さない）
+    /// </summary>
+    public GpuVideoFrame? GetGpuVideoFrame(AssetId asset, Rational time, HardwareVideoDevice device)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        if (_gpuUnsupported.ContainsKey(asset))
+        {
+            return null;
+        }
+
+        var slot = _gpuDecoders.GetOrAdd((asset, device), key =>
+        {
+            // 描画をやめるときは、このデバイスのデコーダーを先に捨てる
+            key.Device.Closing += () => CloseGpuDecoders(key.Device);
+            return OpenGpuDecoder(key.Asset, key.Device);
+        });
+        if (slot is null)
+        {
+            return null;
+        }
+
+        lock (slot.Gate)
+        {
+            try
+            {
+                var frame = slot.Decoder.GetFrame(time);
+                if (frame.GpuFrame is not { } gpu)
+                {
+                    _gpuUnsupported[asset] = 0;
+                    return null;
+                }
+
+                return new GpuVideoFrame(gpu.Clone(), slot.Decoder.SourceWidth, slot.Decoder.SourceHeight, InputLut(asset));
+            }
+            catch (Exception ex) when (ex is MediaException or ObjectDisposedException)
+            {
+                return null;
+            }
+        }
+    }
+
+    private DecoderSlot? OpenGpuDecoder(AssetId asset, HardwareVideoDevice device)
+    {
+        if (PathOf(asset) is not { } path || Info(path)?.Video is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return new DecoderSlot(VideoDecoder.Open(path, new VideoDecoderOptions(CacheCapacity: 4, Output: VideoFrameOutput.Gpu, VulkanDevice: device.Reference)));
+        }
+        catch (MediaException)
+        {
+            return null;
+        }
+    }
+
+    private void CloseGpuDecoders(HardwareVideoDevice device)
+    {
+        foreach (var key in _gpuDecoders.Keys.Where(key => key.Device == device))
+        {
+            CloseSlot(_gpuDecoders, key);
+        }
+    }
+
+    private static void CloseSlot<TKey>(ConcurrentDictionary<TKey, DecoderSlot?> decoders, TKey key)
+        where TKey : notnull
+    {
+        if (decoders.TryRemove(key, out var slot) && slot is not null)
+        {
+            lock (slot.Gate)
+            {
+                slot.Decoder.Dispose();
+            }
+        }
+    }
+
     public SourceImage? GetVideoFrame(AssetId asset, Rational time, double scale)
     {
         var slot = _decoders.GetOrAdd((asset, StepFor(scale)), key => OpenDecoder(key.Asset, key.Step));
@@ -187,6 +269,11 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
             _inputLuts.TryRemove(id, out _);
             _inputErrors.TryRemove(id, out _);
             _planesUnsupported.TryRemove(id, out _);
+            _gpuUnsupported.TryRemove(id, out _);
+            foreach (var key in _gpuDecoders.Keys.Where(key => key.Asset == id))
+            {
+                CloseSlot(_gpuDecoders, key);
+            }
 
             foreach (var key in _images.Keys.Where(key => key.Asset == id))
             {
@@ -265,12 +352,13 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
     public void Dispose()
     {
-        foreach (var slot in _decoders.Values)
+        foreach (var slot in _decoders.Values.Concat(_gpuDecoders.Values))
         {
             slot?.Decoder.Dispose();
         }
 
         _decoders.Clear();
+        _gpuDecoders.Clear();
         _images.Clear();
         _files.Clear();
         foreach (var audio in _audio.Values.Concat(_voices.Values).Where(audio => audio.IsValueCreated))
@@ -311,6 +399,26 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
                 return null;
             }
         });
+
+    /// <summary>
+    /// 動画の素材を、今どの方式でデコードしているか（利用者に表示する文。まだデコードしていなければ null）。
+    /// 「Vulkan Video（GPU のまま）」「d3d11va（YUV の平面）」「ソフトウェア（BGRA）」のように、デコードの方式と渡し方を書く
+    /// </summary>
+    public string? VideoDecodeMethod(AssetId asset)
+    {
+        static string Name(VideoDecoder decoder) => decoder.HardwareDevice is { } device ? device == "vulkan" ? "Vulkan Video" : device : "ソフトウェア";
+        if (!_gpuUnsupported.ContainsKey(asset) && _gpuDecoders.FirstOrDefault(pair => pair.Key.Asset == asset).Value is { } gpu)
+        {
+            return $"{Name(gpu.Decoder)}（GPU のまま）";
+        }
+
+        if (!_planesUnsupported.ContainsKey(asset) && _decoders.TryGetValue((asset, PlanesStep), out var planes) && planes is not null)
+        {
+            return $"{Name(planes.Decoder)}（YUV の平面）";
+        }
+
+        return _decoders.FirstOrDefault(pair => pair.Key.Asset == asset && pair.Key.Step >= 0).Value is { } bgra ? $"{Name(bgra.Decoder)}（BGRA）" : null;
+    }
 
     /// <summary>素材の入力の色空間を変換できなかった理由（変換しないか、できたなら null）</summary>
     public string? InputColorError(AssetId asset)

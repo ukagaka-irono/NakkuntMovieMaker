@@ -45,6 +45,11 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
     // 今記録している仕事の作業用の画像がリニアか（GPU のスレッドだけで使う）
     private bool _linear;
+
+    // 動画を、描画と同じ GPU でデコードするための FFmpeg のデバイス（使えなければ null。初めて動画を描くときに作る）
+    private readonly Lock _videoGate = new();
+    private FfmpegVulkanDevice? _video;
+    private bool _videoTried;
     private readonly SkiaCpuBackend _cpu;
     private readonly ConcurrentDictionary<LayerKey, Layer?> _layers = new();
     private long _layerBytes;
@@ -87,6 +92,16 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     /// <summary>エフェクトを GPU でかけたノードの数（これまでの合計。テストと計測用）</summary>
     public long GpuEffectNodes => Interlocked.Read(ref _gpuEffectNodes);
 
+    /// <summary>
+    /// 動画を、描画と同じ GPU でデコードできない理由（まだ試していないか、できるなら null）。Vulkan Video に対応していない GPU など
+    /// </summary>
+    public string? VideoDecodeProblem { get; private set; }
+
+    /// <summary>GPU でデコードしたフレームを、コピーせずに描いた数（これまでの合計。テストと計測用）</summary>
+    public long GpuVideoFrames => Interlocked.Read(ref _gpuVideoFrames);
+
+    private long _gpuVideoFrames;
+
     /// <summary>トランジションを GPU で描いたノードの数（これまでの合計。テストと計測用）</summary>
     public long GpuTransitionNodes => Interlocked.Read(ref _gpuTransitionNodes);
 
@@ -127,7 +142,32 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         var background = linear ? LinearPremultiplied(plan.Background) : Premultiplied(plan.Background);
         var outputLut = plan.Color.Output;
         var task = _scheduler.RunAsync(context => Record(context, operations, background, width, height, linear, outputLut), cancellationToken);
-        return task.GetAwaiter().GetResult();
+        try
+        {
+            return task.GetAwaiter().GetResult();
+        }
+        catch when (!task.IsCompletedSuccessfully)
+        {
+            // 記録しなかった（キャンセルした・失敗した）仕事の、GPU でデコードしたフレームを返す
+            ReleaseGpuFrames(operations);
+            throw;
+        }
+    }
+
+    private static void ReleaseGpuFrames(IEnumerable<object?> steps)
+    {
+        foreach (var step in steps)
+        {
+            switch (step)
+            {
+                case GpuFrameStep gpu:
+                    gpu.Frame.Dispose();
+                    break;
+                case TransitionStep transition:
+                    ReleaseGpuFrames([transition.From, transition.To]);
+                    break;
+            }
+        }
     }
 
     public void Dispose()
@@ -142,6 +182,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         _sources.Dispose();
         _effectResults.Dispose();
         _outputLuts.Dispose();
+        _video?.Dispose();
         _emptyLut?.Dispose();
         _pool.Dispose();
         _shaders.Dispose();
@@ -288,11 +329,24 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     }
 
     // 素材を切り抜き、残った部分の中心をローカル座標の原点に置いて描く（SkiaCpuBackend.ImageContent と同じ）
-    private static object? PrepareImage(DrawNode node, IMediaSource media, Matrix3x2 output, int width, int height)
+    private object? PrepareImage(DrawNode node, IMediaSource media, Matrix3x2 output, int width, int height)
     {
         var matrix = node.Transform * output;
         var hint = Math.Max(Math.Sqrt(matrix.M11 * matrix.M11 + matrix.M12 * matrix.M12), Math.Sqrt(matrix.M21 * matrix.M21 + matrix.M22 * matrix.M22));
-        // 動画は、渡せれば YUV の平面のまま受け取り、GPU で RGB にする（swscale を使わない）
+        // 動画は、描画と同じ GPU でデコードできればそのフレームを（コピーしない）、できなければ YUV の平面のまま受け取り、GPU で RGB にする（swscale を使わない）
+        if (node.Content is VideoFrameContent gpuVideo && VideoDevice() is { } videoDevice
+            && media.GetGpuVideoFrame(gpuVideo.Asset, gpuVideo.SourceTime, videoDevice) is { } gpuFrame)
+        {
+            var hardware = gpuFrame.Frame;
+            if (PlacePlanes(node, gpuFrame.Width, gpuFrame.Height, hardware.Width, hardware.Height, matrix, width, height) is not { } geometry)
+            {
+                gpuFrame.Dispose();
+                return null;
+            }
+
+            return new GpuFrameStep(gpuFrame, geometry);
+        }
+
         if (node.Content is VideoFrameContent planesVideo && media.GetVideoPlanes(planesVideo.Asset, planesVideo.SourceTime) is { } planes)
         {
             return PreparePlanes(node, planes, matrix, width, height);
@@ -341,7 +395,13 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     }
 
     // 平面のままの動画のフレーム：切り抜き・置き方は画像と同じ（平面は縮小していないので、素材の画素がそのまま切り抜く単位）
-    private static PlanesStep? PreparePlanes(DrawNode node, VideoPlaneFrame frame, Matrix3x2 matrix, int width, int height)
+    private static PlanesStep? PreparePlanes(DrawNode node, VideoPlaneFrame frame, Matrix3x2 matrix, int width, int height) =>
+        PlacePlanes(node, frame.Width, frame.Height, frame.Planes.Width, frame.Planes.Height, matrix, width, height) is { } geometry
+            ? new PlanesStep(frame, geometry)
+            : null;
+
+    // 平面（planeWidth × planeHeight）を、素材の元の大きさ（sourceWidth × sourceHeight）のローカル座標に、切り抜いて置く
+    private static PlaneGeometry? PlacePlanes(DrawNode node, int sourceWidth, int sourceHeight, int planeWidth, int planeHeight, Matrix3x2 matrix, int width, int height)
     {
         if (!Matrix3x2.Invert(matrix, out var inverse))
         {
@@ -349,15 +409,14 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         }
 
         var crop = node.Crop;
-        var planes = frame.Planes;
-        var visibleWidth = frame.Width - crop.Left - crop.Right;
-        var visibleHeight = frame.Height - crop.Top - crop.Bottom;
-        var ratioX = planes.Width / (double)frame.Width;
-        var ratioY = planes.Height / (double)frame.Height;
-        var left = Math.Clamp((int)Math.Round(crop.Left * ratioX), 0, planes.Width);
-        var top = Math.Clamp((int)Math.Round(crop.Top * ratioY), 0, planes.Height);
-        var right = Math.Clamp((int)Math.Round((frame.Width - crop.Right) * ratioX), 0, planes.Width);
-        var bottom = Math.Clamp((int)Math.Round((frame.Height - crop.Bottom) * ratioY), 0, planes.Height);
+        var visibleWidth = sourceWidth - crop.Left - crop.Right;
+        var visibleHeight = sourceHeight - crop.Top - crop.Bottom;
+        var ratioX = planeWidth / (double)sourceWidth;
+        var ratioY = planeHeight / (double)sourceHeight;
+        var left = Math.Clamp((int)Math.Round(crop.Left * ratioX), 0, planeWidth);
+        var top = Math.Clamp((int)Math.Round(crop.Top * ratioY), 0, planeHeight);
+        var right = Math.Clamp((int)Math.Round((sourceWidth - crop.Right) * ratioX), 0, planeWidth);
+        var bottom = Math.Clamp((int)Math.Round((sourceHeight - crop.Bottom) * ratioY), 0, planeHeight);
         if (visibleWidth <= 0 || visibleHeight <= 0 || right <= left || bottom <= top)
         {
             return null;
@@ -370,7 +429,28 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         }
 
         var opacity = node.Opacity < 1 || node.Blend != BlendMode.Normal ? Round(node.Opacity) : 1f;
-        return new PlanesStep(frame, inverse, destination, new SourceRect(left, top, right - left, bottom - top), opacity, node.Blend, region);
+        return new PlaneGeometry(inverse, destination, new SourceRect(left, top, right - left, bottom - top), opacity, node.Blend, region);
+    }
+
+    // 動画を描画と同じ GPU でデコードするための、FFmpeg のデバイス（初めて使うときに作る。作れなければ、理由を覚えて null）
+    private FfmpegVulkanDevice? VideoDevice()
+    {
+        if (_videoTried)
+        {
+            return _video;
+        }
+
+        lock (_videoGate)
+        {
+            if (!_videoTried)
+            {
+                _video = FfmpegVulkanDevice.TryCreate(_device, out var problem);
+                VideoDecodeProblem = problem;
+                _videoTried = true;
+            }
+
+            return _video;
+        }
     }
 
     // GPU のスレッドで：作業用の画像を背景で塗り、ノードを順に重ねて、BGRA にして読み戻す
@@ -436,6 +516,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             case PlanesStep planesStep:
                 CompositePlanes(context, composite, work, planesStep, width);
                 break;
+            case GpuFrameStep gpuFrameStep:
+                CompositeGpuFrame(context, composite, work, gpuFrameStep, width);
+                break;
         }
     }
 
@@ -467,6 +550,81 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     {
         var planes = step.Frame.Planes;
         var rgb = YuvToWork(context, planes, step.Frame.Input);
+        CompositeRgb(context, composite, work, rgb, planes.Width, step.Geometry, width);
+    }
+
+    // GPU でデコードしたフレーム：画像の輝度と色差の平面を、GPU の上でバッファーに写し（メインメモリを通さない）、平面と同じように RGB にして重ねる。
+    // FFmpeg のセマフォを待ってから読み、読み終わったら合図する
+    private void CompositeGpuFrame(GpuCommandContext context, ComputePipeline composite, GpuBuffer work, GpuFrameStep step, int width)
+    {
+        context.OnCompleted(step.Frame.Dispose);
+        Interlocked.Increment(ref _gpuVideoFrames);
+        var hardware = step.Frame.Frame;
+        var images = FfmpegVulkanFrames.Acquire((FFmpeg.AutoGen.Abstractions.AVFrame*)hardware.Frame);
+        var layout = PlaneLayout.Packed(hardware.Format, hardware.Width, hardware.Height);
+        var buffer = _allocator.CreateBuffer((ulong)layout.Bytes, VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.TransferDst, GpuBufferKind.DeviceLocal);
+        context.OnCompleted(buffer.Dispose);
+
+        var api = _device.DeviceApi;
+        var multiPlane = images.Length == 1;
+        var barriers = stackalloc VkImageMemoryBarrier[images.Length];
+        for (var i = 0; i < images.Length; i++)
+        {
+            context.WaitSemaphore(images[i].Semaphore, images[i].Value, VkPipelineStageFlags.Transfer);
+            context.SignalSemaphore(images[i].Semaphore, images[i].Value + 1);
+            barriers[i] = new VkImageMemoryBarrier
+            {
+                srcAccessMask = VkAccessFlags.MemoryWrite,
+                dstAccessMask = VkAccessFlags.TransferRead,
+                oldLayout = images[i].Layout,
+                newLayout = VkImageLayout.TransferSrcOptimal,
+                srcQueueFamilyIndex = Vortice.Vulkan.Vulkan.VK_QUEUE_FAMILY_IGNORED,
+                dstQueueFamilyIndex = Vortice.Vulkan.Vulkan.VK_QUEUE_FAMILY_IGNORED,
+                image = images[i].Image,
+                subresourceRange = new VkImageSubresourceRange(
+                    multiPlane ? VkImageAspectFlags.Plane0 | VkImageAspectFlags.Plane1 : VkImageAspectFlags.Color, 0, 1, 0, 1),
+            };
+        }
+
+        api.vkCmdPipelineBarrier(context.CommandBuffer, VkPipelineStageFlags.AllCommands, VkPipelineStageFlags.Transfer, 0, 0, null, 0, null, (uint)images.Length, barriers);
+
+        var regions = stackalloc VkBufferImageCopy[2];
+        regions[0] = new VkBufferImageCopy
+        {
+            bufferOffset = 0,
+            bufferRowLength = (uint)layout.Width,
+            bufferImageHeight = (uint)layout.Height,
+            imageSubresource = new VkImageSubresourceLayers(multiPlane ? VkImageAspectFlags.Plane0 : VkImageAspectFlags.Color, 0, 0, 1),
+            imageExtent = new VkExtent3D(layout.Width, layout.Height, 1),
+        };
+        regions[1] = new VkBufferImageCopy
+        {
+            bufferOffset = (ulong)layout.ChromaOffset,
+            bufferRowLength = (uint)layout.ChromaWidth,
+            bufferImageHeight = (uint)layout.ChromaHeight,
+            imageSubresource = new VkImageSubresourceLayers(multiPlane ? VkImageAspectFlags.Plane1 : VkImageAspectFlags.Color, 0, 0, 1),
+            imageExtent = new VkExtent3D(layout.ChromaWidth, layout.ChromaHeight, 1),
+        };
+        if (multiPlane)
+        {
+            api.vkCmdCopyImageToBuffer(context.CommandBuffer, images[0].Image, VkImageLayout.TransferSrcOptimal, buffer.Buffer, 2, regions);
+        }
+        else
+        {
+            api.vkCmdCopyImageToBuffer(context.CommandBuffer, images[0].Image, VkImageLayout.TransferSrcOptimal, buffer.Buffer, 1, &regions[0]);
+            api.vkCmdCopyImageToBuffer(context.CommandBuffer, images[1].Image, VkImageLayout.TransferSrcOptimal, buffer.Buffer, 1, &regions[1]);
+        }
+
+        var copied = new VkMemoryBarrier { srcAccessMask = VkAccessFlags.TransferWrite, dstAccessMask = VkAccessFlags.ShaderRead };
+        api.vkCmdPipelineBarrier(context.CommandBuffer, VkPipelineStageFlags.Transfer, VkPipelineStageFlags.ComputeShader, 0, 1, &copied, 0, null, 0, null);
+
+        var rgb = ConvertPlanes(context, buffer, layout, hardware.Color, step.Frame.Input);
+        CompositeRgb(context, composite, work, rgb, layout.Width, step.Geometry, width);
+    }
+
+    // 作業用の画像（RGB、幅 stride）を、変形・不透明度・合成モードを付けて重ねる
+    private void CompositeRgb(GpuCommandContext context, ComputePipeline composite, GpuBuffer work, GpuBuffer rgb, int stride, PlaneGeometry step, int width)
+    {
         var region = step.Region;
         var parameters = new CompositeParams
         {
@@ -484,7 +642,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             SourceY = step.Source.Y,
             SourceWidth = step.Source.Width,
             SourceHeight = step.Source.Height,
-            Stride = planes.Width,
+            Stride = stride,
             OriginX = region.X,
             OriginY = region.Y,
             RegionWidth = region.Width,
@@ -514,24 +672,29 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         planes.Chroma.CopyTo(span[chromaOffset..]);
         upload.Flush();
         context.OnCompleted(upload.Dispose);
+        var layout = new PlaneLayout(planes.Format, planes.Width, planes.Height, planes.LumaStride, chromaOffset, planes.ChromaStride, planes.ChromaWidth, planes.ChromaHeight);
+        return ConvertPlanes(context, upload, layout, planes.Color, input);
+    }
 
-        var rgb = _allocator.CreateBuffer((ulong)planes.Width * (ulong)planes.Height * 8, VkBufferUsageFlags.StorageBuffer, GpuBufferKind.DeviceLocal);
+    // GPU の上の平面（layout の並び）を、作業用の画像（16 ビット浮動小数点の RGBA。入力の色の変換をかけたもの）にする。この仕事が終わったら捨てる
+    private GpuBuffer ConvertPlanes(GpuCommandContext context, GpuBuffer planesBuffer, PlaneLayout layout, VideoColorInfo color, ColorLut? input)
+    {
+        var rgb = _allocator.CreateBuffer((ulong)layout.Width * (ulong)layout.Height * 8, VkBufferUsageFlags.StorageBuffer, GpuBufferKind.DeviceLocal);
         context.OnCompleted(rgb.Dispose);
 
-        var color = planes.Color;
-        var (kr, kb) = YuvConversion.Coefficients(color.Matrix, planes.Height);
-        var (yOffset, yScale, cOffset, cScale) = YuvConversion.Range(color.Range, planes.BitDepth);
+        var (kr, kb) = YuvConversion.Coefficients(color.Matrix, layout.Height);
+        var (yOffset, yScale, cOffset, cScale) = YuvConversion.Range(color.Range, layout.Format == VideoPlaneFormat.P010 ? 10 : 8);
         var (originX, originY) = YuvConversion.ChromaOrigin(color.ChromaLocation);
         var parameters = new YuvParams
         {
-            Width = planes.Width,
-            Height = planes.Height,
-            LumaStride = planes.LumaStride,
-            ChromaOffset = chromaOffset,
-            ChromaStride = planes.ChromaStride,
-            ChromaWidth = planes.ChromaWidth,
-            ChromaHeight = planes.ChromaHeight,
-            P010 = planes.Format == VideoPlaneFormat.P010 ? 1 : 0,
+            Width = layout.Width,
+            Height = layout.Height,
+            LumaStride = layout.LumaStride,
+            ChromaOffset = layout.ChromaOffset,
+            ChromaStride = layout.ChromaStride,
+            ChromaWidth = layout.ChromaWidth,
+            ChromaHeight = layout.ChromaHeight,
+            P010 = layout.Format == VideoPlaneFormat.P010 ? 1 : 0,
             Kr = kr,
             Kb = kb,
             YOffset = yOffset,
@@ -557,7 +720,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         }
 
         _shaders.Get("yuv_to_work", OutputBindings, sizeof(YuvParams))
-            .Dispatch(context, [upload, rgb, lut], parameters, ComputePipeline.Groups(planes.Width, 8), ComputePipeline.Groups(planes.Height, 8));
+            .Dispatch(context, [planesBuffer, rgb, lut], parameters, ComputePipeline.Groups(layout.Width, 8), ComputePipeline.Groups(layout.Height, 8));
         GpuBarriers.AfterCompute(context);
         return rgb;
     }
@@ -772,8 +935,31 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
     private sealed record TransitionStep(IGpuTransition Processor, float Progress, EffectParameters Parameters, object? From, object? To, IMediaSource Media);
 
-    // 平面のままの動画のフレームを重ねる処理（Source は平面の中の切り抜く範囲）
-    private sealed record PlanesStep(VideoPlaneFrame Frame, Matrix3x2 Inverse, Rect Destination, SourceRect Source, float Opacity, BlendMode Blend, Region Region);
+    // 平面の置き方（Source は平面の中の切り抜く範囲）
+    private sealed record PlaneGeometry(Matrix3x2 Inverse, Rect Destination, SourceRect Source, float Opacity, BlendMode Blend, Region Region);
+
+    // 平面のままの動画のフレームを重ねる処理
+    private sealed record PlanesStep(VideoPlaneFrame Frame, PlaneGeometry Geometry);
+
+    // GPU でデコードしたフレームを重ねる処理
+    private sealed record GpuFrameStep(GpuVideoFrame Frame, PlaneGeometry Geometry);
+
+    // GPU の上の、YUV の平面の並び（バイト単位）
+    private readonly record struct PlaneLayout(
+        VideoPlaneFormat Format, int Width, int Height, int LumaStride, int ChromaOffset, int ChromaStride, int ChromaWidth, int ChromaHeight)
+    {
+        public long Bytes => ChromaOffset + (long)ChromaStride * ChromaHeight;
+
+        // 輝度と色差を続けて詰めて置く並び（色差の先頭は 16 バイトの境界）
+        public static PlaneLayout Packed(VideoPlaneFormat format, int width, int height)
+        {
+            var bytes = format == VideoPlaneFormat.P010 ? 2 : 1;
+            var chromaWidth = (width + 1) / 2;
+            var chromaHeight = (height + 1) / 2;
+            var chromaOffset = (width * bytes * height + 15) & ~15;
+            return new PlaneLayout(format, width, height, width * bytes, chromaOffset, chromaWidth * 2 * bytes, chromaWidth, chromaHeight);
+        }
+    }
 
     private sealed record LayerKey(RenderNode Node, double Scale, int SceneWidth, int SceneHeight);
 

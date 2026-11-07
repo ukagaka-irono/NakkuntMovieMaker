@@ -7,7 +7,7 @@ namespace NakkuntMovieMaker.Rendering.Vulkan.Tests;
 /// </summary>
 internal static class Gpu
 {
-    public static VulkanDeviceOptions Options { get; } = new(AllowSoftware: true, Validation: true);
+    public static VulkanDeviceOptions Options { get; } = new(AllowSoftware: true, Validation: true, VideoDecode: true);
 
     private static readonly Lazy<string?> SelfTestProblem = new(() =>
     {
@@ -36,11 +36,19 @@ internal static class Gpu
         }
     }
 
-    public static VulkanDevice CreateOrSkip()
+    /// <summary>
+    /// Vulkan Video でデコードするテスト（試験的な機能）は、NMM_TEST_VULKAN_VIDEO=1 のときだけ回す。
+    /// FFmpeg 9.0.2 と基準の PC の Intel のドライバーでは、デコードの途中でプロセスごと落ちることがあり（4 回に 1 回ほど）、
+    /// ほかのテストまで止めてしまうため
+    /// </summary>
+    public static void RequireVulkanVideoTests() =>
+        Assert.SkipUnless(Environment.GetEnvironmentVariable("NMM_TEST_VULKAN_VIDEO") == "1", "Vulkan Video のテストは NMM_TEST_VULKAN_VIDEO=1 のときだけ回します");
+
+    public static VulkanDevice CreateOrSkip(VulkanDeviceOptions? options = null)
     {
         try
         {
-            return VulkanDevice.Create(Options);
+            return VulkanDevice.Create(options ?? Options);
         }
         catch (VulkanException ex)
         {

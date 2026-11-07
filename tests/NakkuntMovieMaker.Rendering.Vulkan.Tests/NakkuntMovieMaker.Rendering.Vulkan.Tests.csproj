@@ -13,6 +13,13 @@
     <Using Include="NakkuntMovieMaker.Rendering.TestSupport" />
   </ItemGroup>
 
+  <!-- Media のテスト用の動画を使い回す（Vulkan Video のデコード） -->
+  <ItemGroup>
+    <None Include="../NakkuntMovieMaker.Media.Tests/Fixtures/frames-2997.mp4;../NakkuntMovieMaker.Media.Tests/Fixtures/hevc-main10-320x240.mp4"
+          Link="Fixtures/%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- テスト用のシェーダー（共通の関数は本体の Shaders/Library を使う） -->
   <ItemGroup>
     <NmmShader Include="Shaders/*.slang" />

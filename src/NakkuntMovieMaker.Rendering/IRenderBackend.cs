@@ -106,6 +106,32 @@ public interface IMediaSource
     /// 対応していなければ null（そのときは GetVideoFrame を使う）
     /// </summary>
     VideoPlaneFrame? GetVideoPlanes(AssetId asset, Rational time) => null;
+
+    /// <summary>
+    /// GPU 版が使う：動画のフレームを、描画と同じ GPU（device）でデコードしたフレームのまま（コピーしない）。
+    /// GPU でデコードできない動画や、対応していなければ null（そのときは GetVideoPlanes・GetVideoFrame を使う）。
+    /// 返したフレームは、使う側が Dispose する
+    /// </summary>
+    GpuVideoFrame? GetGpuVideoFrame(AssetId asset, Rational time, HardwareVideoDevice device) => null;
+}
+
+/// <summary>
+/// 描画の GPU を、動画のデコードに使うためのもの（FFmpeg の Vulkan のデバイス）。Reference は FFmpeg の AVBufferRef*。
+/// 描画をやめる前に Closing で知らせるので、このデバイスでデコードしているもの（デコーダー）は、それまでに捨てる
+/// </summary>
+public abstract class HardwareVideoDevice
+{
+    public abstract nint Reference { get; }
+
+    public event Action? Closing;
+
+    protected void OnClosing() => Closing?.Invoke();
+}
+
+/// <summary>GPU の上のままの動画のフレーム。Width・Height は素材の元の大きさ。Input は、RGB にした後にかける入力の色の変換</summary>
+public sealed record GpuVideoFrame(HardwareVideoFrame Frame, int Width, int Height, ColorLut? Input) : IDisposable
+{
+    public void Dispose() => Frame.Dispose();
 }
 
 /// <summary>

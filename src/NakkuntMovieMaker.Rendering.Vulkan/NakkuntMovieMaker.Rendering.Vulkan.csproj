@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="NakkuntMovieMaker.Rendering.Vulkan.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Vortice.Vulkan" />
     <PackageReference Include="Vortice.VulkanMemoryAllocator" />
   </ItemGroup>

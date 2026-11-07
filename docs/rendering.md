@@ -64,3 +64,23 @@ GPU 版は 16 ビット浮動小数点で計算し、途中で 8 ビットに丸
 
 - どれも、指定がなければ変換しません（OpenColorIO がなくても、M1 と同じに描けます）。
 - 表示と出力の変換は、CPU 版は描き終えた 8 ビットの画像に、GPU 版は読み戻す前（16 ビット浮動小数点のまま）にかけます。GPU 版と CPU 版の差は 51dB 以上です（`output/*` の場面）。
+
+## 動画の受け取り方（M2 の手順 F）
+
+GPU 版は、動画のフレームを次の順に試して受け取ります（素材ごとに、できなかった方式は次から試しません）。使っている方式は `ProjectMediaSource.VideoDecodeMethod` でわかります。
+
+| 順番 | 方式 | 中身 |
+| --- | --- | --- |
+| 1 | Vulkan Video（試験的） | FFmpeg に描画と同じ Vulkan のデバイスでデコードさせ、フレーム（VkImage）を GPU の上でバッファーに写して RGB にする。メインメモリを通らない |
+| 2 | YUV の平面 | ハードウェア（d3d11va など）かソフトウェアでデコードし、NV12・P010 のままメインメモリに写して GPU に送り、GPU で RGB にする（swscale を使わない） |
+| 3 | BGRA | 4:2:0 でない動画（4:2:2・4:4:4・RGB・透明あり）は、これまでどおり swscale で BGRA にする |
+
+- **Vulkan Video は、既定では使いません**（`RendererOptions.ExperimentalVulkanVideo`、または環境変数 `NMM_VULKAN_VIDEO=1` で使えます）。
+  - FFmpeg 9.0.2 と基準の PC（Iris Xe）のドライバーでは、デコードの途中でプロセスごと落ちることがあります。`samples/general` の `clip.mp4` は、2 つ目のキーフレームで必ず落ちます。テスト用の動画でも、4 回に 1 回ほど落ちます。
+  - FFmpeg の `ffmpeg` コマンド（`-hwaccel vulkan`）でも同じように落ちるので、FFmpeg かドライバーの不具合です。
+  - 落ちないときは、写して送る方式と同じ絵になります（差はありません）。検証レイヤーのエラーもありません。
+  - そのため、Vulkan Video のテストは `NMM_TEST_VULKAN_VIDEO=1` のときだけ回します。
+- **FFmpeg とキューを共有する**
+  - グラフィックスのキューは描画と FFmpeg で共有するので、送る前に同じ錠（`VulkanDevice.QueueLock`）を取ります。
+  - デコードしたフレームは、FFmpeg のセマフォを待ってから読み、読み終わったら値を 1 つ進めて合図します。
+- **FFmpeg の Vulkan の構造体**（`AVVulkanDeviceContext`・`AVVkFrame`）は FFmpeg.AutoGen にないので、ヘッダーをコンパイルして確かめたオフセットで読み書きします。FFmpeg が自分で作ったデバイスを、同じオフセットで読んで確かめるテストもあります。

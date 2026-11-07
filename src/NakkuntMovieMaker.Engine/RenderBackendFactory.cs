@@ -22,7 +22,13 @@ public enum RendererPreference
 /// 描画の方式の設定。Device は使う GPU の名前（null なら自動で選ぶ）。
 /// CrashMarkerPath を指定すると、GPU の準備の間だけそのファイルを置き、準備の途中でアプリが止まったら、次からは GPU を使わない
 /// </summary>
-public sealed record RendererOptions(RendererPreference Preference = RendererPreference.Auto, string? Device = null, string? CrashMarkerPath = null)
+/// <remarks>
+/// ExperimentalVulkanVideo なら、GPU 版で、動画を描画と同じ GPU の Vulkan Video でデコードし、フレームをコピーせずに使う（試験的な機能。
+/// 基準の PC では、FFmpeg とドライバーの不具合で落ちる動画があるので、既定では使わない）。
+/// 使わないときは、ハードウェアでデコードしたフレームを YUV の平面のままメインメモリに写して GPU に送り、GPU で RGB にする
+/// </remarks>
+public sealed record RendererOptions(
+    RendererPreference Preference = RendererPreference.Auto, string? Device = null, string? CrashMarkerPath = null, bool ExperimentalVulkanVideo = false)
 {
     public static RendererOptions Default { get; } = new();
 
@@ -70,7 +76,7 @@ public static class RenderBackendFactory
             VulkanBackend gpu;
             try
             {
-                gpu = new VulkanBackend(VulkanDevice.Create(new VulkanDeviceOptions(options.Device)), layouts, ownsDevice: true);
+                gpu = new VulkanBackend(VulkanDevice.Create(new VulkanDeviceOptions(options.Device, VideoDecode: options.ExperimentalVulkanVideo)), layouts, ownsDevice: true);
             }
             catch (VulkanException ex)
             {

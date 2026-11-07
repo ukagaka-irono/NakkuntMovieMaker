@@ -44,16 +44,24 @@ public sealed unsafe class GpuCommandContext
     /// <summary>ここまで記録したコマンドを送り、新しいコマンドバッファーで続ける（完了の合図はまだ出さない）</summary>
     public void Flush()
     {
-        _scheduler.Submit(_slot.End(Device), signal: null);
+        _scheduler.Submit(_slot.End(Device), signal: null, _slot);
         CommandBuffer = _slot.Begin(Device);
     }
 
     public void OnCompleted(Action action) => _slot.Completions.Add(action);
 
+    /// <summary>次に送るコマンドの前に、ほかのタイムラインセマフォ（FFmpeg のデコードしたフレームなど）が value に届くのを待つ</summary>
+    public void WaitSemaphore(VkSemaphore semaphore, ulong value, VkPipelineStageFlags stage) => _slot.Waits.Add((semaphore, value, stage));
+
+    /// <summary>この仕事が終わったら、ほかのタイムラインセマフォを value にする</summary>
+    public void SignalSemaphore(VkSemaphore semaphore, ulong value) => _slot.Signals.Add((semaphore, value));
+
     /// <summary>この仕事の間だけ使うディスクリプターセット（記録の場所を使い回すときに、まとめて返す）</summary>
     public VkDescriptorSet AllocateDescriptorSet(VkDescriptorSetLayout layout) => _slot.AllocateDescriptorSet(Device, layout);
 
-    internal void Finish() => _scheduler.Submit(_slot.End(Device), signal: Value);
+    internal void Finish() => _scheduler.Submit(_slot.End(Device), signal: Value, _slot);
+
+    internal GpuScheduler.Slot Slot => _slot;
 }
 
 /// <summary>
@@ -169,20 +177,60 @@ public sealed unsafe class GpuScheduler : IDisposable
         _jobs.Dispose();
     }
 
-    internal void Submit(VkCommandBuffer commands, ulong? signal)
+    internal void Submit(VkCommandBuffer commands, ulong? signal, Slot? slot = null)
     {
-        var semaphore = _timeline;
-        var value = signal ?? 0;
-        var timelineInfo = new VkTimelineSemaphoreSubmitInfo { signalSemaphoreValueCount = signal is null ? 0u : 1u, pSignalSemaphoreValues = &value };
+        // 待つセマフォ（記録の途中で頼まれたもの）と、合図するセマフォ（自分のタイムラインと、最後の送信なら頼まれたもの）
+        var waits = slot?.Waits ?? [];
+        var signals = new List<(VkSemaphore Semaphore, ulong Value)>();
+        if (signal is { } own)
+        {
+            signals.Add((_timeline, own));
+            if (slot is not null)
+            {
+                signals.AddRange(slot.Signals);
+                slot.Signals.Clear();
+            }
+        }
+
+        var waitSemaphores = stackalloc VkSemaphore[Math.Max(1, waits.Count)];
+        var waitValues = stackalloc ulong[Math.Max(1, waits.Count)];
+        var waitStages = stackalloc VkPipelineStageFlags[Math.Max(1, waits.Count)];
+        for (var i = 0; i < waits.Count; i++)
+        {
+            (waitSemaphores[i], waitValues[i], waitStages[i]) = waits[i];
+        }
+
+        var signalSemaphores = stackalloc VkSemaphore[Math.Max(1, signals.Count)];
+        var signalValues = stackalloc ulong[Math.Max(1, signals.Count)];
+        for (var i = 0; i < signals.Count; i++)
+        {
+            (signalSemaphores[i], signalValues[i]) = signals[i];
+        }
+
+        var timelineInfo = new VkTimelineSemaphoreSubmitInfo
+        {
+            waitSemaphoreValueCount = (uint)waits.Count,
+            pWaitSemaphoreValues = waitValues,
+            signalSemaphoreValueCount = (uint)signals.Count,
+            pSignalSemaphoreValues = signalValues,
+        };
         var submit = new VkSubmitInfo
         {
             pNext = &timelineInfo,
+            waitSemaphoreCount = (uint)waits.Count,
+            pWaitSemaphores = waitSemaphores,
+            pWaitDstStageMask = waitStages,
             commandBufferCount = 1,
             pCommandBuffers = &commands,
-            signalSemaphoreCount = signal is null ? 0u : 1u,
-            pSignalSemaphores = &semaphore,
+            signalSemaphoreCount = (uint)signals.Count,
+            pSignalSemaphores = signalSemaphores,
         };
-        Check(Device.DeviceApi.vkQueueSubmit(Device.Queue, 1, &submit, VkFence.Null), "GPU への送信");
+        lock (Device.QueueLock)
+        {
+            Check(Device.DeviceApi.vkQueueSubmit(Device.Queue, 1, &submit, VkFence.Null), "GPU への送信");
+        }
+
+        slot?.Waits.Clear();
     }
 
     private void Run()
@@ -217,6 +265,8 @@ public sealed unsafe class GpuScheduler : IDisposable
                 // 記録に失敗した仕事は送らない（値も進めない）
                 slot.End(Device);
                 slot.Completions.Clear();
+                slot.Waits.Clear();
+                slot.Signals.Clear();
             }
         }
     }
@@ -271,6 +321,12 @@ public sealed unsafe class GpuScheduler : IDisposable
         public ulong LastValue { get; set; }
 
         public List<Action> Completions { get; } = [];
+
+        /// <summary>次の送信で待つ、ほかのタイムラインセマフォ</summary>
+        public List<(VkSemaphore Semaphore, ulong Value, VkPipelineStageFlags Stage)> Waits { get; } = [];
+
+        /// <summary>この仕事の最後の送信で合図する、ほかのタイムラインセマフォ</summary>
+        public List<(VkSemaphore Semaphore, ulong Value)> Signals { get; } = [];
 
         public void Reset(VulkanDevice device)
         {

@@ -35,6 +35,12 @@ public enum VideoFrameOutput
     /// それ以外の形式（4:2:2・4:4:4・RGB・透明あり）は、BGRA の画像にする
     /// </summary>
     Planes,
+
+    /// <summary>
+    /// GPU（Vulkan）の上のフレームのまま（VideoDecoderOptions.VulkanDevice のデバイスで Vulkan Video でデコードする）。
+    /// GPU でデコードできない動画・形式は、平面か BGRA の画像にする
+    /// </summary>
+    Gpu,
 }
 
 /// <summary>
@@ -47,7 +53,8 @@ public sealed record VideoDecoderOptions(
     HardwareDecoding Hardware = HardwareDecoding.Auto,
     int CacheCapacity = 32,
     ConversionQuality Quality = ConversionQuality.Accurate,
-    VideoFrameOutput Output = VideoFrameOutput.Bgra);
+    VideoFrameOutput Output = VideoFrameOutput.Bgra,
+    nint VulkanDevice = 0);
 
 /// <summary>
 /// デコードしたフレーム。Time は素材の先頭からの表示時刻（秒）、Duration は次のフレームまでの長さ。
@@ -58,8 +65,12 @@ public sealed record DecodedFrame(BgraImage? Image, Rational Time, Rational? Dur
     /// <summary>平面のまま渡したときの YUV の平面（BGRA にしたときは null）</summary>
     public VideoPlanes? Planes { get; init; }
 
+    /// <summary>GPU の上のフレームのまま渡したときのフレーム（デコーダーが持っている参照。使う側は Clone する）</summary>
+    public HardwareVideoFrame? GpuFrame { get; init; }
+
     /// <summary>BGRA の画像（平面のまま渡したときは、CPU で RGB にする）</summary>
-    public BgraImage Bgra => Image ?? YuvConversion.ToBgra(Planes!);
+    public BgraImage Bgra => Image
+        ?? (Planes is { } planes ? YuvConversion.ToBgra(planes) : throw new InvalidOperationException("GPU の上のフレームは、BGRA の画像として読めません"));
 
     /// <summary>
     /// フレームの色の情報（タグがなければ推測した値）。Image はこの行列と範囲で RGB にしたもので、
@@ -292,8 +303,15 @@ public sealed unsafe class VideoDecoder : IDisposable
                 if (timestamp > target)
                 {
                     // 最初のフレームより前の時刻：最初のフレームを返す（次のフレームがまだ分からないので覚えない）
-                    var (image, planes, color) = Convert(_held);
-                    return new DecodedFrame(image, ToSeconds(timestamp), null) { Color = color, Planes = planes };
+                    var (image, planes, gpuFrame, color) = Convert(_held);
+                    var first = new DecodedFrame(image, ToSeconds(timestamp), null) { Color = color, Planes = planes, GpuFrame = gpuFrame };
+                    if (gpuFrame is not null)
+                    {
+                        // GPU のフレームは、キャッシュに入れて、外すときに返す（次のフレームはまだ分からないので、時刻では見つからないようにする）
+                        AddToCache(new CacheEntry(timestamp, timestamp, first));
+                    }
+
+                    return first;
                 }
 
                 continue;
@@ -417,7 +435,7 @@ public sealed unsafe class VideoDecoder : IDisposable
             return existing;
         }
 
-        var (image, planes, color) = Convert(frame);
+        var (image, planes, gpuFrame, color) = Convert(frame);
         var decoded = new DecodedFrame(
             image,
             ToSeconds(start),
@@ -425,14 +443,20 @@ public sealed unsafe class VideoDecoder : IDisposable
         {
             Color = color,
             Planes = planes,
+            GpuFrame = gpuFrame,
         };
-        _cache.AddFirst(new CacheEntry(start, end, decoded));
+        AddToCache(new CacheEntry(start, end, decoded));
+        return decoded;
+    }
+
+    private void AddToCache(CacheEntry entry)
+    {
+        _cache.AddFirst(entry);
         while (_cache.Count > Math.Max(1, _options.CacheCapacity))
         {
+            _cache.Last!.Value.Frame.GpuFrame?.Dispose();
             _cache.RemoveLast();
         }
-
-        return decoded;
     }
 
     private DecodedFrame? FindCached(long target)
@@ -463,9 +487,32 @@ public sealed unsafe class VideoDecoder : IDisposable
         return null;
     }
 
-    // フレームを BGRA にする（平面のまま渡す設定で、渡せる形式なら平面にする）。ハードウェアデコードしたフレームは、先にメインメモリへ移す
-    private (BgraImage? Image, VideoPlanes? Planes, VideoColorInfo Color) Convert(AVFrame* frame)
+    // フレームを BGRA にする（平面のまま渡す設定で、渡せる形式なら平面にする。GPU のまま渡す設定で、Vulkan のフレームなら、そのまま渡す）。
+    // ハードウェアデコードしたフレームは、先にメインメモリへ移す
+    private (BgraImage? Image, VideoPlanes? Planes, HardwareVideoFrame? GpuFrame, VideoColorInfo Color) Convert(AVFrame* frame)
     {
+        if (_options.Output == VideoFrameOutput.Gpu && frame->format == (int)AVPixelFormat.AV_PIX_FMT_VULKAN && frame->hw_frames_ctx is not null)
+        {
+            var frames = (AVHWFramesContext*)frame->hw_frames_ctx->data;
+            VideoPlaneFormat? planeFormat = frames->sw_format switch
+            {
+                AVPixelFormat.AV_PIX_FMT_NV12 => VideoPlaneFormat.Nv12,
+                AVPixelFormat.AV_PIX_FMT_P010LE => VideoPlaneFormat.P010,
+                _ => null,
+            };
+            if (planeFormat is { } gpuFormat)
+            {
+                var gpuColor = FfmpegColor.FromFrame(frame, frames->sw_format, _format->streams[_streamIndex]->codecpar);
+                var clone = ffmpeg.av_frame_clone(frame);
+                if (clone is null)
+                {
+                    throw new MediaException("フレームの参照を作れませんでした");
+                }
+
+                return (null, null, new HardwareVideoFrame(clone, gpuFormat, gpuColor), gpuColor);
+            }
+        }
+
         var source = frame;
         if (frame->hw_frames_ctx is not null)
         {
@@ -476,7 +523,7 @@ public sealed unsafe class VideoDecoder : IDisposable
         }
 
         var format = (AVPixelFormat)source->format;
-        if (_options.Output == VideoFrameOutput.Planes
+        if (_options.Output is VideoFrameOutput.Planes or VideoFrameOutput.Gpu
             && CopyPlanes(source, format, FfmpegColor.FromFrame(source, format, _format->streams[_streamIndex]->codecpar)) is { } planes)
         {
             if (source == _transfer)
@@ -484,7 +531,7 @@ public sealed unsafe class VideoDecoder : IDisposable
                 ffmpeg.av_frame_unref(_transfer);
             }
 
-            return (null, planes, planes.Color);
+            return (null, planes, null, planes.Color);
         }
 
         _scaler = ffmpeg.sws_getCachedContext(
@@ -527,7 +574,7 @@ public sealed unsafe class VideoDecoder : IDisposable
             ffmpeg.av_frame_unref(_transfer);
         }
 
-        return (new BgraImage(OutputWidth, OutputHeight, pixels), null, color);
+        return (new BgraImage(OutputWidth, OutputHeight, pixels), null, null, color);
     }
 
     // 4:2:0 の YUV（8 ビット・10 ビット）を、NV12・P010 の平面に写す。ほかの形式なら null
@@ -645,6 +692,21 @@ public sealed unsafe class VideoDecoder : IDisposable
 
     private void OpenCodec(AVCodec* decoder, bool tryHardware)
     {
+        // GPU のまま渡すときは、描画と同じ Vulkan のデバイスでデコードする（デバイスは借りるだけで、捨てない）
+        if (_options.Output == VideoFrameOutput.Gpu && _options.VulkanDevice != 0 && SupportsDevice(decoder, AVHWDeviceType.AV_HWDEVICE_TYPE_VULKAN))
+        {
+            try
+            {
+                OpenCodecContext(decoder, (AVBufferRef*)_options.VulkanDevice);
+                HardwareDevice = "vulkan";
+                return;
+            }
+            catch (MediaException)
+            {
+                FreeCodec();
+            }
+        }
+
         if (tryHardware && TryCreateHardwareDevice(decoder) is { } name)
         {
             try
@@ -673,6 +735,9 @@ public sealed unsafe class VideoDecoder : IDisposable
         if (hardwareDevice is not null)
         {
             _codec->hw_device_ctx = ffmpeg.av_buffer_ref(hardwareDevice);
+
+            // 覚えておくフレームと、描画が使っている途中のフレームの分も、GPU の画像を余分に用意する
+            _codec->extra_hw_frames = Math.Max(1, _options.CacheCapacity) + 4;
         }
 
         ffmpeg.avcodec_open2(_codec, decoder, null).ThrowIfError("デコーダーの準備");
@@ -804,6 +869,11 @@ public sealed unsafe class VideoDecoder : IDisposable
         }
 
         _received = _held = _transfer = null;
+
+        foreach (var entry in _cache)
+        {
+            entry.Frame.GpuFrame?.Dispose();
+        }
 
         if (_packet is not null)
         {

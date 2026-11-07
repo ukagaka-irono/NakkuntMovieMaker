@@ -75,6 +75,9 @@ ffmpeg $G -f lavfi -i "$C:s=128x96"   -vf "scale=out_color_matrix=bt709:out_rang
 ffmpeg $G -f lavfi -i "$C:s=128x96" -vf "scale=out_color_matrix=bt2020:out_range=tv,format=yuv420p10le"   -c:v libx265 -preset veryfast -crf 10   -x265-params "log-level=error:hdr10=1:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50):max-cll=1000,400:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc"   -tag:v hvc1 $O pq-sei.mp4
 ffmpeg $G -i pq-sei.mp4 -c:v libx265 -preset veryfast -crf 10 -x265-params log-level=error -tag:v hvc1 $O color-c83c28-bt2020-pq.mp4
 
+# HEVC Main 10・BT.2020・PQ のテストパターン（320×240。Vulkan Video でデコードできる大きさ）
+ffmpeg $G -f lavfi -i "testsrc2=s=320x240:r=30:d=0.5" -vf "scale=out_color_matrix=bt2020:out_range=tv,format=yuv420p10le"   -c:v libx265 -preset veryfast -crf 20 -x265-params "log-level=error:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc"   -colorspace bt2020nc -color_primaries bt2020 -color_trc smpte2084 -color_range tv -tag:v hvc1 $O hevc-main10-320x240.mp4
+
 # BT.2020・HLG・10 ビット（HEVC Main 10）
 ffmpeg $G -f lavfi -i "$C:s=128x96" -vf "scale=out_color_matrix=bt2020:out_range=tv,format=yuv420p10le"   -c:v libx265 -preset veryfast -crf 10 -x265-params "log-level=error:colorprim=bt2020:transfer=arib-std-b67:colormatrix=bt2020nc"   -colorspace bt2020nc -color_primaries bt2020 -color_trc arib-std-b67 -color_range tv -tag:v hvc1 $O color-c83c28-bt2020-hlg.mp4
 ```

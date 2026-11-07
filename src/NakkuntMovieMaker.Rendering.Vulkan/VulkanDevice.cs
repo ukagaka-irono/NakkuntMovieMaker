@@ -23,16 +23,27 @@ public sealed record VulkanDeviceInfo(string Name, VulkanDeviceType Type, Versio
 
 /// <summary>
 /// デバイスの選び方。DeviceName を指定すれば、その名前の GPU を選ぶ。AllowSoftware なら CPU で動く Vulkan も選べる
-/// （CI のテスト用。環境変数 NMM_VULKAN_ALLOW_SOFTWARE=1 でも同じ）。Validation なら検証レイヤーを使う（NMM_VULKAN_VALIDATION=1 でも同じ）
+/// （CI のテスト用。環境変数 NMM_VULKAN_ALLOW_SOFTWARE=1 でも同じ）。Validation なら検証レイヤーを使う（NMM_VULKAN_VALIDATION=1 でも同じ）。
+/// VideoDecode なら、Vulkan Video のデコード用のキューと拡張も用意する（NMM_VULKAN_VIDEO=1 でも同じ）。
+/// FFmpeg 9.0.2 と基準の PC の Intel のドライバーでは、H.264 の動画によって、Vulkan Video でデコードするとプロセスごと落ちる
+/// （FFmpeg の ffmpeg コマンドでも同じ）ので、今は試験的な機能として、既定では使わない
 /// </summary>
-public sealed record VulkanDeviceOptions(string? DeviceName = null, bool AllowSoftware = false, bool Validation = false)
+public sealed record VulkanDeviceOptions(string? DeviceName = null, bool AllowSoftware = false, bool Validation = false, bool VideoDecode = false)
 {
     public static VulkanDeviceOptions Default { get; } = new();
 
     internal bool SoftwareAllowed => AllowSoftware || Environment.GetEnvironmentVariable("NMM_VULKAN_ALLOW_SOFTWARE") == "1";
 
+    internal bool VideoDecodeEnabled => VideoDecode || Environment.GetEnvironmentVariable("NMM_VULKAN_VIDEO") == "1";
+
     internal bool ValidationEnabled => Validation || Environment.GetEnvironmentVariable("NMM_VULKAN_VALIDATION") == "1";
 }
+
+/// <summary>
+/// Vulkan Video のデコード（FFmpeg に同じデバイスでデコードさせ、フレームをコピーせずに受け取るため）。
+/// Family はデコード用のキューファミリー、QueueCount はその中で作ったキューの数、CodecOperations は対応しているコーデック（VkVideoCodecOperationFlagsKHR）
+/// </summary>
+public sealed record VulkanVideoDecode(uint Family, uint QueueCount, uint CodecOperations, VkQueueFlags FamilyFlags);
 
 /// <summary>Vulkan を使えなかった。Message は利用者に表示できる文</summary>
 public sealed class VulkanException(string message, Exception? innerException = null) : Exception(message, innerException);
@@ -50,11 +61,16 @@ public sealed unsafe class VulkanDevice : IDisposable
     private static VkResult? _loaded;
 
     private readonly VkDebugUtilsMessengerEXT _messenger;
+    private readonly DeviceSetup _setup;
     private bool _disposed;
 
     private VulkanDevice(VkInstance instance, VkInstanceApi instanceApi, VkPhysicalDevice physical, VulkanDeviceInfo info, VkDevice device, VkDeviceApi deviceApi,
-        uint queueFamily, VkQueue queue, VkDebugUtilsMessengerEXT messenger)
+        uint queueFamily, VkQueue queue, VkDebugUtilsMessengerEXT messenger, DeviceSetup setup)
     {
+        _setup = setup;
+        VideoDecode = setup.Video;
+        QueueFamilyFlags = setup.GraphicsFlags;
+        DecodeQueueLocks = [.. Enumerable.Range(0, (int)(setup.Video?.QueueCount ?? 0)).Select(_ => new Lock())];
         Instance = instance;
         InstanceApi = instanceApi;
         PhysicalDevice = physical;
@@ -83,6 +99,29 @@ public sealed unsafe class VulkanDevice : IDisposable
 
     public VkQueue Queue { get; }
 
+    /// <summary>グラフィックス・コンピュートのキューファミリーでできること</summary>
+    public VkQueueFlags QueueFamilyFlags { get; }
+
+    /// <summary>
+    /// グラフィックス・コンピュートのキューに送るときに取る錠（FFmpeg も同じキューに送るので、送る前に取る）
+    /// </summary>
+    public Lock QueueLock { get; } = new();
+
+    /// <summary>デコード用のキューの錠（FFmpeg だけが使う）</summary>
+    internal Lock[] DecodeQueueLocks { get; }
+
+    /// <summary>Vulkan Video のデコードに使えるキューと、有効にした拡張（使えなければ null）</summary>
+    public VulkanVideoDecode? VideoDecode { get; }
+
+    /// <summary>有効にしたインスタンスの拡張（UTF-8 の文字列の配列。FFmpeg に渡す）</summary>
+    internal (nint Names, int Count) InstanceExtensionNames => (_setup.InstanceExtensions.Pointer, _setup.InstanceExtensions.Count);
+
+    /// <summary>有効にしたデバイスの拡張（UTF-8 の文字列の配列。FFmpeg に渡す）</summary>
+    internal (nint Names, int Count) DeviceExtensionNames => (_setup.DeviceExtensions.Pointer, _setup.DeviceExtensions.Count);
+
+    /// <summary>有効にした機能（VkPhysicalDeviceFeatures2 と、つないだ 1.1・1.2・1.3 の機能。デバイスがある間は有効。FFmpeg に渡す）</summary>
+    internal VkPhysicalDeviceFeatures2* EnabledFeatures => _setup.Features;
+
     /// <summary>検証レイヤーが出した警告とエラー（検証レイヤーを使ったときだけ。テストで 0 件を確かめる）</summary>
     public static IReadOnlyCollection<string> ValidationMessages => Messages;
 
@@ -101,7 +140,7 @@ public sealed unsafe class VulkanDevice : IDisposable
         }
 
         EnsureLoader();
-        var (instance, api, messenger) = CreateInstance(options);
+        var (instance, api, messenger, instanceExtensions) = CreateInstance(options);
         try
         {
             var candidates = Enumerate(instance, api);
@@ -109,7 +148,7 @@ public sealed unsafe class VulkanDevice : IDisposable
                 ?? throw new VulkanException(candidates.Count == 0
                     ? "Vulkan に対応した GPU が見つかりません"
                     : $"使える GPU がありません（{string.Join("、", candidates.Select(c => $"{c.Info.Name}: {c.Info.Unsuitable}"))}）");
-            return CreateDevice(instance, api, messenger, chosen.Physical, chosen.Info, chosen.QueueFamily);
+            return CreateDevice(instance, api, messenger, chosen.Physical, chosen.Info, chosen.QueueFamily, instanceExtensions, options.VideoDecodeEnabled);
         }
         catch
         {
@@ -124,7 +163,7 @@ public sealed unsafe class VulkanDevice : IDisposable
         try
         {
             EnsureLoader();
-            var (instance, api, messenger) = CreateInstance(VulkanDeviceOptions.Default with { Validation = false });
+            var (instance, api, messenger, _) = CreateInstance(VulkanDeviceOptions.Default with { Validation = false });
             try
             {
                 return [.. Enumerate(instance, api).Select(candidate => candidate.Info)];
@@ -157,6 +196,7 @@ public sealed unsafe class VulkanDevice : IDisposable
         DeviceApi.vkDeviceWaitIdle();
         DeviceApi.vkDestroyDevice(null);
         DestroyInstance(Instance, InstanceApi, _messenger);
+        _setup.Dispose();
     }
 
     // Vulkan のローダー（Windows・Linux は OS・ドライバーのもの、macOS は同梱の MoltenVK）を読み込む
@@ -185,7 +225,7 @@ public sealed unsafe class VulkanDevice : IDisposable
         }
     }
 
-    private static (VkInstance Instance, VkInstanceApi Api, VkDebugUtilsMessengerEXT Messenger) CreateInstance(VulkanDeviceOptions options)
+    private static (VkInstance Instance, VkInstanceApi Api, VkDebugUtilsMessengerEXT Messenger, List<string> Extensions) CreateInstance(VulkanDeviceOptions options)
     {
         var available = InstanceExtensions();
         var extensions = new List<string>();
@@ -238,7 +278,7 @@ public sealed unsafe class VulkanDevice : IDisposable
             api.vkCreateDebugUtilsMessengerEXT(&messengerInfo, null, &messenger);
         }
 
-        return (instance, api, messenger);
+        return (instance, api, messenger, extensions);
     }
 
     [UnmanagedCallersOnly]
@@ -354,38 +394,250 @@ public sealed unsafe class VulkanDevice : IDisposable
         }).FirstOrDefault();
     }
 
-    private static VulkanDevice CreateDevice(VkInstance instance, VkInstanceApi api, VkDebugUtilsMessengerEXT messenger, VkPhysicalDevice physical, VulkanDeviceInfo info, uint family)
+    private static VulkanDevice CreateDevice(
+        VkInstance instance, VkInstanceApi api, VkDebugUtilsMessengerEXT messenger, VkPhysicalDevice physical, VulkanDeviceInfo info, uint family, List<string> instanceExtensions,
+        bool wantVideo)
     {
+        var available = DeviceExtensions(api, physical);
         var extensions = new List<string>();
-        if (DeviceExtensions(api, physical).Contains("VK_KHR_portability_subset"))
+        if (available.Contains("VK_KHR_portability_subset"))
         {
             extensions.Add("VK_KHR_portability_subset");
         }
 
-        var priority = 1f;
-        var queueInfo = new VkDeviceQueueCreateInfo { queueFamilyIndex = family, queueCount = 1, pQueuePriorities = &priority };
-        var vulkan12 = new VkPhysicalDeviceVulkan12Features { timelineSemaphore = true };
-        var features = new VkPhysicalDeviceFeatures2 { pNext = &vulkan12 };
-        using var extensionNames = new VkStringArray(extensions);
-        var createInfo = new VkDeviceCreateInfo
+        var families = QueueFamilies(api, physical);
+        var video = wantVideo ? FindVideoDecode(api, physical, available, families, family, info.ApiVersion) : null;
+        if (video is not null)
         {
-            pNext = &features,
-            queueCreateInfoCount = 1,
-            pQueueCreateInfos = &queueInfo,
-            enabledExtensionCount = extensionNames.Length,
-            ppEnabledExtensionNames = extensionNames,
-        };
-        VkDevice device;
-        var result = api.vkCreateDevice(physical, &createInfo, null, &device);
-        if (result != VkResult.Success)
-        {
-            throw new VulkanException($"GPU（{info.Name}）を使い始められません（{result}）");
+            extensions.AddRange(video.Value.Extensions);
         }
 
-        var deviceApi = GetApi(instance, device);
-        VkQueue queue;
-        deviceApi.vkGetDeviceQueue(family, 0, &queue);
-        return new VulkanDevice(instance, api, physical, info, device, deviceApi, family, queue, messenger);
+        // 有効にする機能（FFmpeg にも渡すので、デバイスがある間は残しておく）
+        var setup = new DeviceSetup(instanceExtensions, extensions, info.ApiVersion >= new Version(1, 3), video?.Decode, families[family].queueFlags);
+        try
+        {
+            setup.EnableSupported(api, physical, wantVideo: video is not null);
+
+            var priorities = stackalloc float[Math.Max(1, (int)(video?.Decode.QueueCount ?? 1))];
+            for (var i = 0; i < Math.Max(1, (int)(video?.Decode.QueueCount ?? 1)); i++)
+            {
+                priorities[i] = 1f;
+            }
+
+            var queueInfos = stackalloc VkDeviceQueueCreateInfo[2];
+            queueInfos[0] = new VkDeviceQueueCreateInfo { queueFamilyIndex = family, queueCount = 1, pQueuePriorities = priorities };
+            var queueCount = 1u;
+            if (video is { } decode)
+            {
+                queueInfos[1] = new VkDeviceQueueCreateInfo { queueFamilyIndex = decode.Decode.Family, queueCount = decode.Decode.QueueCount, pQueuePriorities = priorities };
+                queueCount = 2;
+            }
+
+            using var extensionNames = new VkStringArray(extensions);
+            var createInfo = new VkDeviceCreateInfo
+            {
+                pNext = setup.Features,
+                queueCreateInfoCount = queueCount,
+                pQueueCreateInfos = queueInfos,
+                enabledExtensionCount = extensionNames.Length,
+                ppEnabledExtensionNames = extensionNames,
+            };
+            VkDevice device;
+            var result = api.vkCreateDevice(physical, &createInfo, null, &device);
+            if (result != VkResult.Success)
+            {
+                throw new VulkanException($"GPU（{info.Name}）を使い始められません（{result}）");
+            }
+
+            var deviceApi = GetApi(instance, device);
+            VkQueue queue;
+            deviceApi.vkGetDeviceQueue(family, 0, &queue);
+            return new VulkanDevice(instance, api, physical, info, device, deviceApi, family, queue, messenger, setup);
+        }
+        catch
+        {
+            setup.Dispose();
+            throw;
+        }
+    }
+
+    private static VkQueueFamilyProperties[] QueueFamilies(VkInstanceApi api, VkPhysicalDevice device)
+    {
+        uint count = 0;
+        api.vkGetPhysicalDeviceQueueFamilyProperties(device, &count, null);
+        var families = new VkQueueFamilyProperties[count];
+        fixed (VkQueueFamilyProperties* pointer = families)
+        {
+            api.vkGetPhysicalDeviceQueueFamilyProperties(device, &count, pointer);
+        }
+
+        return families;
+    }
+
+    // Vulkan Video のデコード：デコード用のキューファミリーと、対応しているコーデックの拡張。
+    // Vulkan 1.3 以上（FFmpeg が synchronization2 などを使う）のときだけ。macOS（MoltenVK）では使わない
+    private static (VulkanVideoDecode Decode, List<string> Extensions)? FindVideoDecode(
+        VkInstanceApi api, VkPhysicalDevice physical, HashSet<string> available, VkQueueFamilyProperties[] families, uint graphicsFamily, Version apiVersion)
+    {
+        if (OperatingSystem.IsMacOS() || apiVersion < new Version(1, 3)
+            || !available.Contains("VK_KHR_video_queue") || !available.Contains("VK_KHR_video_decode_queue"))
+        {
+            return null;
+        }
+
+        (string Name, uint Operation)[] codecs =
+        [
+            ("VK_KHR_video_decode_h264", 0x1), ("VK_KHR_video_decode_h265", 0x2), ("VK_KHR_video_decode_av1", 0x4), ("VK_KHR_video_decode_vp9", 0x8),
+        ];
+        var enabledCodecs = codecs.Where(codec => available.Contains(codec.Name)).ToList();
+        var operations = enabledCodecs.Aggregate(0u, (all, codec) => all | codec.Operation);
+        if (operations == 0)
+        {
+            return null;
+        }
+
+        // キューファミリーごとの、対応しているコーデック
+        var count = (uint)families.Length;
+        var videoProperties = new VkQueueFamilyVideoPropertiesKHR[count];
+        var properties = new VkQueueFamilyProperties2[count];
+        fixed (VkQueueFamilyVideoPropertiesKHR* video = videoProperties)
+        fixed (VkQueueFamilyProperties2* pointer = properties)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                video[i] = new VkQueueFamilyVideoPropertiesKHR();
+                pointer[i] = new VkQueueFamilyProperties2 { pNext = &video[i] };
+            }
+
+            api.vkGetPhysicalDeviceQueueFamilyProperties2(physical, &count, pointer);
+        }
+
+        for (var i = 0u; i < count; i++)
+        {
+            var flags = properties[i].queueFamilyProperties.queueFlags;
+            var supported = (uint)videoProperties[i].videoCodecOperations & operations;
+            if (i != graphicsFamily && (flags & VkQueueFlags.VideoDecodeKHR) != 0 && supported != 0)
+            {
+                var extensions = new List<string> { "VK_KHR_video_queue", "VK_KHR_video_decode_queue" };
+                extensions.AddRange(enabledCodecs.Where(codec => (codec.Operation & supported) != 0).Select(codec => codec.Name));
+                foreach (var optional in new[] { "VK_KHR_video_maintenance1" })
+                {
+                    if (available.Contains(optional))
+                    {
+                        extensions.Add(optional);
+                    }
+                }
+
+                return (new VulkanVideoDecode(i, properties[i].queueFamilyProperties.queueCount, supported, flags), extensions);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// デバイスを作るときに有効にした拡張と機能。FFmpeg にも同じものを渡すので、デバイスを捨てるまで残す
+    /// </summary>
+    private sealed class DeviceSetup : IDisposable
+    {
+        private readonly byte* _block;
+
+        public DeviceSetup(List<string> instanceExtensions, List<string> deviceExtensions, bool vulkan13, VulkanVideoDecode? video, VkQueueFlags graphicsFlags)
+        {
+            InstanceExtensions = new Utf8Strings(instanceExtensions);
+            DeviceExtensions = new Utf8Strings(deviceExtensions);
+            Video = video;
+            GraphicsFlags = graphicsFlags;
+
+            // VkPhysicalDeviceFeatures2 → 1.1 → 1.2 →（1.3）の順につなぐ
+            _block = (byte*)NativeMemory.AllocZeroed((nuint)(sizeof(VkPhysicalDeviceFeatures2) + sizeof(VkPhysicalDeviceVulkan11Features)
+                + sizeof(VkPhysicalDeviceVulkan12Features) + sizeof(VkPhysicalDeviceVulkan13Features)));
+            Features = (VkPhysicalDeviceFeatures2*)_block;
+            Vulkan11 = (VkPhysicalDeviceVulkan11Features*)(_block + sizeof(VkPhysicalDeviceFeatures2));
+            Vulkan12 = (VkPhysicalDeviceVulkan12Features*)((byte*)Vulkan11 + sizeof(VkPhysicalDeviceVulkan11Features));
+            Vulkan13 = (VkPhysicalDeviceVulkan13Features*)((byte*)Vulkan12 + sizeof(VkPhysicalDeviceVulkan12Features));
+            *Features = new VkPhysicalDeviceFeatures2 { pNext = Vulkan11 };
+            *Vulkan11 = new VkPhysicalDeviceVulkan11Features { pNext = Vulkan12 };
+            *Vulkan12 = new VkPhysicalDeviceVulkan12Features { pNext = vulkan13 ? Vulkan13 : null };
+            *Vulkan13 = new VkPhysicalDeviceVulkan13Features();
+        }
+
+        public Utf8Strings InstanceExtensions { get; }
+
+        public Utf8Strings DeviceExtensions { get; }
+
+        public VulkanVideoDecode? Video { get; }
+
+        public VkQueueFlags GraphicsFlags { get; }
+
+        public VkPhysicalDeviceFeatures2* Features { get; }
+
+        private VkPhysicalDeviceVulkan11Features* Vulkan11 { get; }
+
+        private VkPhysicalDeviceVulkan12Features* Vulkan12 { get; }
+
+        private VkPhysicalDeviceVulkan13Features* Vulkan13 { get; }
+
+        // タイムラインセマフォ（必須）と、デコードに使う機能（対応していれば）だけを有効にする
+        public void EnableSupported(VkInstanceApi api, VkPhysicalDevice physical, bool wantVideo)
+        {
+            var supported11 = new VkPhysicalDeviceVulkan11Features();
+            var supported12 = new VkPhysicalDeviceVulkan12Features();
+            var supported13 = new VkPhysicalDeviceVulkan13Features();
+            supported11.pNext = &supported12;
+            supported12.pNext = Vulkan12->pNext is null ? null : &supported13;
+            var supported = new VkPhysicalDeviceFeatures2 { pNext = &supported11 };
+            api.vkGetPhysicalDeviceFeatures2(physical, &supported);
+
+            Vulkan12->timelineSemaphore = true;
+            if (wantVideo)
+            {
+                Vulkan11->samplerYcbcrConversion = supported11.samplerYcbcrConversion;
+                Vulkan12->hostQueryReset = supported12.hostQueryReset;
+                if (Vulkan12->pNext is not null)
+                {
+                    Vulkan13->synchronization2 = supported13.synchronization2;
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            InstanceExtensions.Dispose();
+            DeviceExtensions.Dispose();
+            NativeMemory.Free(_block);
+        }
+    }
+
+    /// <summary>UTF-8 の文字列の配列（char**）。捨てるまで有効</summary>
+    internal sealed class Utf8Strings : IDisposable
+    {
+        private readonly nint[] _strings;
+
+        public Utf8Strings(IReadOnlyList<string> values)
+        {
+            _strings = [.. values.Select(Marshal.StringToCoTaskMemUTF8)];
+            Count = values.Count;
+            Pointer = Marshal.AllocCoTaskMem(Math.Max(1, Count) * sizeof(nint));
+            for (var i = 0; i < Count; i++)
+            {
+                ((nint*)Pointer)[i] = _strings[i];
+            }
+        }
+
+        public nint Pointer { get; }
+
+        public int Count { get; }
+
+        public void Dispose()
+        {
+            foreach (var value in _strings)
+            {
+                Marshal.FreeCoTaskMem(value);
+            }
+
+            Marshal.FreeCoTaskMem(Pointer);
+        }
     }
 
     private static HashSet<string> InstanceExtensions()
