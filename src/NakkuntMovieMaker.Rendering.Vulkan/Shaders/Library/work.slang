@@ -75,3 +75,21 @@ public uint2 nmmPackWork(float4 color)
 {
     return uint2(floatToHalf(color.r) | (floatToHalf(color.g) << 16), floatToHalf(color.b) | (floatToHalf(color.a) << 16));
 }
+
+// エフェクトの「1 画素ずつの色の処理」の決まり（CPU 版の PixelOps.Map と同じ）：
+// 完全に透明な画素は飛ばし、色は straight alpha（0〜1）で処理し、最後に 0〜1 に収めて premultiplied に戻す
+public bool nmmIsTransparent(float4 premultiplied)
+{
+    return premultiplied.a <= 0.0;
+}
+
+public float3 nmmStraight(float4 premultiplied)
+{
+    return premultiplied.rgb / premultiplied.a;
+}
+
+public float4 nmmPremultiply(float3 rgb, float alpha)
+{
+    float4 c = clamp(float4(rgb, alpha), 0.0, 1.0);
+    return float4(c.rgb * c.a, c.a);
+}

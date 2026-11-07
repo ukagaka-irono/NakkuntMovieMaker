@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using NakkuntMovieMaker.Core.Collections;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Media;
+using NakkuntMovieMaker.Rendering.Effects;
 using NakkuntMovieMaker.Rendering.Skia;
 using NakkuntMovieMaker.Text;
 using Vortice.Vulkan;
@@ -31,6 +33,10 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     private readonly ShaderLibrary _shaders;
     private readonly TexturePool _pool;
     private readonly GpuCache<BgraImage> _sources;
+    private readonly GpuCache<EffectKey> _effectResults;
+    private readonly ConcurrentDictionary<EffectKey, byte> _effectKnown = new();
+    private long _gpuEffectNodes;
+    private long _cpuLayers;
     private readonly SkiaCpuBackend _cpu;
     private readonly ConcurrentDictionary<LayerKey, Layer?> _layers = new();
     private long _layerBytes;
@@ -51,6 +57,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             _shaders = new ShaderLibrary(_device, pipelineCachePath);
             _pool = new TexturePool(_allocator, _allocator.BudgetBytes / 4);
             _sources = new GpuCache<BgraImage>(_allocator.BudgetBytes / 2);
+            _effectResults = new GpuCache<EffectKey>(_allocator.BudgetBytes / 4);
             _cpu = new SkiaCpuBackend(layouts: layouts);
         }
         catch
@@ -67,6 +74,12 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     }
 
     public RenderBackendInfo Info { get; }
+
+    /// <summary>エフェクトを GPU でかけたノードの数（これまでの合計。テストと計測用）</summary>
+    public long GpuEffectNodes => Interlocked.Read(ref _gpuEffectNodes);
+
+    /// <summary>CPU で描いてから GPU で重ねたノードの数（これまでの合計。テストと計測用）</summary>
+    public long CpuLayers => Interlocked.Read(ref _cpuLayers);
 
     public VulkanDevice Device => _device;
 
@@ -88,7 +101,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         var output = Matrix3x2.CreateScale((float)(width / (double)plan.Width), (float)(height / (double)plan.Height));
 
         // 素材を取り出す・CPU で描くのは、呼び出したスレッドで行う（GPU のスレッドを待たせない）
-        var operations = new List<Operation>();
+        var operations = new List<object>();
         foreach (var node in plan.Nodes)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -113,6 +126,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         _disposed = true;
         _scheduler.Dispose();
         _sources.Dispose();
+        _effectResults.Dispose();
         _pool.Dispose();
         _shaders.Dispose();
         _allocator.Dispose();
@@ -124,11 +138,17 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     }
 
     // ノードを、GPU で重ねる処理にする。GPU で描けないものは CPU で描いた画像にする
-    private Operation? Prepare(RenderNode node, FramePlan plan, IMediaSource media, Matrix3x2 output, int width, int height, double scale)
+    private object? Prepare(RenderNode node, FramePlan plan, IMediaSource media, Matrix3x2 output, int width, int height, double scale)
     {
         if (node is DrawNode { Effects.IsEmpty: true, Content: ImageContent or VideoFrameContent } draw)
         {
             return PrepareImage(draw, media, output, width, height);
+        }
+
+        if (node is DrawNode { Effects.IsEmpty: false } withEffects && GpuEffects.Supports(withEffects.Effects))
+        {
+            Interlocked.Increment(ref _gpuEffectNodes);
+            return PrepareEffects(withEffects, plan, media, output, scale);
         }
 
         // まだ GPU で描けないもの：そのノードだけを、描かれる範囲だけ CPU で透明な画像に描き、合成モードと不透明度は GPU で重ねるときに付ける。
@@ -139,6 +159,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             _ => (node, BlendMode.Normal, 1f),
         };
         var key = new LayerKey(alone, scale, plan.Width, plan.Height);
+        Interlocked.Increment(ref _cpuLayers);
         var reusable = IsStill(alone);
         if (!reusable || !_layers.TryGetValue(key, out var layer))
         {
@@ -161,6 +182,84 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         return new Operation(
             layer.Image, Owned: !reusable, Matrix3x2.Identity, destination, new SourceRect(0, 0, region.Width, region.Height), opacity, blend, Antialias: false,
             new Region(region.X, region.Y, region.Width, region.Height));
+    }
+
+    // エフェクトをかけて描くノード：中身を CPU 版と同じ細かさの画像にし（静止したものは結果を覚えておく）、エフェクトは GPU でかける
+    private EffectStep? PrepareEffects(DrawNode node, FramePlan plan, IMediaSource media, Matrix3x2 output, double scale)
+    {
+        var matrix = node.Transform * output;
+        var hint = Math.Max(Math.Sqrt(matrix.M11 * matrix.M11 + matrix.M12 * matrix.M12), Math.Sqrt(matrix.M21 * matrix.M21 + matrix.M22 * matrix.M22));
+        if (!Matrix3x2.Invert(matrix, out var inverse))
+        {
+            return null;
+        }
+
+        // 結果を覚えておく鍵は CPU 版と同じ（素材・切り抜き・エフェクト・細かさ）。動画は毎フレーム変わるので覚えない
+        EffectKey? key = null;
+        if (node.Content is not VideoFrameContent)
+        {
+            var identity = node.Content is ImageContent image && media.GetImage(image.Asset, hint) is { } source ? source : (object)node.Content;
+            key = new EffectKey(identity, node.Crop, node.Effects, (float)hint);
+        }
+
+        var raster = key is not null && _effectKnown.ContainsKey(key) ? null : _cpu.RasterizeForEffects(node, plan, media, scale);
+        if (raster is null && key is null)
+        {
+            return null;
+        }
+
+        var opacity = node.Opacity < 1 || node.Blend != BlendMode.Normal ? Round(node.Opacity) : 1f;
+        return new EffectStep(node, matrix, inverse, key, raster, () => _cpu.RasterizeForEffects(node, plan, media, scale), media, opacity);
+    }
+
+    // GPU のスレッドで：エフェクトをかけた結果（覚えていれば、それを使う）。描くものがなければ null
+    private GpuEffectImage? EffectResult(GpuCommandContext context, EffectStep step, out bool owned)
+    {
+        owned = false;
+        if (step.Key is not null && _effectResults.TryGet<GpuEffectImage>(step.Key, context.Value, out var cached))
+        {
+            return cached;
+        }
+
+        if ((step.Raster ?? step.LateRaster()) is not { } raster)
+        {
+            return null;
+        }
+
+        // CPU で描いた画像を GPU に送り、16 ビット浮動小数点の作業用の画像にする
+        var effects = new GpuEffectContext(context, _allocator, _shaders, step.Media);
+        var pixels = raster.Image.Pixels;
+        var upload = _allocator.CreateBuffer((ulong)pixels.Length, VkBufferUsageFlags.StorageBuffer, GpuBufferKind.Upload);
+        pixels.CopyTo(upload.Span);
+        upload.Flush();
+        context.OnCompleted(upload.Dispose);
+        var image = effects.CreateImage(raster.PixelLeft, raster.PixelTop, raster.Image.Width, raster.Image.Height, raster.Scale);
+        _shaders.Get("fx_from_bgra8", ConvertBindings, sizeof(int))
+            .Dispatch(context, [upload, image.Buffer], image.Count, ComputePipeline.Groups(image.Count, 256), 1);
+        GpuBarriers.AfterCompute(context);
+
+        foreach (var effect in step.Node.Effects)
+        {
+            if (GpuEffects.Find(effect.Type) is { } processor)
+            {
+                image = processor.Apply(effects, image, effect.Parameters);
+            }
+        }
+
+        if (step.Key is null)
+        {
+            owned = true;
+            return image;
+        }
+
+        _effectResults.Add(step.Key, image, image.Bytes, context.Value);
+        if (_effectKnown.Count > 10_000)
+        {
+            _effectKnown.Clear();
+        }
+
+        _effectKnown[step.Key] = 0;
+        return image;
     }
 
     // 素材を切り抜き、残った部分の中心をローカル座標の原点に置いて描く（SkiaCpuBackend.ImageContent と同じ）
@@ -211,9 +310,10 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     }
 
     // GPU のスレッドで：作業用の画像を背景で塗り、ノードを順に重ねて、BGRA にして読み戻す
-    private VulkanRenderResult Record(GpuCommandContext context, List<Operation> operations, Vector4 background, int width, int height)
+    private VulkanRenderResult Record(GpuCommandContext context, List<object> steps, Vector4 background, int width, int height)
     {
         _sources.Collect(_scheduler.CompletedValue);
+        _effectResults.Collect(_scheduler.CompletedValue);
 
         // 作業用の画像は、どの GPU でも使えるようにバッファーにする（1 画素 8 バイト）。この仕事が終わったら捨てる
         var work = _allocator.CreateBuffer((ulong)width * (ulong)height * 8, VkBufferUsageFlags.StorageBuffer, GpuBufferKind.DeviceLocal);
@@ -224,8 +324,15 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         GpuBarriers.AfterCompute(context);
 
         var composite = _shaders.Get("composite", CompositeBindings, sizeof(CompositeParams));
-        foreach (var operation in operations)
+        foreach (var step in steps)
         {
+            if (step is EffectStep effectStep)
+            {
+                CompositeEffect(context, composite, work, effectStep, width, height);
+                continue;
+            }
+
+            var operation = (Operation)step;
             var source = SourceBuffer(context, operation);
             var region = operation.Region;
             var parameters = new CompositeParams
@@ -263,6 +370,55 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         convert.Dispatch(context, [work, readback], new ConvertParams { Width = width, Height = height }, ComputePipeline.Groups(width, 8), ComputePipeline.Groups(height, 8));
         GpuBarriers.AfterCompute(context);
         return new VulkanRenderResult(context.Fence, readback, width, height);
+    }
+
+    // エフェクトをかけた結果を、変形・不透明度・合成モードを付けて重ねる（CPU 版と同じく、ローカル座標の範囲に、縁のアンチエイリアス付きで描く）
+    private void CompositeEffect(GpuCommandContext context, ComputePipeline composite, GpuBuffer work, EffectStep step, int width, int height)
+    {
+        if (EffectResult(context, step, out var owned) is not { } result)
+        {
+            return;
+        }
+
+        if (owned)
+        {
+            context.OnCompleted(result.Dispose);
+        }
+
+        var bounds = result.LocalBounds;
+        var destination = new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+        if (Bounds(destination, step.Matrix, width, height) is not { } region)
+        {
+            return;
+        }
+
+        var parameters = new CompositeParams
+        {
+            Ax = step.Inverse.M11,
+            Ay = step.Inverse.M12,
+            Bx = step.Inverse.M21,
+            By = step.Inverse.M22,
+            Cx = step.Inverse.M31,
+            Cy = step.Inverse.M32,
+            Left = destination.Left,
+            Top = destination.Top,
+            Width = destination.Width,
+            Height = destination.Height,
+            SourceWidth = result.Width,
+            SourceHeight = result.Height,
+            Stride = result.Width,
+            OriginX = region.X,
+            OriginY = region.Y,
+            RegionWidth = region.Width,
+            RegionHeight = region.Height,
+            Opacity = step.Opacity,
+            Blend = (int)step.Node.Blend,
+            Antialias = 1,
+            TargetWidth = width,
+            SourceFormat = 1,
+        };
+        composite.Dispatch(context, [work, result.Buffer], parameters, ComputePipeline.Groups(region.Width, 8), ComputePipeline.Groups(region.Height, 8));
+        GpuBarriers.AfterCompute(context);
     }
 
     // 素材の画素を GPU のバッファーにする。静止画は覚えておき、動画のフレームと CPU で描いた画像は、この仕事が終わったら捨てる
@@ -342,6 +498,12 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
     private readonly record struct Rect(float Left, float Top, float Width, float Height);
 
+    // エフェクトの結果を覚えておく鍵（CPU 版の EffectKey と同じ考え方。Identity は素材の画像か、描く中身）
+    private sealed record EffectKey(object Identity, Crop Crop, EquatableArray<EvaluatedEffect> Effects, float Hint);
+
+    private sealed record EffectStep(
+        DrawNode Node, Matrix3x2 Matrix, Matrix3x2 Inverse, EffectKey? Key, EffectSource? Raster, Func<EffectSource?> LateRaster, IMediaSource Media, float Opacity);
+
     private sealed record LayerKey(RenderNode Node, double Scale, int SceneWidth, int SceneHeight);
 
     // CPU で描いた、ノード 1 つの画像と、出力の中の位置
@@ -364,6 +526,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         public int OriginX, OriginY, RegionWidth, RegionHeight;
         public float Opacity;
         public int Blend, Antialias, TargetWidth;
+        public int SourceFormat, Padding0, Padding1, Padding2;
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -46,11 +46,32 @@ public sealed class ParityTests : IDisposable
         }
 
         var expected = _cpu.Render(scene.Plan, scene.Media, scene.Scale, TestContext.Current.CancellationToken);
+        var effectNodes = gpu.GpuEffectNodes;
         var actual = gpu.Render(scene.Plan, scene.Media, scene.Scale, TestContext.Current.CancellationToken);
+
+        // GPU 版があるエフェクトは、本当に GPU でかけたことも確かめる
+        if (name.StartsWith("effect-", StringComparison.Ordinal) && GpuEffects.Find("nmm." + name["effect-".Length..]) is not null)
+        {
+            Assert.True(gpu.GpuEffectNodes > effectNodes, $"{name}: エフェクトを GPU でかけていません");
+        }
 
         var difference = ImageCompare.Compare(expected, actual);
         TestContext.Current.TestOutputHelper?.WriteLine($"{name}: {difference}");
         Assert.True(difference.Psnr >= Tolerance(name), $"{name}: CPU 版と違います（{difference}、基準は PSNR {Tolerance(name)}dB 以上）");
+    }
+
+    [Fact]
+    public void ReusesEffectResultsForTheSameStill()
+    {
+        var gpu = _gpu ?? SkipOrFail();
+        Gpu.RequireRenderer();
+        using var scene = RenderScenes.Create("effect-colorAdjust");
+
+        // 2 回目は、覚えておいたエフェクトの結果を使う（CPU で描き直さない）。結果は同じ
+        var first = gpu.Render(scene.Plan, scene.Media, scene.Scale, TestContext.Current.CancellationToken);
+        var second = gpu.Render(scene.Plan, scene.Media, scene.Scale, TestContext.Current.CancellationToken);
+
+        Assert.Equal(first.Pixels, second.Pixels);
     }
 
     // 場面ごとの基準（PSNR、dB）。M2 の手順 D で GPU に移すときに見直す

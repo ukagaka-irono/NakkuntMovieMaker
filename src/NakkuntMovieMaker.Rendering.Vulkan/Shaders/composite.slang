@@ -36,6 +36,12 @@ struct Params
     int blend;
     int antialias;
     int targetWidth;
+
+    // 素材の形式：0 は premultiplied の BGRA（8 ビット、1 画素 1 uint）、1 は作業用の画像（16 ビット浮動小数点、1 画素 2 uint）
+    int sourceFormat;
+    int padding0;
+    int padding1;
+    int padding2;
 };
 
 [[vk::push_constant]] ConstantBuffer<Params> p;
@@ -47,7 +53,13 @@ float4 texel(int x, int y)
 {
     x = clamp(x, 0, p.sourceWidth - 1);
     y = clamp(y, 0, p.sourceHeight - 1);
-    uint bgra = source[(p.sourceY + y) * p.stride + p.sourceX + x];
+    uint index = uint((p.sourceY + y) * p.stride + p.sourceX + x);
+    if (p.sourceFormat == 1)
+    {
+        return nmmUnpackWork(uint2(source[index * 2], source[index * 2 + 1]));
+    }
+
+    uint bgra = source[index];
     return float4(float((bgra >> 16) & 255u), float((bgra >> 8) & 255u), float(bgra & 255u), float(bgra >> 24)) / 255.0;
 }
 

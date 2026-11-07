@@ -267,8 +267,38 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         return (result, false);
     }
 
-    // 中身を、出力と同じくらいの細かさ（ローカル座標 1 あたり scale ピクセル）の画像にしてから、エフェクトを順にかける
-    private static EffectImage? ApplyEffects(Content content, DrawNode node, IMediaSource media, float scale)
+    /// <summary>
+    /// エフェクトをかける前の画像（中身を、出力と同じくらいの細かさで描いたもの）。GPU 版が、エフェクトを GPU でかけるときに使う。
+    /// 描くものがなければ null
+    /// </summary>
+    public EffectSource? RasterizeForEffects(DrawNode node, FramePlan plan, IMediaSource media, double scale)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        var (width, height) = OutputSize(plan, scale);
+        var hint = Hint(SKMatrix.Concat(OutputScale(plan, width, height), ToSkia(node.Transform)));
+        if (CreateContent(node, media, plan, hint) is not { } content)
+        {
+            return null;
+        }
+
+        using var image = CreateEffectImage(content, (float)hint);
+        if (image is null)
+        {
+            return null;
+        }
+
+        var pixels = new byte[image.Width * image.Height * 4];
+        var row = image.Width * 4;
+        for (var y = 0; y < image.Height; y++)
+        {
+            new ReadOnlySpan<byte>(image.Pixels + y * image.RowBytes, row).CopyTo(pixels.AsSpan(y * row, row));
+        }
+
+        return new EffectSource(new BgraImage(image.Width, image.Height, pixels), image.PixelLeft, image.PixelTop, image.Scale);
+    }
+
+    // 中身を、出力と同じくらいの細かさ（ローカル座標 1 あたり scale ピクセル）の画像にする（エフェクトをかける前）
+    private static EffectImage? CreateEffectImage(Content content, float scale)
     {
         if (content.Bounds.Width <= 0 || content.Bounds.Height <= 0)
         {
@@ -283,6 +313,18 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         using (var canvas = image.OpenLocalCanvas())
         {
             content.Draw(canvas, null);
+        }
+
+        return image;
+    }
+
+    // 中身を画像にしてから、エフェクトを順にかける
+    private static EffectImage? ApplyEffects(Content content, DrawNode node, IMediaSource media, float scale)
+    {
+        var image = CreateEffectImage(content, scale);
+        if (image is null)
+        {
+            return null;
         }
 
         var context = new EffectContext(media);
@@ -492,3 +534,8 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
     /// </summary>
     private sealed record Content(SKRect Bounds, Action<SKCanvas, SKPaint?> Draw);
 }
+
+/// <summary>
+/// エフェクトをかける前の画像。Image の左上は、ピクセル座標（ローカル座標を Scale 倍したもの）の (PixelLeft, PixelTop)
+/// </summary>
+public sealed record EffectSource(BgraImage Image, int PixelLeft, int PixelTop, float Scale);
