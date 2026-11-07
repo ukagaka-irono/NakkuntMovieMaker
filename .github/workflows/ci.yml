@@ -69,6 +69,13 @@ jobs:
       - name: ビルド
         run: dotnet build NakkuntMovieMaker.slnx -c Release --no-restore
 
+      # GPU のテストだけを先に、1 件ずつ結果を出しながら回す（lavapipe が落ちたときに、どのテストかわかるように）
+      - name: GPU のテスト（Linux）
+        if: runner.os == 'Linux'
+        run: dotnet test --project tests/NakkuntMovieMaker.Rendering.Vulkan.Tests -c Release --no-build --output Detailed --no-progress
+        env:
+          NMM_REQUIRE_VULKAN: '1'
+
       - name: テスト
         run: dotnet test --solution NakkuntMovieMaker.slnx -c Release --no-build
         env:
