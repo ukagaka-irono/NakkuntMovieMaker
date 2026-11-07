@@ -142,6 +142,14 @@ public static unsafe class ProxyGenerator
             throw;
         }
 
+        // ハードウェアのエンコーダーには、色のタグ（変換式など）を書かないものがある（Windows の Media Foundation など）。
+        // タグが違うと、プレビューで色がずれるので、そのときはソフトウェアのエンコーダーで作り直す
+        if (settings.Encoder != EncoderPreference.Software && SourceVideo.Read(outputPath).RawColor != source.RawColor)
+        {
+            TryDelete(outputPath);
+            return Generate(sourcePath, outputPath, settings with { Encoder = EncoderPreference.Software }, progress, cancellationToken);
+        }
+
         progress?.Report(1);
         return new ProxyInfo(width, height, frames, encoder, source.Color);
     }
@@ -185,7 +193,7 @@ public static unsafe class ProxyGenerator
     }
 
     // 素材の映像の情報のうち、プロキシに写すもの
-    private sealed record SourceVideo(int Width, int Height, Rational TimeBase, Rational FrameRate, Rational? Duration, VideoColorTags Color)
+    private sealed record SourceVideo(int Width, int Height, Rational TimeBase, Rational FrameRate, Rational? Duration, VideoColorTags Color, VideoColorTags RawColor)
     {
         public static SourceVideo Read(string path)
         {
@@ -221,7 +229,9 @@ public static unsafe class ProxyGenerator
                 Rational? duration = stream->duration > 0
                     ? stream->duration * timeBase
                     : format->duration > 0 ? new Rational(format->duration, ffmpeg.AV_TIME_BASE) : null;
-                return new SourceVideo(parameters->width, parameters->height, timeBase, frameRate, duration, ColorTags(parameters));
+                var raw = new VideoColorTags(
+                    (int)parameters->color_primaries, (int)parameters->color_trc, (int)parameters->color_space, parameters->color_range == AVColorRange.AVCOL_RANGE_JPEG);
+                return new SourceVideo(parameters->width, parameters->height, timeBase, frameRate, duration, ColorTags(parameters), raw);
             }
             finally
             {
