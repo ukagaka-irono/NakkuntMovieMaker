@@ -44,12 +44,14 @@ public sealed class RenderBenchmark
 
     private readonly string _folder;
     private readonly string? _video;
-    private readonly SkiaCpuBackend _backend = new();
+    private readonly IRenderBackend _backend;
 
     /// <param name="folder">素材とキャッシュを置く作業フォルダ</param>
     /// <param name="video">使う動画（1080p の H.264 を想定）。null なら動画のレイヤーは空にする</param>
-    public RenderBenchmark(string folder, string? video)
+    /// <param name="renderer">描画の方式（null なら自動）</param>
+    public RenderBenchmark(string folder, string? video, RendererOptions? renderer = null)
     {
+        _backend = RenderBackendFactory.Create(renderer).Backend;
         _folder = Path.GetFullPath(folder);
         _video = video is null ? null : Path.GetFullPath(video);
         Directory.CreateDirectory(_folder);
@@ -57,6 +59,9 @@ public sealed class RenderBenchmark
     }
 
     public bool HasVideo => _video is not null;
+
+    /// <summary>使っている描画の方式</summary>
+    public RenderBackendInfo Renderer => _backend.Info;
 
     /// <summary>
     /// 場面を workers 個のスレッドで frames 枚描いて測る。最初の数枚（準備のため遅い）は計測に含めない。

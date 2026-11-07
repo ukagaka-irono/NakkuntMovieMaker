@@ -3,6 +3,7 @@ using System.Globalization;
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Core.Serialization;
 using NakkuntMovieMaker.Core.Time;
+using NakkuntMovieMaker.Engine;
 using NakkuntMovieMaker.Engine.Export;
 using NakkuntMovieMaker.Engine.Subtitles;
 using NakkuntMovieMaker.Media;
@@ -41,13 +42,14 @@ internal static class ExportCommands
         var subtitlesOption = new Option<FileInfo?>("--subtitles") { Description = "セリフの字幕を SRT にも書き出す" };
         var sceneOption = SceneOption();
         var workersOption = new Option<int>("--workers") { Description = "並列に描くスレッドの数（0 なら自動）" };
+        var rendererOption = RendererOption();
 
         var command = new Command("export", "シーンを動画（MP4）か音声（WAV）に書き出す");
         command.Arguments.Add(ProjectArgument);
         foreach (var option in new Option[]
                  {
                      outputOption, presetOption, codecOption, widthOption, heightOption, bitrateOption, audioBitrateOption, fromOption, toOption,
-                     softwareOption, ffmpegOption, loudnessOption, subtitlesOption, sceneOption, workersOption,
+                     softwareOption, ffmpegOption, loudnessOption, rendererOption, subtitlesOption, sceneOption, workersOption,
                  })
         {
             command.Options.Add(option);
@@ -91,7 +93,13 @@ internal static class ExportCommands
                     return 2;
             }
 
-            using var pipeline = new ExportPipeline(project, scene.Id, folder);
+            if (!TryRenderer(parseResult.GetValue(rendererOption), out var renderer))
+            {
+                return 2;
+            }
+
+            using var pipeline = new ExportPipeline(project, scene.Id, folder, renderer);
+            ReportFallback(pipeline);
             try
             {
                 var loudness = parseResult.GetValue(loudnessOption);
@@ -156,10 +164,11 @@ internal static class ExportCommands
         var widthOption = new Option<int?>("--width") { Description = "画像の幅（省略するとシーンの大きさ）" };
         var heightOption = new Option<int?>("--height") { Description = "画像の高さ" };
         var sceneOption = SceneOption();
+        var rendererOption = RendererOption();
 
         var command = new Command("render-frame", "シーンの 1 フレームを画像に書き出す");
         command.Arguments.Add(ProjectArgument);
-        foreach (var option in new Option[] { outputOption, frameOption, widthOption, heightOption, sceneOption })
+        foreach (var option in new Option[] { outputOption, frameOption, widthOption, heightOption, sceneOption, rendererOption })
         {
             command.Options.Add(option);
         }
@@ -177,8 +186,14 @@ internal static class ExportCommands
                 return 2;
             }
 
+            if (!TryRenderer(parseResult.GetValue(rendererOption), out var renderer))
+            {
+                return 2;
+            }
+
             var output = parseResult.GetValue(outputOption)!.FullName;
-            using var pipeline = new ExportPipeline(project, scene.Id, folder);
+            using var pipeline = new ExportPipeline(project, scene.Id, folder, renderer);
+            ReportFallback(pipeline);
             try
             {
                 await pipeline.ExportStillAsync(output, frame.Value, parseResult.GetValue(widthOption), parseResult.GetValue(heightOption), cancellationToken);
@@ -196,6 +211,31 @@ internal static class ExportCommands
     }
 
     private static Option<string?> SceneOption() => new("--scene") { Description = "書き出すシーンの名前（省略するとメインのシーン）" };
+
+    /// <summary>描画の方式（auto・cpu・vulkan）</summary>
+    internal static Option<string?> RendererOption() => new("--renderer") { Description = "描画の方式（auto・cpu・vulkan。省略すると auto）" };
+
+    /// <summary>--renderer を読む。分からない値なら、知らせて false</summary>
+    internal static bool TryRenderer(string? text, out RendererOptions options)
+    {
+        options = RendererOptions.Default;
+        if (RendererOptions.ParsePreference(text) is not { } preference)
+        {
+            Console.Error.WriteLine($"描画の方式が分かりません: {text}（auto・cpu・vulkan）");
+            return false;
+        }
+
+        options = new RendererOptions(preference);
+        return true;
+    }
+
+    private static void ReportFallback(ExportPipeline pipeline)
+    {
+        if (pipeline.RendererFallbackReason is { } reason)
+        {
+            Console.Error.WriteLine(reason);
+        }
+    }
 
     // プロジェクトを読み、書き出すシーンを選ぶ
     private static bool TryOpen(FileInfo entry, string? sceneName, out Project project, out Scene scene, out string folder)

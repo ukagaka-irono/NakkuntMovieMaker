@@ -27,7 +27,7 @@ public sealed record ExportBenchResult(long Frames, TimeSpan Elapsed, TimeSpan D
 /// プロジェクトを使った性能の測定（M1 の手順 I-39）。プレビューの再生（音を出さない仮のデバイスの時計で、画面の更新の間隔で取り出す）、
 /// シーンを繰り返して長くした書き出し、セリフ 1 行の合成から試聴まで、録音を止めてからタイムラインに置くまで
 /// </summary>
-public sealed class ProjectBenchmark(Project project, string projectFolder)
+public sealed class ProjectBenchmark(Project project, string projectFolder, RendererOptions? renderer = null)
 {
     /// <summary>シーンを最初から最後まで再生し、表示できた・飛ばしたフレームを数える（scale はプレビューの解像度）</summary>
     public PlaybackBenchResult MeasurePlayback(double scale, CancellationToken cancellationToken = default)
@@ -35,7 +35,8 @@ public sealed class ProjectBenchmark(Project project, string projectFolder)
         var scene = project.Root;
         using var media = new ProjectMediaSource(project, projectFolder, new MediaCache(Path.Combine(projectFolder, ".nmm", "cache")));
         var timeline = new TimelineContext(project.Characters, new TachieLoader(projectFolder), new ProjectLipSync(media));
-        using var frames = new FrameScheduler(scene, new SkiaCpuBackend(), media, timeline: timeline) { Scale = scale };
+        using var backend = RenderBackendFactory.Create(renderer).Backend;
+        using var frames = new FrameScheduler(scene, backend, media, timeline: timeline) { Scale = scale };
 
         // 準備（キャッシュの作成・デコーダーを開く）は測らない
         frames.RequestAsync(0, cancellationToken).GetAwaiter().GetResult();
@@ -71,7 +72,7 @@ public sealed class ProjectBenchmark(Project project, string projectFolder)
         }
 
         var longProject = project.WithScene(repeated);
-        using var pipeline = new ExportPipeline(longProject, longProject.RootScene, projectFolder);
+        using var pipeline = new ExportPipeline(longProject, longProject.RootScene, projectFolder, renderer);
         var result = pipeline.ExportVideoAsync(new ExportOptions(outputPath, Encoder: encoder), cancellationToken: cancellationToken).GetAwaiter().GetResult();
         return new ExportBenchResult(result.Frames, result.Elapsed, Core.Time.TimeMath.FrameToTimeSpan(result.Frames, scene.Fps), result.VideoEncoder);
     }

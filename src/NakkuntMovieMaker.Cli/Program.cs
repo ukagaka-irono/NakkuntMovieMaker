@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Text;
 using NakkuntMovieMaker.Audio;
+using NakkuntMovieMaker.Engine;
 using NakkuntMovieMaker.Engine.Benchmarks;
 using NakkuntMovieMaker.Media;
 
@@ -76,13 +77,20 @@ internal static class Program
         command.Options.Add(folderOption);
         command.Options.Add(onlyOption);
         command.Options.Add(projectOption);
+        var rendererOption = ExportCommands.RendererOption();
+        command.Options.Add(rendererOption);
         command.Options.Add(repeatOption);
         command.SetAction(parseResult =>
         {
+            if (!ExportCommands.TryRenderer(parseResult.GetValue(rendererOption), out var renderer))
+            {
+                return 2;
+            }
+
             if (parseResult.GetValue(projectOption) is { } project)
             {
                 var selectedNames = parseResult.GetValue(onlyOption) is { Length: > 0 } selected ? selected.ToHashSet(StringComparer.Ordinal) : null;
-                return RunProjectBench(project, Math.Max(1, parseResult.GetValue(repeatOption)), selectedNames);
+                return RunProjectBench(project, Math.Max(1, parseResult.GetValue(repeatOption)), selectedNames, renderer);
             }
 
             var folder = parseResult.GetValue(folderOption)?.FullName ?? Path.Combine(Path.GetTempPath(), "nmm-bench");
@@ -96,8 +104,8 @@ internal static class Program
             var frames = Math.Max(10, parseResult.GetValue(framesOption));
             var workers = Math.Max(1, parseResult.GetValue(workersOption));
             var only = parseResult.GetValue(onlyOption) is { Length: > 0 } names ? names.ToHashSet(StringComparer.Ordinal) : null;
-            var benchmark = new RenderBenchmark(folder, video?.FullName);
-            Console.WriteLine($"CPU の論理コア数 {Environment.ProcessorCount}、動画 {(benchmark.HasVideo ? Path.GetFileName(video!.FullName) : "なし")}、{frames} 枚ずつ");
+            var benchmark = new RenderBenchmark(folder, video?.FullName, renderer);
+            Console.WriteLine($"描画 {benchmark.Renderer.Name}、CPU の論理コア数 {Environment.ProcessorCount}、動画 {(benchmark.HasVideo ? Path.GetFileName(video!.FullName) : "なし")}、{frames} 枚ずつ");
             Console.WriteLine("場面                                      スレッド  平均(ms)  95%(ms)  最大(ms)      fps");
             foreach (var scenario in RenderBenchmark.Scenarios.Where(scenario => only is null || only.Contains(scenario.Name)))
             {
@@ -121,12 +129,12 @@ internal static class Program
     }
 
     // プロジェクトを使った測定（I-39）：再生のドロップ、長い書き出しの速さ、セリフの合成、録音を止めてから置くまで
-    private static int RunProjectBench(FileInfo entry, int repeat, HashSet<string>? only)
+    private static int RunProjectBench(FileInfo entry, int repeat, HashSet<string>? only, RendererOptions renderer)
     {
         bool Selected(string name) => only is null || only.Contains(name);
         var project = new Core.Serialization.ProjectStore().Load(entry.FullName);
         var folder = entry.DirectoryName!;
-        var benchmark = new ProjectBenchmark(project, folder);
+        var benchmark = new ProjectBenchmark(project, folder, renderer);
         Console.WriteLine($"{project.Name}（{project.Root.Duration} フレーム）、CPU の論理コア数 {Environment.ProcessorCount}");
 
         foreach (var (name, scale) in new[] { ("playback-half", 0.5), ("playback-full", 1.0) })

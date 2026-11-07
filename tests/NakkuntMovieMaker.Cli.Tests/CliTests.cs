@@ -130,6 +130,18 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
+    public void ChoosesTheRenderer()
+    {
+        // CPU を指定すれば、指定しないときと同じ画像になる。GPU（Vulkan）を使えなければ、CPU に切り替えて描く
+        Assert.Equal(0, Program.Main(["render-frame", _entry, "--frame", "45", "-o", Output("auto.png")]));
+        Assert.Equal(0, Program.Main(["render-frame", _entry, "--frame", "45", "-o", Output("cpu.png"), "--renderer", "cpu"]));
+        Assert.Equal(0, Program.Main(["render-frame", _entry, "--frame", "45", "-o", Output("gpu.png"), "--renderer", "vulkan"]));
+        Assert.Equal(File.ReadAllBytes(Output("auto.png")), File.ReadAllBytes(Output("cpu.png")));
+        Assert.True(File.Exists(Output("gpu.png")));
+        Assert.Equal(2, Program.Main(["render-frame", _entry, "-o", Output("x.png"), "--renderer", "opengl"]));
+    }
+
+    [Fact]
     public void RejectsBadArguments()
     {
         Assert.Equal(2, Program.Main(["export", _entry, "-o", Output("x.mp4"), "--preset", "nothing"]));

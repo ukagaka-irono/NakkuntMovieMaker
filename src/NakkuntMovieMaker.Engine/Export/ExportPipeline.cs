@@ -72,10 +72,12 @@ public sealed class ExportPipeline : IDisposable
     private readonly Scene _scene;
     private readonly ProjectMediaSource _media;
     private readonly TimelineContext _timeline;
-    private readonly SkiaCpuBackend _backend = new();
+    private readonly IRenderBackend _backend;
 
-    public ExportPipeline(Project project, SceneId scene, string projectFolder)
+    /// <param name="renderer">描画の方式（null なら自動）</param>
+    public ExportPipeline(Project project, SceneId scene, string projectFolder, RendererOptions? renderer = null)
     {
+        (_backend, RendererFallbackReason) = RenderBackendFactory.Create(renderer);
         _scene = project.GetScene(scene);
         _media = new ProjectMediaSource(project, projectFolder, new MediaCache(Path.Combine(projectFolder, ".nmm", "cache")), ConversionQuality.Accurate);
         _timeline = new TimelineContext(project.Characters, new TachieLoader(projectFolder), new ProjectLipSync(_media));
@@ -104,7 +106,17 @@ public sealed class ExportPipeline : IDisposable
     public Task ExportStillAsync(string path, long frame, int? width = null, int? height = null, CancellationToken cancellationToken = default) =>
         Task.Run(() => ImageFiles.Save(RenderFrame(frame, OutputSize(width, height, even: false), cancellationToken), path), cancellationToken);
 
-    public void Dispose() => _media.Dispose();
+    /// <summary>使っている描画の方式</summary>
+    public RenderBackendInfo Renderer => _backend.Info;
+
+    /// <summary>望んだ描画の方式を使えずに切り替えたときの理由（切り替えていなければ null）</summary>
+    public string? RendererFallbackReason { get; }
+
+    public void Dispose()
+    {
+        _media.Dispose();
+        _backend.Dispose();
+    }
 
     private ExportResult ExportVideo(ExportOptions options, IProgress<ExportProgress>? progress, CancellationToken cancellationToken)
     {
@@ -124,7 +136,7 @@ public sealed class ExportPipeline : IDisposable
         var completed = false;
         try
         {
-            var workers = options.Workers > 0 ? options.Workers : Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
+            var workers = options.Workers > 0 ? options.Workers : _backend.Info.PreferredConcurrency;
             var pending = new Queue<(long Frame, Task<BgraImage> Image)>();
             FramePlan? previousPlan = null;
             Task<BgraImage>? previousImage = null;
