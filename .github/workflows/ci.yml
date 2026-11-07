@@ -44,9 +44,10 @@ jobs:
         shell: pwsh
         run: C:\msys64\usr\bin\bash.exe -lc 'pacman -S --needed --noconfirm make diffutils mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-jq'
 
-      - name: FFmpeg のビルドに使うものを入れる（Linux）
+      # GPU のテストは、CPU で動く Vulkan（Mesa の lavapipe）と検証レイヤーで回す（CI には GPU がないため）
+      - name: FFmpeg のビルドと GPU のテストに使うものを入れる（Linux）
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y nasm zlib1g-dev
+        run: sudo apt-get update && sudo apt-get install -y nasm zlib1g-dev mesa-vulkan-drivers libvulkan1 vulkan-validationlayers
 
       - name: ネイティブライブラリの取得とビルド（Windows）
         if: runner.os == 'Windows'
@@ -75,6 +76,8 @@ jobs:
           NMM_REQUIRE_NMM_AUDIO: '1'
           NMM_REQUIRE_FONTS: '1'
           NMM_REQUIRE_COLORFULTALK: '1'
+          # Linux では GPU（lavapipe）のテストを必ず回す。Windows・macOS の CI では、使える GPU がなければスキップする
+          NMM_REQUIRE_VULKAN: ${{ runner.os == 'Linux' && '1' || '0' }}
 
       # ゴールデン画像と違ったときに、描いた結果を確かめられるように残す
       - name: ゴールデン画像のテストで描いた結果
