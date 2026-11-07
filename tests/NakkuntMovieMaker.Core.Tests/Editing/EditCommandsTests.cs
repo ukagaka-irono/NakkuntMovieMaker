@@ -289,4 +289,19 @@ public class EditCommandsTests
         Assert.Equal("別の名前", result.Project.Name);
         Assert.Equal(_t.Project, result.Inverse.Apply(result.Project).Project);
     }
+
+    [Fact]
+    public void ChangesTheColorAndProxySettings()
+    {
+        var color = new ProjectColorSettings(CompositingSpace.Linear, "some-config", "Display P3 - Display");
+        var result = new SetProjectColor(color).Apply(_t.Project);
+        Assert.Equal(color, result.Project.Color);
+        Assert.Equal([DirtyRange.Everything], result.Dirty);
+        Assert.Equal(_t.Project, result.Inverse.Apply(result.Project).Project);
+
+        var proxies = new ProjectProxySettings(ProxyMode.AllVideos);
+        result = new SetProxySettings(proxies).Apply(_t.Project);
+        Assert.Equal(proxies, result.Project.Proxies);
+        Assert.Equal(_t.Project, result.Inverse.Apply(result.Project).Project);
+    }
 }

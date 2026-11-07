@@ -8,7 +8,7 @@
         CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="{StaticResource DialogPadding}" Spacing="{StaticResource Space2}" MinWidth="420">
-    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
       <TextBlock Classes="field-label" Text="名前" />
       <TextBox Grid.Column="1" Text="{Binding Name}" />
 
@@ -30,9 +30,23 @@
 
       <TextBlock Grid.Row="4" Classes="field-label" Text="サンプルレート" />
       <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{x:Static vm:ProjectSettingsViewModel.SampleRates}" SelectedItem="{Binding SampleRate}" MinWidth="120" />
+
+      <TextBlock Grid.Row="5" Classes="field-label" Text="合成の色空間" />
+      <ComboBox Grid.Row="5" Grid.Column="1" HorizontalAlignment="Stretch"
+                ItemsSource="{x:Static vm:ProjectSettingsViewModel.CompositingChoices}" SelectedItem="{Binding Compositing}" />
+
+      <TextBlock Grid.Row="6" Classes="field-label" Text="OpenColorIO の構成" />
+      <ComboBox Grid.Row="6" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding OcioConfigs}" SelectedItem="{Binding OcioConfig}"
+                IsEnabled="{Binding !IsOcioUnavailable}" />
+
+      <TextBlock Grid.Row="7" Classes="field-label" Text="書き出しの色空間" />
+      <ComboBox Grid.Row="7" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ExportColorSpaces}" SelectedItem="{Binding ExportColorSpace}"
+                IsEnabled="{Binding !IsOcioUnavailable}" />
     </Grid>
 
     <TextBlock Classes="secondary" Text="フレームレートを変えると、アイテムの位置と長さは同じ時刻になるように合わせます" IsVisible="{Binding !IsNew}" TextWrapping="Wrap" MaxWidth="420" />
+    <TextBlock Classes="secondary" Text="リニアで合成すると、半透明の重なりやぼかしの縁が明るめになります" TextWrapping="Wrap" MaxWidth="420" />
+    <TextBlock Classes="warning" Text="OpenColorIO を読み込めないため、色空間は選べません" IsVisible="{Binding IsOcioUnavailable}" TextWrapping="Wrap" MaxWidth="420" />
     <TextBlock Classes="warning" Text="{Binding Error}" IsVisible="{Binding !IsValid}" />
 
     <StackPanel Classes="dialog-buttons">

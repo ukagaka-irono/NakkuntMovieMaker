@@ -45,6 +45,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         ShowGrid = session.Settings.ShowGrid;
         ShowSafeArea = session.Settings.ShowSafeArea;
         session.Changed += (_, _) => _dirty = true;
+        session.PreviewColorChanged += (_, _) => _dirty = true;
         session.ProjectOpened += (_, _) =>
         {
             Speed = 0;

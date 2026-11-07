@@ -17,10 +17,16 @@ public sealed record FrameRateChoice(string Name, Rational Fps)
     public override string ToString() => Name;
 }
 
-/// <summary>プロジェクトの設定（新規作成と、あとからの変更の両方に使う）</summary>
+/// <summary>合成の色空間の候補</summary>
+public sealed record CompositingChoice(CompositingSpace Space, string Name)
+{
+    public override string ToString() => Name;
+}
+
+/// <summary>プロジェクトの設定（新規作成と、あとからの変更の両方に使う）。形式と、色（合成の色空間・OpenColorIO の構成・書き出しの色空間）</summary>
 public sealed partial class ProjectSettingsViewModel : ObservableObject
 {
-    public ProjectSettingsViewModel(string title, string name, SceneFormat format, bool isNew)
+    public ProjectSettingsViewModel(string title, string name, SceneFormat format, bool isNew, ProjectColorSettings? color = null)
     {
         Title = title;
         IsNew = isNew;
@@ -34,6 +40,12 @@ public sealed partial class ProjectSettingsViewModel : ObservableObject
         }
 
         SampleRate = format.SampleRate;
+
+        color ??= ProjectColorSettings.Default;
+        Compositing = CompositingChoices.First(choice => choice.Space == color.Compositing);
+        OcioConfigs = [.. ColorChoices.Configs()];
+        OcioConfig = ColorChoices.Select(OcioConfigs, color.OcioConfig);
+        ExportColorSpace = ColorChoices.Select(ExportColorSpaces, color.ExportColorSpace);
     }
 
     public string Title { get; }
@@ -63,6 +75,32 @@ public sealed partial class ProjectSettingsViewModel : ObservableObject
     ];
 
     public static IReadOnlyList<int> SampleRates { get; } = [44100, 48000];
+
+    public static IReadOnlyList<CompositingChoice> CompositingChoices { get; } =
+    [
+        new(CompositingSpace.Srgb, "sRGB（今までと同じ見た目）"),
+        new(CompositingSpace.Linear, "リニア（光の量として混ぜる）"),
+    ];
+
+    /// <summary>OpenColorIO の組み込みの構成（Name が null なら既定）</summary>
+    public ObservableCollection<ColorSpaceChoice> OcioConfigs { get; }
+
+    /// <summary>書き出しの色空間（選んでいる構成のディスプレイの色空間。Name が null なら変換しない）</summary>
+    public ObservableCollection<ColorSpaceChoice> ExportColorSpaces { get; } = [];
+
+    /// <summary>OpenColorIO を使えない（構成と書き出しの色空間を選べない）</summary>
+    public bool IsOcioUnavailable { get; } = !ColorChoices.IsAvailable;
+
+    [ObservableProperty]
+    public partial CompositingChoice Compositing { get; set; }
+
+    [ObservableProperty]
+    public partial ColorSpaceChoice OcioConfig { get; set; }
+
+    [ObservableProperty]
+    public partial ColorSpaceChoice ExportColorSpace { get; set; }
+
+    public ProjectColorSettings Color => new(Compositing.Space, OcioConfig.Name, ExportColorSpace.Name);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Error), nameof(IsValid))]
@@ -97,6 +135,19 @@ public sealed partial class ProjectSettingsViewModel : ObservableObject
     public bool IsValid => Error is null;
 
     public SceneFormat Format => new(Width, Height, FrameRate.Fps, SampleRate);
+
+    // 構成を変えたら、書き出しの色空間の候補をその構成のものにする（選んでいた名前があれば、そのまま選ぶ）
+    partial void OnOcioConfigChanged(ColorSpaceChoice value)
+    {
+        var selected = ExportColorSpace?.Name;
+        ExportColorSpaces.Clear();
+        foreach (var choice in ColorChoices.Displays(value.Name, "変換しない（BT.709）"))
+        {
+            ExportColorSpaces.Add(choice);
+        }
+
+        ExportColorSpace = ColorChoices.Select(ExportColorSpaces, selected);
+    }
 
     partial void OnPresetChanged(FormatPreset? value)
     {

@@ -32,6 +32,18 @@ public sealed partial class AssetEntry(Asset asset, string fullPath) : Observabl
 
     public bool IsAudio => Asset.Kind == AssetKind.Audio;
 
+    /// <summary>入力の色空間を指定していれば、その表示（自動なら空）</summary>
+    public string ColorSpaceLabel => Asset.ColorSpace is { } space ? $"入力の色空間：{space}" : "";
+
+    public bool HasColorSpace => Asset.ColorSpace is not null;
+
+    /// <summary>入力の色空間で変換できない理由（変換せずに描いている）</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasColorError))]
+    public partial string? ColorError { get; set; }
+
+    public bool HasColorError => ColorError is not null;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasThumbnail))]
     public partial Bitmap? Thumbnail { get; set; }
@@ -52,7 +64,7 @@ public sealed partial class AssetEntry(Asset asset, string fullPath) : Observabl
 
 /// <summary>
 /// 素材の一覧（メディアプール）。ファイルの追加（ドラッグ＆ドロップを含む）、サムネイル、リンク切れの表示と場所の指定し直し、
-/// タイムラインへの配置、使っていない素材の削除
+/// タイムラインへの配置、使っていない素材の削除、動画と画像の入力の色空間の指定
 /// </summary>
 public sealed partial class MediaPoolViewModel : ObservableObject
 {
@@ -79,8 +91,14 @@ public sealed partial class MediaPoolViewModel : ObservableObject
     public ObservableCollection<AssetEntry> Assets { get; } = [];
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(AddToTimelineCommand), nameof(RelinkCommand), nameof(RemoveCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddToTimelineCommand), nameof(RelinkCommand), nameof(RemoveCommand), nameof(SetInputColorSpaceCommand))]
     public partial AssetEntry? Selected { get; set; }
+
+    /// <summary>入力の色空間の候補（プロジェクトの OpenColorIO の構成の色空間。Name が null なら自動）</summary>
+    public ObservableCollection<ColorSpaceChoice> InputColorSpaces { get; } = [];
+
+    // 候補を作った構成（構成が変わったら作り直す）
+    private string? _inputColorSpacesConfig;
 
     /// <summary>リンク切れの素材の数</summary>
     [ObservableProperty]
@@ -90,6 +108,9 @@ public sealed partial class MediaPoolViewModel : ObservableObject
     public bool HasMissing => MissingCount > 0;
 
     public bool IsEmpty => Assets.Count == 0;
+
+    /// <summary>入力の色空間で変換できるかを確かめ終えるまで待つ（テスト用）</summary>
+    public Task ColorErrorsReady { get; private set; } = Task.CompletedTask;
 
     /// <summary>サムネイルを作り終えるまで待つ（テスト用）</summary>
     public Task PreviewsReady { get; private set; } = Task.CompletedTask;
@@ -195,6 +216,53 @@ public sealed partial class MediaPoolViewModel : ObservableObject
 
     private bool HasSelection() => Selected is not null;
 
+    /// <summary>選んだ素材（動画・画像）の入力の色空間を指定する（Name が null なら、動画の色のタグなどから自動で決める）</summary>
+    [RelayCommand(CanExecute = nameof(HasPicture))]
+    private void SetInputColorSpace(ColorSpaceChoice choice)
+    {
+        if (Selected is { } entry && entry.Asset.ColorSpace != choice.Name)
+        {
+            _session.Execute(new SetAsset(entry.Id, entry.Asset with { ColorSpace = choice.Name }));
+        }
+    }
+
+    private bool HasPicture() => Selected is { IsAudio: false };
+
+    // 候補を、プロジェクトの構成の色空間にする（構成が変わったときだけ作り直す）
+    private void RefreshInputColorSpaces()
+    {
+        var config = _session.Project.Color.OcioConfig;
+        if (InputColorSpaces.Count > 0 && config == _inputColorSpacesConfig)
+        {
+            return;
+        }
+
+        _inputColorSpacesConfig = config;
+        InputColorSpaces.Clear();
+        foreach (var choice in ColorChoices.ColorSpaces(config, "自動（動画の色の情報から決める）"))
+        {
+            InputColorSpaces.Add(choice);
+        }
+    }
+
+    // 入力の色空間で変換できるかを裏で確かめる（変換の表を作るので時間がかかることがある）
+    private async Task LoadColorErrorsAsync(IReadOnlyList<AssetEntry> entries)
+    {
+        var media = _session.Media;
+        foreach (var entry in entries)
+        {
+            try
+            {
+                var error = await Task.Run(() => media.InputColorError(entry.Id));
+                entry.ColorError = error;
+            }
+            catch (ObjectDisposedException)
+            {
+                return; // 別のプロジェクトを開いた
+            }
+        }
+    }
+
     // プロジェクトに合わせて一覧を作り直す（サムネイルは素材とパスが同じなら使い回す）
     private void Refresh()
     {
@@ -241,6 +309,8 @@ public sealed partial class MediaPoolViewModel : ObservableObject
 
         Selected = Assets.FirstOrDefault(entry => entry.Id == selected);
         MissingCount = Assets.Count(entry => entry.IsMissing);
+        RefreshInputColorSpaces();
+        ColorErrorsReady = LoadColorErrorsAsync([.. Assets.Where(entry => !entry.IsAudio && !entry.IsMissing)]);
         OnPropertyChanged(nameof(IsEmpty));
         if (pending.Count > 0)
         {

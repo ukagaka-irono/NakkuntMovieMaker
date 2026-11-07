@@ -116,6 +116,21 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
     /// <summary>描画の方式が変わった（GPU が使えなくなって CPU に切り替えたなど。描画のスレッドから呼ばれることがある）</summary>
     public event EventHandler? RendererChanged;
 
+    /// <summary>プレビューの色（プロジェクトの色の設定や、プレビューの表示の色空間）が変わった。プレビューは描き直す</summary>
+    public event EventHandler? PreviewColorChanged;
+
+    /// <summary>設定のプレビューの表示の色空間を変えたあとに呼ぶ（プレビューを新しい変換で描き直す）</summary>
+    public void RefreshPreviewColor()
+    {
+        if (_workspace is null)
+        {
+            return;
+        }
+
+        Frames.SetColor(PreviewColor(Project, _settings));
+        PreviewColorChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>プレビュー上でアイテムの大きさを測る（描画と文字の配置のキャッシュを共有する）</summary>
     public ContentMeasurer Measurer => _workspace!.Measurer;
 
@@ -148,9 +163,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
     public IReadOnlyList<Item> SelectedItems => [.. Selection.Where(Scene.Items.ContainsKey).Select(Scene.GetItem)];
 
     /// <summary>新しいプロジェクトにする（保存はしない）</summary>
-    public void NewProject(string name, SceneFormat format)
+    public void NewProject(string name, SceneFormat format, ProjectColorSettings? color = null)
     {
-        var project = Project.CreateNew(name, format);
+        var project = Project.CreateNew(name, format) with { Color = color ?? ProjectColorSettings.Default };
         Replace(new ProjectDocument(project), CreateUntitledFolder(), null);
     }
 
@@ -333,8 +348,15 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
             SceneId = change.Current.RootScene;
         }
 
+        // 画面が素材を読む前に（Changed より先に）、素材の読み出しを新しいプロジェクトにする
+        Media.Update(change.Current);
         var scene = change.Current.GetScene(SceneId);
         Playback.SetScene(scene);
+        if (change.Previous.Color != change.Current.Color)
+        {
+            Frames.SetColor(PreviewColor(change.Current, _settings));
+        }
+
         Selection = Selection.Where(scene.Items.ContainsKey).ToImmutableHashSet();
         Changed?.Invoke(this, change);
         OnPropertyChanged(nameof(Title));
@@ -409,6 +431,10 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
         }
     }
 
+    // プレビューの色：プロジェクトの色の設定と、表示の変換（利用者ごとの設定）
+    private static FrameColor PreviewColor(Project project, AppSettings settings) =>
+        FrameColor.From(project.Color).WithOutput(PreviewTransform(project, settings));
+
     // プレビューの表示の変換（利用者ごとの設定）。変換できなければ、変換せずに表示する
     private static ColorLut? PreviewTransform(Project project, AppSettings settings)
     {
@@ -466,7 +492,7 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
             Media = new ProjectMediaSource(project, folder, Cache, proxies: Proxies);
             var timeline = new TimelineContext(project.Characters, new TachieLoader(folder), new ProjectLipSync(Media))
             {
-                Color = FrameColor.From(project.Color).WithOutput(PreviewTransform(project, session.Settings)),
+                Color = PreviewColor(project, session.Settings),
             };
             Frames = new FrameScheduler(session.Scene, Backend, Media, timeline: timeline) { Scale = session.Settings.PreviewScale };
             _connection = Frames.Connect(session.Document, session.SceneId);

@@ -127,6 +127,16 @@ public sealed class FrameScheduler : IDisposable
         }
     }
 
+    /// <summary>色の設定を変える（まだ描いていないフレームは、新しい設定で描く。設定は FramePlan に入るので、前の設定で描いたフレームは使わない）</summary>
+    public void SetColor(FrameColor color)
+    {
+        ArgumentNullException.ThrowIfNull(color);
+        lock (_gate)
+        {
+            _timeline = _timeline with { Color = color };
+        }
+    }
+
     /// <summary>描き直しが必要になった範囲のフレームを、覚えているものから捨てる</summary>
     public void Invalidate(IEnumerable<DirtyRange> ranges) => _cache.Invalidate(ranges);
 

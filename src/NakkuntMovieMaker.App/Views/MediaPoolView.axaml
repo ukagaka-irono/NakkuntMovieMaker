@@ -20,6 +20,15 @@
           <ContextMenu>
             <MenuItem Header="再生位置に置く" Command="{Binding AddToTimelineCommand}" />
             <MenuItem Header="場所を指定し直す…" Command="{Binding RelinkCommand}" />
+            <MenuItem Header="入力の色空間" ItemsSource="{Binding InputColorSpaces}">
+              <MenuItem.ItemContainerTheme>
+                <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" x:DataType="vm:ColorSpaceChoice">
+                  <Setter Property="Header" Value="{Binding Label}" />
+                  <Setter Property="Command" Value="{Binding $parent[ContextMenu].((vm:MediaPoolViewModel)DataContext).SetInputColorSpaceCommand}" />
+                  <Setter Property="CommandParameter" Value="{Binding}" />
+                </ControlTheme>
+              </MenuItem.ItemContainerTheme>
+            </MenuItem>
             <Separator />
             <MenuItem Header="一覧から外す" Command="{Binding RemoveCommand}" />
           </ContextMenu>
@@ -39,7 +48,9 @@
                   <TextBlock Classes="secondary" Text="{Binding KindLabel}" />
                   <TextBlock Classes="secondary" Text="{Binding Details}" />
                 </StackPanel>
+                <TextBlock Classes="secondary" Text="{Binding ColorSpaceLabel}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasColorSpace}" />
                 <TextBlock Classes="warning" Text="ファイルが見つかりません" FontSize="{StaticResource SmallFontSize}" IsVisible="{Binding IsMissing}" />
+                <TextBlock Classes="warning" Text="{Binding ColorError}" FontSize="{StaticResource SmallFontSize}" IsVisible="{Binding HasColorError}" />
               </StackPanel>
             </Grid>
           </DataTemplate>

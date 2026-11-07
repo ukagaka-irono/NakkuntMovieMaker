@@ -237,6 +237,24 @@ public sealed record RenameProject(string Name) : IOperation
         new(project with { Name = Name }, new RenameProject(project.Name), []);
 }
 
+/// <summary>プロジェクトの色の設定（合成の色空間・OpenColorIO の構成・書き出しの色空間）を変える。すべてのシーンを描き直す</summary>
+public sealed record SetProjectColor(ProjectColorSettings Color) : IOperation
+{
+    public string Description => "色の設定の変更";
+
+    public OperationResult Apply(Project project) =>
+        new(project with { Color = Color }, new SetProjectColor(project.Color), [DirtyRange.Everything]);
+}
+
+/// <summary>プロキシの設定を変える（プレビューでどの動画にプロキシを使うかが変わるので、描き直す）</summary>
+public sealed record SetProxySettings(ProjectProxySettings Proxies) : IOperation
+{
+    public string Description => "プロキシの設定の変更";
+
+    public OperationResult Apply(Project project) =>
+        new(project with { Proxies = Proxies }, new SetProxySettings(project.Proxies), [DirtyRange.Everything]);
+}
+
 public static class Operations
 {
     /// <summary>複数の操作を 1 つの Transaction にまとめる</summary>

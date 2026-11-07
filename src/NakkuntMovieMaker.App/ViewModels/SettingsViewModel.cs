@@ -30,7 +30,8 @@ public sealed partial class ShortcutEntry(ShortcutCommand command) : ObservableO
 
 /// <summary>
 /// 設定。キーボードショートカットの変更（行を選んで「キーを割り当てる」を押し、割り当てるキーを押す。ほかのコマンドが使っていたキーは、そちらから外す）と、
-/// 自動保存の間隔、音の出力デバイス、書き出しに使う外部の ffmpeg（x264・x265）、描画（方式・GPU・メモリの上限）。OK で設定ファイルに書く
+/// 自動保存の間隔、音の出力デバイス、書き出しに使う外部の ffmpeg（x264・x265）、描画（方式・GPU・メモリの上限・プレビューの表示の色空間）。
+/// OK で設定ファイルに書く
 /// </summary>
 public sealed partial class SettingsViewModel : ObservableObject
 {
@@ -85,6 +86,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         GpuDevice = GpuDevices.First(choice => choice.Name == settings.RendererDevice);
         GpuMemoryLimit = settings.GpuMemoryLimitMegabytes ?? 0;
         ExperimentalVulkanVideo = settings.ExperimentalVulkanVideo;
+        PreviewColorSpaces = [.. ColorChoices.Displays(null, "変換しない（sRGB のモニター）")];
+        PreviewColorSpace = ColorChoices.Select(PreviewColorSpaces, settings.PreviewColorSpace);
         CurrentRenderer = currentRenderer ?? "（プロジェクトを開いていません）";
         RendererProblem = rendererProblem;
     }
@@ -120,6 +123,12 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool ExperimentalVulkanVideo { get; set; }
+
+    /// <summary>プレビューを表示するモニターの色空間（Name が null なら変換しない）</summary>
+    public ObservableCollection<ColorSpaceChoice> PreviewColorSpaces { get; }
+
+    [ObservableProperty]
+    public partial ColorSpaceChoice PreviewColorSpace { get; set; }
 
     /// <summary>今使っている描画の方式</summary>
     public string CurrentRenderer { get; }
@@ -277,6 +286,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _settings.RendererDevice = GpuDevice.Name;
         _settings.GpuMemoryLimitMegabytes = GpuMemoryLimit > 0 ? (int)GpuMemoryLimit : null;
         _settings.ExperimentalVulkanVideo = ExperimentalVulkanVideo;
+        _settings.PreviewColorSpace = PreviewColorSpace.Name;
         _settings.Save(settingsPath);
     }
 
