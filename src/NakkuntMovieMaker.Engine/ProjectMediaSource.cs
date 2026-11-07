@@ -38,6 +38,10 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
     private readonly ConcurrentDictionary<(AssetId Asset, HardwareVideoDevice Device), DecoderSlot?> _gpuDecoders = new();
     private readonly ConcurrentDictionary<AssetId, byte> _gpuUnsupported = new();
 
+    // プレビューで使うプロキシ（書き出しでは渡さないので、使わない）
+    private readonly ProxyQueue? _proxies;
+    private readonly ConcurrentDictionary<string, byte> _proxyRequested = new(StringComparer.OrdinalIgnoreCase);
+
     // 平面のまま渡すデコーダーの段階の番号（縮小しない）
     private const int PlanesStep = -1;
     private readonly ColorTransforms _transforms;
@@ -45,10 +49,21 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
     private long _imageBytes;
 
     /// <param name="quality">動画の RGB への変換の質（プレビューは速さ、書き出しは質を優先する）</param>
+    /// <param name="proxies">
+    /// プレビューで使うプロキシ（プロジェクトのプロキシの設定に合う動画は、プロキシがあればそれを読み、なければ作り始めて、できるまでは元の素材を読む）。
+    /// 書き出しでは渡さない（必ず元の素材を読む）
+    /// </param>
     public ProjectMediaSource(
-        Project project, string projectFolder, MediaCache cache, ConversionQuality quality = ConversionQuality.Fast, ColorTransforms? transforms = null)
+        Project project, string projectFolder, MediaCache cache, ConversionQuality quality = ConversionQuality.Fast, ColorTransforms? transforms = null,
+        ProxyQueue? proxies = null)
     {
         _project = project;
+        _proxies = proxies;
+        if (proxies is not null)
+        {
+            proxies.JobChanged += OnProxyChanged;
+        }
+
         _transforms = transforms ?? ColorTransforms.Shared;
         _projectFolder = projectFolder;
         _cache = cache;
@@ -104,7 +119,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
             return null;
         }
 
-        var slot = _decoders.GetOrAdd((asset, PlanesStep), key => OpenDecoder(key.Asset, key.Step));
+        var slot = GetOrOpen<(AssetId Asset, int Step)>(_decoders, (asset, PlanesStep), key => OpenDecoder(key.Asset, key.Step));
         if (slot is null)
         {
             return null;
@@ -121,7 +136,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
                     return null;
                 }
 
-                return new VideoPlaneFrame(planes, slot.Decoder.SourceWidth, slot.Decoder.SourceHeight, InputLut(asset));
+                return new VideoPlaneFrame(planes, slot.SourceWidth, slot.SourceHeight, InputLut(asset));
             }
             catch (Exception ex) when (ex is MediaException or ObjectDisposedException)
             {
@@ -142,7 +157,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
             return null;
         }
 
-        var slot = _gpuDecoders.GetOrAdd((asset, device), key =>
+        var slot = GetOrOpen<(AssetId Asset, HardwareVideoDevice Device)>(_gpuDecoders, (asset, device), key =>
         {
             // 描画をやめるときは、このデバイスのデコーダーを先に捨てる
             key.Device.Closing += () => CloseGpuDecoders(key.Device);
@@ -164,7 +179,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
                     return null;
                 }
 
-                return new GpuVideoFrame(gpu.Clone(), slot.Decoder.SourceWidth, slot.Decoder.SourceHeight, InputLut(asset));
+                return new GpuVideoFrame(gpu.Clone(), slot.SourceWidth, slot.SourceHeight, InputLut(asset));
             }
             catch (Exception ex) when (ex is MediaException or ObjectDisposedException)
             {
@@ -175,14 +190,17 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
     private DecoderSlot? OpenGpuDecoder(AssetId asset, HardwareVideoDevice device)
     {
-        if (PathOf(asset) is not { } path || Info(path)?.Video is null)
+        if (VideoPath(asset) is not { } source)
         {
             return null;
         }
 
         try
         {
-            return new DecoderSlot(VideoDecoder.Open(path, new VideoDecoderOptions(CacheCapacity: 4, Output: VideoFrameOutput.Gpu, VulkanDevice: device.Reference)));
+            return new DecoderSlot(
+                VideoDecoder.Open(source.Path, new VideoDecoderOptions(CacheCapacity: 4, Output: VideoFrameOutput.Gpu, VulkanDevice: device.Reference)),
+                source.Width,
+                source.Height);
         }
         catch (MediaException)
         {
@@ -196,6 +214,25 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         {
             CloseSlot(_gpuDecoders, key);
         }
+    }
+
+    // デコーダーを、なければ開いて覚える。いくつものスレッドが同時に開いたときは、覚えなかったほうを閉じる（ファイルを開いたままにしない）
+    private static DecoderSlot? GetOrOpen<TKey>(ConcurrentDictionary<TKey, DecoderSlot?> decoders, TKey key, Func<TKey, DecoderSlot?> open)
+        where TKey : notnull
+    {
+        if (decoders.TryGetValue(key, out var existing))
+        {
+            return existing;
+        }
+
+        var opened = open(key);
+        var kept = decoders.GetOrAdd(key, opened);
+        if (!ReferenceEquals(kept, opened))
+        {
+            opened?.Decoder.Dispose();
+        }
+
+        return kept;
     }
 
     private static void CloseSlot<TKey>(ConcurrentDictionary<TKey, DecoderSlot?> decoders, TKey key)
@@ -212,7 +249,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
     public SourceImage? GetVideoFrame(AssetId asset, Rational time, double scale)
     {
-        var slot = _decoders.GetOrAdd((asset, StepFor(scale)), key => OpenDecoder(key.Asset, key.Step));
+        var slot = GetOrOpen<(AssetId Asset, int Step)>(_decoders, (asset, StepFor(scale)), key => OpenDecoder(key.Asset, key.Step));
         if (slot is null)
         {
             return null;
@@ -228,7 +265,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
                     image = ColorLutImage.Apply(lut, image);
                 }
 
-                return new SourceImage(image, slot.Decoder.SourceWidth, slot.Decoder.SourceHeight);
+                return new SourceImage(image, slot.SourceWidth, slot.SourceHeight);
             }
             catch (Exception ex) when (ex is MediaException or ObjectDisposedException)
             {
@@ -352,6 +389,11 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
     public void Dispose()
     {
+        if (_proxies is not null)
+        {
+            _proxies.JobChanged -= OnProxyChanged;
+        }
+
         foreach (var slot in _decoders.Values.Concat(_gpuDecoders.Values))
         {
             slot?.Decoder.Dispose();
@@ -505,17 +547,18 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
     private DecoderSlot? OpenDecoder(AssetId asset, int step)
     {
-        if (PathOf(asset) is not { } path || Info(path)?.Video is not { } video)
+        if (VideoPath(asset) is not { } source)
         {
             return null;
         }
 
         try
         {
+            var video = (Width: source.Width, Height: source.Height);
             var options = step == PlanesStep
                 ? new VideoDecoderOptions(Output: VideoFrameOutput.Planes)
                 : new VideoDecoderOptions(MaxSize(video.Width, step), MaxSize(video.Height, step), Quality: _quality);
-            return new DecoderSlot(VideoDecoder.Open(path, options));
+            return new DecoderSlot(VideoDecoder.Open(source.Path, options), source.Width, source.Height);
         }
         catch (MediaException)
         {
@@ -525,7 +568,71 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
     private static int MaxSize(int size, int step) => Math.Max(1, (int)Math.Ceiling(size * Steps[step]));
 
-    private sealed record DecoderSlot(VideoDecoder Decoder)
+    // 動画を読む場所と、素材の元の大きさ（プロキシを読むときも、大きさは元の素材のまま扱う）。
+    // プレビューでプロキシを使う設定に合う動画は、プロキシがあればプロキシ、なければ作り始めて元の素材
+    private (string Path, int Width, int Height)? VideoPath(AssetId asset)
+    {
+        if (PathOf(asset) is not { } path || Info(path)?.Video is not { } video)
+        {
+            return null;
+        }
+
+        if (_proxies is not null && UsesProxy(_project.Proxies.Mode, video.Width, video.Height))
+        {
+            if (_proxies.FindProxy(path) is { } proxy)
+            {
+                return (proxy, video.Width, video.Height);
+            }
+
+            if (_proxyRequested.TryAdd(Path.GetFullPath(path), 0))
+            {
+                _proxies.Enqueue(path);
+            }
+        }
+
+        return (path, video.Width, video.Height);
+    }
+
+    // プロキシを使う大きさか（1080p より大きい動画だけ、またはすべての動画）
+    private static bool UsesProxy(ProxyMode mode, int width, int height) => mode switch
+    {
+        ProxyMode.AllVideos => true,
+        ProxyMode.LargeVideos => Math.Max(width, height) > 1920 || Math.Min(width, height) > 1080,
+        _ => false,
+    };
+
+    /// <summary>素材の動画を、今プロキシで読んでいるか</summary>
+    public bool IsUsingProxy(AssetId asset) =>
+        _proxies is not null && PathOf(asset) is { } path && _proxies.FindProxy(path) is not null
+        && Info(path)?.Video is { } video && UsesProxy(_project.Proxies.Mode, video.Width, video.Height);
+
+    // プロキシができたら、その素材のデコーダーを閉じて、次から読み直させる（プロキシを読むように）
+    private void OnProxyChanged(object? sender, ProxyJob job)
+    {
+        if (job.State != ProxyJobState.Completed)
+        {
+            return;
+        }
+
+        foreach (var (id, asset) in _project.Assets)
+        {
+            if (asset.Kind == AssetKind.Video && PathOf(id) is { } path
+                && string.Equals(Path.GetFullPath(path), job.SourcePath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                foreach (var key in _decoders.Keys.Where(key => key.Asset == id))
+                {
+                    CloseSlot(_decoders, key);
+                }
+
+                foreach (var key in _gpuDecoders.Keys.Where(key => key.Asset == id))
+                {
+                    CloseSlot(_gpuDecoders, key);
+                }
+            }
+        }
+    }
+
+    private sealed record DecoderSlot(VideoDecoder Decoder, int SourceWidth, int SourceHeight)
     {
         public Lock Gate { get; } = new();
     }

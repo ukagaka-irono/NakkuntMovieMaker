@@ -5,7 +5,7 @@
 
   <!-- Media のテスト用の素材を使い回す -->
   <ItemGroup>
-    <None Include="../NakkuntMovieMaker.Media.Tests/Fixtures/frames-2997.mp4;../NakkuntMovieMaker.Media.Tests/Fixtures/green-64x48.png;../NakkuntMovieMaker.Media.Tests/Fixtures/tone-1s.wav;../NakkuntMovieMaker.Media.Tests/Fixtures/color-c83c28-bt709.mp4;../NakkuntMovieMaker.Media.Tests/Fixtures/color-c83c28-bt2020-pq.mp4"
+    <None Include="../NakkuntMovieMaker.Media.Tests/Fixtures/frames-2997.mp4;../NakkuntMovieMaker.Media.Tests/Fixtures/green-64x48.png;../NakkuntMovieMaker.Media.Tests/Fixtures/tone-1s.wav;../NakkuntMovieMaker.Media.Tests/Fixtures/color-c83c28-bt709.mp4;../NakkuntMovieMaker.Media.Tests/Fixtures/color-c83c28-bt2020-pq.mp4;../NakkuntMovieMaker.Media.Tests/Fixtures/red-blue-2s.mp4"
           Link="Fixtures/%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

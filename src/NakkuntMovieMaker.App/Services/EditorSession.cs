@@ -433,7 +433,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
             var marker = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(session._settingsPath)) ?? ".", "gpu-starting");
             Backend = RenderBackendFactory.Create(RendererOptions.Default with { CrashMarkerPath = marker }, layouts).Backend;
             Measurer = new ContentMeasurer(layouts);
-            Media = new ProjectMediaSource(project, folder, Cache);
+            // プレビューでは、プロジェクトの設定に合う動画にプロキシを使う（書き出しは別の素材の読み出しで、元の素材を読む）
+            Proxies = new ProxyQueue(Cache);
+            Media = new ProjectMediaSource(project, folder, Cache, proxies: Proxies);
             var timeline = new TimelineContext(project.Characters, new TachieLoader(folder), new ProjectLipSync(Media))
         {
             Color = FrameColor.From(project.Color).WithOutput(PreviewTransform(project, session.Settings)),
@@ -457,6 +459,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
 
         public ProjectMediaSource Media { get; }
 
+        /// <summary>プレビューで使うプロキシを作る仕事（後ろで 1 つずつ作る）</summary>
+        public ProxyQueue Proxies { get; }
+
         public FrameScheduler Frames { get; }
 
         public PlaybackController Playback { get; }
@@ -473,6 +478,7 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
             Voices.Dispose();
             Engines.Dispose();
             Media.Dispose();
+            Proxies.Dispose();
             Backend.Dispose();
         }
     }
