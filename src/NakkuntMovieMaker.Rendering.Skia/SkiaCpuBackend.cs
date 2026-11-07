@@ -64,32 +64,97 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
             throw new ArgumentOutOfRangeException(nameof(scale), "倍率は 0 より大きくしてください");
         }
 
-        var width = Math.Max(1, (int)Math.Round(plan.Width * scale));
-        var height = Math.Max(1, (int)Math.Round(plan.Height * scale));
-        var pixels = new byte[width * height * 4];
-        var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        var (width, height) = OutputSize(plan, scale);
+        return RenderInto(plan.Nodes, plan, media, scale, new PixelRegion(0, 0, width, height), plan.Background, cancellationToken);
+    }
+
+    /// <summary>出力の大きさ（GPU 版も同じ大きさにする）</summary>
+    public static (int Width, int Height) OutputSize(FramePlan plan, double scale) =>
+        (Math.Max(1, (int)Math.Round(plan.Width * scale)), Math.Max(1, (int)Math.Round(plan.Height * scale)));
+
+    /// <summary>
+    /// ノード 1 つが描かれる範囲（出力の画素。出力の中に収める）。描くものがなければ null。
+    /// エフェクト（外側に広がる）とトランジションは、出力の全体にする
+    /// </summary>
+    public PixelRegion? NodeRegion(RenderNode node, FramePlan plan, IMediaSource media, double scale)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        var (width, height) = OutputSize(plan, scale);
+        if (node is not DrawNode { Effects.IsEmpty: true } draw)
+        {
+            return new PixelRegion(0, 0, width, height);
+        }
+
+        var matrix = SKMatrix.Concat(OutputScale(plan, width, height), ToSkia(draw.Transform));
+        if (CreateContent(draw, media, plan, Hint(matrix)) is not { } content)
+        {
+            return null;
+        }
+
+        // 縁のアンチエイリアスと、線の角のはみ出しの分（4 画素）を足す
+        var bounds = matrix.MapRect(content.Bounds);
+        var x0 = Math.Max(0, (int)Math.Floor(bounds.Left) - 4);
+        var y0 = Math.Max(0, (int)Math.Floor(bounds.Top) - 4);
+        var x1 = Math.Min(width, (int)Math.Ceiling(bounds.Right) + 4);
+        var y1 = Math.Min(height, (int)Math.Ceiling(bounds.Bottom) + 4);
+        return x1 > x0 && y1 > y0 ? new PixelRegion(x0, y0, x1 - x0, y1 - y0) : null;
+    }
+
+    /// <summary>
+    /// ノード 1 つを、出力の region の範囲だけ、透明な画像に描く（全体を描いたときと同じ画素の並び）。GPU 版が、まだ GPU で描けないものに使う
+    /// </summary>
+    public BgraImage RenderRegion(RenderNode node, FramePlan plan, IMediaSource media, double scale, PixelRegion region, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        return RenderInto([node], plan, media, scale, region, RgbaColor.Transparent, cancellationToken);
+    }
+
+    // nodes を、出力の region の範囲だけ描く
+    private BgraImage RenderInto(
+        IReadOnlyList<RenderNode> nodes, FramePlan plan, IMediaSource media, double scale, PixelRegion region, RgbaColor background, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(media);
+        if (!(scale > 0))
+        {
+            throw new ArgumentOutOfRangeException(nameof(scale), "倍率は 0 より大きくしてください");
+        }
+
+        var (width, height) = OutputSize(plan, scale);
+        var pixels = new byte[region.Width * region.Height * 4];
+        var info = new SKImageInfo(region.Width, region.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        var whole = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
 
         fixed (byte* output = pixels)
         {
-            using var surface = SKSurface.Create(info, (nint)output, width * 4)
+            using var surface = SKSurface.Create(info, (nint)output, region.Width * 4)
                 ?? throw new InvalidOperationException("描画先を準備できませんでした");
             var canvas = surface.Canvas;
-            var background = plan.Background;
             canvas.Clear(new SKColor(background.R, background.G, background.B, background.A));
 
-            // シーンの座標 → 出力の座標
-            var outputScale = SKMatrix.CreateScale((float)(width / (double)plan.Width), (float)(height / (double)plan.Height));
-            foreach (var node in plan.Nodes)
+            // シーンの座標 → 出力の座標。範囲だけを描くときは、範囲の左上を原点にずらす
+            // （Draw は行列を置き換えるので、ずらす分を出力の行列にも入れる。トランジションの全体の画像は canvas のずれで置く）
+            var outputScale = SKMatrix.Concat(SKMatrix.CreateTranslation(-region.X, -region.Y), OutputScale(plan, width, height));
+            canvas.Translate(-region.X, -region.Y);
+            foreach (var node in nodes)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                DrawNode(canvas, node, media, outputScale, plan, info);
+                DrawNode(canvas, node, media, outputScale, plan, whole);
             }
 
             canvas.Flush();
         }
 
-        return new BgraImage(width, height, pixels);
+        return new BgraImage(region.Width, region.Height, pixels);
     }
+
+    private static SKMatrix OutputScale(FramePlan plan, int width, int height) =>
+        SKMatrix.CreateScale((float)(width / (double)plan.Width), (float)(height / (double)plan.Height));
+
+    // 素材を読む細かさ（ローカル座標 1 あたりの出力の画素）
+    private static double Hint(SKMatrix matrix) => Math.Max(
+        Math.Sqrt(matrix.ScaleX * matrix.ScaleX + matrix.SkewY * matrix.SkewY),
+        Math.Sqrt(matrix.SkewX * matrix.SkewX + matrix.ScaleY * matrix.ScaleY));
 
     public void Dispose()
     {
@@ -143,20 +208,9 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
     private void Draw(SKCanvas canvas, DrawNode node, IMediaSource media, SKMatrix outputScale, FramePlan plan)
     {
         var matrix = SKMatrix.Concat(outputScale, ToSkia(node.Transform));
-        var hint = Math.Max(
-            Math.Sqrt(matrix.ScaleX * matrix.ScaleX + matrix.SkewY * matrix.SkewY),
-            Math.Sqrt(matrix.SkewX * matrix.SkewX + matrix.ScaleY * matrix.ScaleY));
-
-        SourceImage? source = null;
-        var content = node.Content switch
-        {
-            VideoFrameContent video => media.GetVideoFrame(video.Asset, video.SourceTime, hint) is { } frame ? ImageContent(node.Crop, frame) : null,
-            ImageContent image => (source = media.GetImage(image.Asset, hint)) is { } picture ? ImageContent(node.Crop, picture) : null,
-            TextContent text => TextContent(node.Crop, text),
-            ShapeContent shape => ShapeContent(node.Crop, shape.Shape, plan),
-            TachieContent tachie => TachieContent(node.Crop, tachie, media, hint),
-            _ => null,
-        };
+        var hint = Hint(matrix);
+        var source = node.Content is ImageContent image ? media.GetImage(image.Asset, hint) : null;
+        var content = CreateContent(node, media, plan, hint, source);
         if (content is null)
         {
             return;
@@ -249,6 +303,17 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
 
         return image;
     }
+
+    // 描く中身（ローカル座標）。静止画は、読んだ素材を source で渡せる
+    private Content? CreateContent(DrawNode node, IMediaSource media, FramePlan plan, double hint, SourceImage? source = null) => node.Content switch
+    {
+        VideoFrameContent video => media.GetVideoFrame(video.Asset, video.SourceTime, hint) is { } frame ? ImageContent(node.Crop, frame) : null,
+        ImageContent image => (source ?? media.GetImage(image.Asset, hint)) is { } picture ? ImageContent(node.Crop, picture) : null,
+        TextContent text => TextContent(node.Crop, text),
+        ShapeContent shape => ShapeContent(node.Crop, shape.Shape, plan),
+        TachieContent tachie => TachieContent(node.Crop, tachie, media, hint),
+        _ => null,
+    };
 
     private TextLayout GetLayout(string text, TextStyle style) => _layouts.Get(text, style);
 

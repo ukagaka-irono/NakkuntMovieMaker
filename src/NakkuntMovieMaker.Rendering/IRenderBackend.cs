@@ -111,3 +111,6 @@ public sealed record SourceImage(BgraImage Image, int Width, int Height)
     {
     }
 }
+
+/// <summary>出力の画像の中の、画素の範囲（左上と大きさ）</summary>
+public readonly record struct PixelRegion(int X, int Y, int Width, int Height);

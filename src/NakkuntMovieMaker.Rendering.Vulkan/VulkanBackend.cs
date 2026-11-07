@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using NakkuntMovieMaker.Core.Model;
@@ -16,6 +17,9 @@ namespace NakkuntMovieMaker.Rendering.Vulkan;
 /// </summary>
 public sealed unsafe class VulkanBackend : IRenderBackend
 {
+    // CPU で描いたノードの画像を覚えておく量
+    private const long LayerCacheBytes = 256L << 20;
+
     private const VkImageUsageFlags WorkUsage = VkImageUsageFlags.Storage | VkImageUsageFlags.TransferDst | VkImageUsageFlags.TransferSrc;
     private static readonly GpuBindingKind[] CompositeBindings = [GpuBindingKind.StorageImage, GpuBindingKind.StorageBuffer];
     private static readonly GpuBindingKind[] ConvertBindings = [GpuBindingKind.StorageImage, GpuBindingKind.StorageBuffer];
@@ -28,6 +32,8 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     private readonly TexturePool _pool;
     private readonly GpuCache<BgraImage> _sources;
     private readonly SkiaCpuBackend _cpu;
+    private readonly ConcurrentDictionary<LayerKey, Layer?> _layers = new();
+    private long _layerBytes;
     private bool _disposed;
 
     /// <param name="device">使う GPU（null なら選んで作る。そのときは破棄するときに一緒に破棄する）</param>
@@ -125,15 +131,36 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             return PrepareImage(draw, media, output, width, height);
         }
 
-        // まだ GPU で描けないもの：そのノードだけを透明な画像に描き、合成モードと不透明度は GPU で重ねるときに付ける
+        // まだ GPU で描けないもの：そのノードだけを、描かれる範囲だけ CPU で透明な画像に描き、合成モードと不透明度は GPU で重ねるときに付ける。
+        // 動画を含まないものは、描いた画像を覚えておく（同じ画像なら、GPU に送り直さずに済む）
         var (alone, blend, opacity) = node switch
         {
             DrawNode d => ((RenderNode)(d with { Blend = BlendMode.Normal, Opacity = 1 }), d.Blend, Round(d.Opacity)),
             _ => (node, BlendMode.Normal, 1f),
         };
-        var layer = _cpu.Render(new FramePlan(plan.Width, plan.Height, RgbaColor.Transparent, [alone]), media, scale);
-        var full = new Rect(0, 0, width, height);
-        return new Operation(layer, Owned: true, Matrix3x2.Identity, full, new SourceRect(0, 0, width, height), opacity, blend, Antialias: false, new Region(0, 0, width, height));
+        var key = new LayerKey(alone, scale, plan.Width, plan.Height);
+        var reusable = IsStill(alone);
+        if (!reusable || !_layers.TryGetValue(key, out var layer))
+        {
+            layer = _cpu.NodeRegion(alone, plan, media, scale) is { } area
+                ? new Layer(_cpu.RenderRegion(alone, plan, media, scale, area), area)
+                : null;
+            if (reusable)
+            {
+                AddLayer(key, layer);
+            }
+        }
+
+        if (layer is null)
+        {
+            return null;
+        }
+
+        var region = layer.Region;
+        var destination = new Rect(region.X, region.Y, region.Width, region.Height);
+        return new Operation(
+            layer.Image, Owned: !reusable, Matrix3x2.Identity, destination, new SourceRect(0, 0, region.Width, region.Height), opacity, blend, Antialias: false,
+            new Region(region.X, region.Y, region.Width, region.Height));
     }
 
     // 素材を切り抜き、残った部分の中心をローカル座標の原点に置いて描く（SkiaCpuBackend.ImageContent と同じ）
@@ -261,6 +288,28 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         return buffer;
     }
 
+    // 動画のフレームを含まない（同じノードなら、毎回同じ画像になる）か
+    private static bool IsStill(RenderNode? node) => node switch
+    {
+        null => true,
+        DrawNode draw => draw.Content is not VideoFrameContent,
+        TransitionNode transition => IsStill(transition.From) && IsStill(transition.To),
+        _ => false,
+    };
+
+    // CPU で描いた画像を覚える。多くなりすぎたら、すべて捨てる（GPU に送ったものは、GPU のキャッシュが別に覚えている）
+    private void AddLayer(LayerKey key, Layer? layer)
+    {
+        var bytes = layer?.Image.Pixels.Length ?? 0;
+        if (Interlocked.Add(ref _layerBytes, bytes) > LayerCacheBytes)
+        {
+            _layers.Clear();
+            Interlocked.Exchange(ref _layerBytes, bytes);
+        }
+
+        _layers[key] = layer;
+    }
+
     // 四角形を変換した先を囲む、出力の中の画素の範囲（縁のアンチエイリアスの分を足す）。出力の外なら null
     private static Region? Bounds(Rect rect, Matrix3x2 matrix, int width, int height)
     {
@@ -291,6 +340,11 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     }
 
     private readonly record struct Rect(float Left, float Top, float Width, float Height);
+
+    private sealed record LayerKey(RenderNode Node, double Scale, int SceneWidth, int SceneHeight);
+
+    // CPU で描いた、ノード 1 つの画像と、出力の中の位置
+    private sealed record Layer(BgraImage Image, PixelRegion Region);
 
     private readonly record struct SourceRect(int X, int Y, int Width, int Height);
 
