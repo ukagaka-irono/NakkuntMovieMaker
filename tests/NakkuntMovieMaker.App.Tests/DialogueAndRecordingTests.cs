@@ -146,13 +146,17 @@ public sealed class DialogueAndRecordingTests : IDisposable
         session.Selection = [first.Id];
         Assert.Equal("「一」", recording.LineLabel);
 
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         await recording.RecordLineCommand.ExecuteAsync(null);
         await Task.Delay(300, TestContext.Current.CancellationToken);
         await recording.RecordLineCommand.ExecuteAsync(null);
+        var elapsedFrames = watch.Elapsed.TotalSeconds * 30;
 
         var recorded = (VoiceItem)session.Scene.GetItem(first.Id);
         Assert.IsType<RecordedVoice>(recorded.Source);
-        Assert.InRange(recorded.Length, 6, 15); // 録った長さ
+
+        // 録った長さは、実際にたった時間（混んだマシンでは Delay が長めになる）以内で、短すぎない
+        Assert.InRange(recorded.Length, 6, Math.Max(15, (long)Math.Ceiling(elapsedFrames) + 1));
         Assert.Equal([second.Id], session.Selection);
         Assert.Equal(60, session.CurrentFrame);
 
