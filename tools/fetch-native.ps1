@@ -20,7 +20,7 @@ function Get-Verified([string]$Url, [string]$Sha256) {
     $file = Join-Path $downloads ([System.Uri]::UnescapeDataString([System.IO.Path]::GetFileName($Url)))
     if (-not (Test-Path $file)) {
         Write-Host "ダウンロード: $Url"
-        Invoke-WebRequest -Uri $Url -OutFile $file
+        Invoke-Download $Url $file
     }
 
     $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -32,6 +32,23 @@ function Get-Verified([string]$Url, [string]$Sha256) {
     return $file
 }
 
+# ダウンロードする。つながらない・途中で切れたときは、間を空けて 5 回まで試す（CI で ffmpeg.org などにつながらないことがあるため）。
+# 途中まで書いたファイルは消す
+function Invoke-Download([string]$Url, [string]$OutFile) {
+    for ($attempt = 1; ; $attempt++) {
+        try {
+            Invoke-WebRequest -Uri $Url -OutFile $OutFile -TimeoutSec 300
+            return
+        }
+        catch {
+            if (Test-Path $OutFile) { Remove-Item $OutFile }
+            if ($attempt -ge 5) { throw }
+            Write-Warning "ダウンロードに失敗しました（$attempt 回目。$($_.Exception.Message)）。$($attempt * 15) 秒後にやり直します: $Url"
+            Start-Sleep -Seconds ($attempt * 15)
+        }
+    }
+}
+
 # アーカイブを downloads/<name>-<version>-<ファイル名> に取得して、SHA-256 を確かめる。場所を返す。
 # ハッシュをまだ決めていない（空の）ときは、実際の値を表示して $null を返す（最後に失敗させる）
 $script:missingHash = $false
@@ -39,7 +56,7 @@ function Get-Archive([string]$Name, [string]$Version, [string]$Url, [string]$Sha
     $archive = Join-Path $downloads "$Name-$Version-$([System.IO.Path]::GetFileName($Url))"
     if (-not (Test-Path $archive)) {
         Write-Host "ダウンロード: $Url"
-        Invoke-WebRequest -Uri $Url -OutFile $archive
+        Invoke-Download $Url $archive
     }
 
     $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -86,7 +103,7 @@ foreach ($source in $colorful.files) {
     if (-not (Test-Path $target)) {
         New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
         Write-Host "ダウンロード: $($colorful.baseUrl)$($source.path)"
-        Invoke-WebRequest -Uri "$($colorful.baseUrl)$($source.path)" -OutFile $target
+        Invoke-Download "$($colorful.baseUrl)$($source.path)" $target
     }
 
     $hash = (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()
