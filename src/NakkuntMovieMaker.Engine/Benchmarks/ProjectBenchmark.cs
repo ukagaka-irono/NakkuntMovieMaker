@@ -5,6 +5,7 @@ using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Engine.Export;
 using NakkuntMovieMaker.Engine.Playback;
 using NakkuntMovieMaker.Engine.Tachie;
+using NakkuntMovieMaker.Rendering;
 using NakkuntMovieMaker.Media;
 using NakkuntMovieMaker.Rendering.Skia;
 using NakkuntMovieMaker.Voice;
@@ -34,7 +35,10 @@ public sealed class ProjectBenchmark(Project project, string projectFolder, Rend
     {
         var scene = project.Root;
         using var media = new ProjectMediaSource(project, projectFolder, new MediaCache(Path.Combine(projectFolder, ".nmm", "cache")));
-        var timeline = new TimelineContext(project.Characters, new TachieLoader(projectFolder), new ProjectLipSync(media));
+        var timeline = new TimelineContext(project.Characters, new TachieLoader(projectFolder), new ProjectLipSync(media))
+        {
+            Color = FrameColor.From(project.Color),
+        };
         using var backend = RenderBackendFactory.Create(renderer).Backend;
         using var frames = new FrameScheduler(scene, backend, media, timeline: timeline) { Scale = scale };
 

@@ -414,7 +414,10 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
             Backend = RenderBackendFactory.Create(RendererOptions.Default with { CrashMarkerPath = marker }, layouts).Backend;
             Measurer = new ContentMeasurer(layouts);
             Media = new ProjectMediaSource(project, folder, Cache);
-            var timeline = new TimelineContext(project.Characters, new TachieLoader(folder), new ProjectLipSync(Media));
+            var timeline = new TimelineContext(project.Characters, new TachieLoader(folder), new ProjectLipSync(Media))
+        {
+            Color = FrameColor.From(project.Color),
+        };
             Frames = new FrameScheduler(session.Scene, Backend, Media, timeline: timeline) { Scale = session.Settings.PreviewScale };
             _connection = Frames.Connect(session.Document, session.SceneId);
             Playback = new PlaybackController(

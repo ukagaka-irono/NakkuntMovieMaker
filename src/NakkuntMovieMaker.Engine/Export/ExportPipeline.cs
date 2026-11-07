@@ -80,7 +80,10 @@ public sealed class ExportPipeline : IDisposable
         (_backend, RendererFallbackReason) = RenderBackendFactory.Create(renderer);
         _scene = project.GetScene(scene);
         _media = new ProjectMediaSource(project, projectFolder, new MediaCache(Path.Combine(projectFolder, ".nmm", "cache")), ConversionQuality.Accurate);
-        _timeline = new TimelineContext(project.Characters, new TachieLoader(projectFolder), new ProjectLipSync(_media));
+        _timeline = new TimelineContext(project.Characters, new TachieLoader(projectFolder), new ProjectLipSync(_media))
+        {
+            Color = FrameColor.From(project.Color),
+        };
     }
 
     /// <summary>動画を書き出す</summary>

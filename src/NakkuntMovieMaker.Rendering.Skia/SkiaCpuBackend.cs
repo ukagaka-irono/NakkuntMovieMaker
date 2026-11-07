@@ -26,6 +26,11 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
 
     private static readonly SKSamplingOptions Sampling = new(SKFilterMode.Linear, SKMipmapMode.None);
 
+    // 素材・エフェクトの途中の画像は sRGB。リニアのモードでは、描く先を 16 ビット浮動小数点のリニアの sRGB（Rec.709）にし、
+    // Skia に変換させる（sRGB のモードでは、描く先に色空間がないので、変換は行われない）
+    internal static readonly SKColorSpace Srgb = SKColorSpace.CreateSrgb();
+    private static readonly SKColorSpace LinearSrgb = SKColorSpace.CreateSrgbLinear();
+
     private static readonly Lazy<SKBlender> SubtractBlender = new(() =>
     {
         using var effect = SKRuntimeEffect.CreateBlender(SubtractSksl, out var errors)
@@ -122,12 +127,14 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
 
         var (width, height) = OutputSize(plan, scale);
         var pixels = new byte[region.Width * region.Height * 4];
-        var info = new SKImageInfo(region.Width, region.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
-        var whole = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        var info = WorkingInfo(plan, region.Width, region.Height);
+        var whole = WorkingInfo(plan, width, height);
+        var linear = plan.Color.IsLinear;
 
         fixed (byte* output = pixels)
         {
-            using var surface = SKSurface.Create(info, (nint)output, region.Width * 4)
+            // sRGB のモードは、結果の配列に直接描く。リニアのモードは、別の画像に描いてから sRGB の 8 ビットに変換する
+            using var surface = (linear ? SKSurface.Create(info) : SKSurface.Create(info, (nint)output, region.Width * 4))
                 ?? throw new InvalidOperationException("描画先を準備できませんでした");
             var canvas = surface.Canvas;
             canvas.Clear(new SKColor(background.R, background.G, background.B, background.A));
@@ -143,10 +150,23 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
             }
 
             canvas.Flush();
+            if (linear)
+            {
+                var srgb = new SKImageInfo(region.Width, region.Height, SKColorType.Bgra8888, SKAlphaType.Premul, Srgb);
+                if (!surface.ReadPixels(srgb, (nint)output, region.Width * 4, 0, 0))
+                {
+                    throw new InvalidOperationException("描いた結果を sRGB に変換できませんでした");
+                }
+            }
         }
 
         return new BgraImage(region.Width, region.Height, pixels);
     }
+
+    // 描く先の画像の形式（sRGB のモードは 8 ビットで色空間なし、リニアのモードは 16 ビット浮動小数点のリニアの sRGB）
+    private static SKImageInfo WorkingInfo(FramePlan plan, int width, int height) => plan.Color.IsLinear
+        ? new SKImageInfo(width, height, SKColorType.RgbaF16, SKAlphaType.Premul, LinearSrgb)
+        : new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
 
     private static SKMatrix OutputScale(FramePlan plan, int width, int height) =>
         SKMatrix.CreateScale((float)(width / (double)plan.Width), (float)(height / (double)plan.Height));
@@ -400,7 +420,7 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         var image = source.Image;
         fixed (byte* pixels = image.Pixels)
         {
-            var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul, Srgb);
             using var pixmap = new SKPixmap(info, (nint)pixels, image.Stride);
             using var skImage = SKImage.FromPixels(pixmap);
             using var plain = paint is null ? new SKPaint { IsAntialias = true } : null;
@@ -482,7 +502,7 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
             fixed (byte* pixels = image.Pixels)
             {
                 // 画素を写さずに、切り抜いた部分だけを Skia の画像として扱う
-                var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+                var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul, Srgb);
                 using var whole = new SKPixmap(info, (nint)pixels, image.Stride);
                 using var part = whole.ExtractSubset(subset);
                 using var skImage = SKImage.FromPixels(part);

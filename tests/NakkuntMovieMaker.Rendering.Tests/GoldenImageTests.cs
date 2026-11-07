@@ -11,6 +11,8 @@ public sealed class GoldenImageTests
 
     public static TheoryData<string> Scenes => new(RenderScenes.Names);
 
+    public static TheoryData<string> LinearScenes => new(RenderScenes.LinearNames);
+
     [Theory]
     [MemberData(nameof(Scenes))]
     public void MatchesTheGoldenImage(string name)
@@ -24,6 +26,19 @@ public sealed class GoldenImageTests
         var image = _backend.Render(scene.Plan, scene.Media, scene.Scale, TestContext.Current.CancellationToken);
 
         Golden.AssertMatches(image, scene.Name);
+    }
+
+    [Theory]
+    [MemberData(nameof(LinearScenes))]
+    public void MatchesTheLinearGoldenImage(string name) => MatchesTheGoldenImage(name);
+
+    [Fact]
+    public void DefaultColorDrawsLikeM1()
+    {
+        // 色の設定が既定値なら、M1 と同じ（8 ビットの sRGB の画像に直接描く）
+        using var scene = RenderScenes.Create("composition");
+        Assert.Equal(FrameColor.Default, scene.Plan.Color);
+        Assert.False(scene.Plan.Color.IsLinear);
     }
 
     private static string GoldenFolder([System.Runtime.CompilerServices.CallerFilePath] string path = "") =>

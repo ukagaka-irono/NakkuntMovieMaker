@@ -9,9 +9,33 @@ namespace NakkuntMovieMaker.Rendering;
 /// <summary>
 /// フレーム 1 枚に描く内容。GPU にも CPU にも依存しないデータで、描画の処理（IRenderBackend）がこれを実行する。
 /// Width・Height はシーンの大きさ（ピクセル）で、Nodes は下から順に重ねる。
-/// 中身で比較できるので、同じ内容のフレーム（止まっている画像だけの区間など）は描画した結果を使い回せる
+/// 中身で比較できるので、同じ内容のフレーム（止まっている画像だけの区間など）は描画した結果を使い回せる。
+/// Color は色の設定（合成の色空間など）で、既定値は M1 と同じ処理
 /// </summary>
-public sealed record FramePlan(int Width, int Height, RgbaColor Background, EquatableArray<RenderNode> Nodes);
+public sealed record FramePlan(int Width, int Height, RgbaColor Background, EquatableArray<RenderNode> Nodes)
+{
+    public FrameColor Color { get; init; } = FrameColor.Default;
+}
+
+/// <summary>
+/// フレームを描くときの色の設定。Compositing がリニアなら、合成（重ねる・混ぜる・トランジション）をリニアの Rec.709 で計算する。
+/// 素材・文字・図形の色と、出力は sRGB のまま。エフェクトの中の計算（色の処理・ぼかし）は、どちらでも sRGB で行う
+/// </summary>
+public sealed record FrameColor(CompositingSpace Compositing = CompositingSpace.Srgb)
+{
+    public static FrameColor Default { get; } = new();
+
+    public static FrameColor Linear { get; } = new(CompositingSpace.Linear);
+
+    public bool IsLinear => Compositing == CompositingSpace.Linear;
+
+    /// <summary>プロジェクトの色の設定から</summary>
+    public static FrameColor From(ProjectColorSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return settings.Compositing == CompositingSpace.Linear ? Linear : Default;
+    }
+}
 
 /// <summary>描画の木の節</summary>
 public abstract record RenderNode;

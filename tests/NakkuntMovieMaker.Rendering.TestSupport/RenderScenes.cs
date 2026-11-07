@@ -47,8 +47,20 @@ public static class RenderScenes
         .. BuiltInTransitions.All.Select(transition => "transition-" + transition.Type["nmm.".Length..]),
     ];
 
+    /// <summary>リニアのモード（合成をリニアで計算する）の場面。ゴールデン画像は Golden/linear にある</summary>
+    public static IReadOnlyList<string> LinearNames { get; } =
+    [
+        "linear/composition",
+        "linear/shapes",
+        "linear/effect-blur",
+        "linear/effect-glow",
+        "linear/transition-crossfade",
+        "linear/transition-wipe",
+    ];
+
     public static RenderScene Create(string name) => name switch
     {
+        _ when name.StartsWith("linear/", StringComparison.Ordinal) => Linear(name),
         "composition" => Composition(name, 1),
         "composition-half" => Composition(name, 0.5),
         "shapes" => Shapes(name),
@@ -60,6 +72,13 @@ public static class RenderScenes
 
     private static RenderScene Make(string name, Scene scene, TestMedia media, long frame = 0, RgbaColor? background = null, double scale = 1, bool fonts = false, IDisposable? resources = null) =>
         new(name, TimelineEvaluator.Evaluate(scene, frame, background), media, scale, fonts, resources);
+
+    // 同じ場面を、リニアのモードで描く
+    private static RenderScene Linear(string name)
+    {
+        var scene = Create(name["linear/".Length..]);
+        return new RenderScene(name, scene.Plan with { Color = FrameColor.Linear }, scene.Media, scene.Scale, scene.RequiresFonts, scene);
+    }
 
     private static Scene With(Scene scene, params Item[] items) =>
         scene with { Items = scene.Items.SetItems(items.Select(item => KeyValuePair.Create(item.Id, item))) };

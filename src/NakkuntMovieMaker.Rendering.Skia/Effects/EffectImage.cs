@@ -47,7 +47,8 @@ internal sealed unsafe class EffectImage : IDisposable
     {
         var width = Math.Max(1, pixelBounds.Width);
         var height = Math.Max(1, pixelBounds.Height);
-        var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        // sRGB として扱う（リニアのモードで重ねるとき、Skia がリニアに変換する）
+        var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul, SkiaCpuBackend.Srgb));
         bitmap.Erase(SKColors.Transparent);
         return new EffectImage(bitmap, pixelBounds.Left, pixelBounds.Top, scale);
     }

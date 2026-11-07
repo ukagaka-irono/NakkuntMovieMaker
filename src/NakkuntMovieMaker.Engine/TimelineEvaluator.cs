@@ -43,7 +43,10 @@ public static class TimelineEvaluator
             nodes.AddRange(EvaluateLayer(context, layer, frame, transitions));
         }
 
-        return new FramePlan(scene.Format.Width, scene.Format.Height, background ?? RgbaColor.Black, new EquatableArray<RenderNode>(nodes.ToImmutable()));
+        return new FramePlan(scene.Format.Width, scene.Format.Height, background ?? RgbaColor.Black, new EquatableArray<RenderNode>(nodes.ToImmutable()))
+        {
+            Color = context.Timeline.Color,
+        };
     }
 
     /// <summary>

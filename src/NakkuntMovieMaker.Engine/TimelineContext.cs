@@ -1,11 +1,13 @@
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Engine.Tachie;
+using NakkuntMovieMaker.Rendering;
 
 namespace NakkuntMovieMaker.Engine;
 
 /// <summary>
 /// シーンのほかに、描く内容を決めるのに使うもの。Characters はプロジェクトのキャラクター（字幕のスタイルと立ち絵）、
-/// Tachie は立ち絵の読み込み、LipSync は口パク用の声の大きさ（どれもなければ、立ち絵は描かず口も動かさない）
+/// Tachie は立ち絵の読み込み、LipSync は口パク用の声の大きさ（どれもなければ、立ち絵は描かず口も動かさない）。
+/// Color は描くときの色の設定（プロジェクトの色の設定から作る）
 /// </summary>
 public sealed record TimelineContext(
     IReadOnlyDictionary<CharacterId, Character> Characters,
@@ -13,4 +15,6 @@ public sealed record TimelineContext(
     ILipSyncSource? LipSync = null)
 {
     public static readonly TimelineContext Empty = new(new Dictionary<CharacterId, Character>());
+
+    public FrameColor Color { get; init; } = FrameColor.Default;
 }
