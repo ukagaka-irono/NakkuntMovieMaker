@@ -42,7 +42,7 @@ installed="$prefix/ffmpeg-install/ffmpeg"
 sha256_of() {
   if command -v sha256sum >/dev/null; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi
 }
-stamp="$({ jq -c '.ffmpeg.sourceBuild' "$deps"; cat "$0"; } | sha256_of)"
+stamp="$({ jq -c '.ffmpeg.sourceBuild' "$deps"; jq -c '.vulkanHeaders' "$deps"; cat "$0"; } | sha256_of)"
 if [ "$(cat "$prefix/.stamp" 2>/dev/null || true)" != "$stamp" ]; then
   rm -rf "$prefix"
   mkdir -p "$prefix"
@@ -81,6 +81,14 @@ if [ "$(cat "$prefix/.stamp" 2>/dev/null || true)" != "$stamp" ]; then
         make -j"$jobs"
         make install
       )
+      # Vulkan（ヘッダーだけ。ローダーは実行時に読み込む）。Vulkan Video でデコードし、GPU の描画と同じデバイスでフレームを渡すため
+      vulkan_headers="$root/native/downloads/src-vulkan-headers"
+      if [ ! -f "$vulkan_headers/include/vulkan/vulkan.h" ]; then
+        echo "Vulkan-Headers のソースがありません。先に tools/fetch-native を実行してください" >&2
+        exit 1
+      fi
+      ffmpeg_flags+=(--enable-vulkan "--extra-cflags=-I$vulkan_headers/include")
+
       # NVENC・NVDEC（ヘッダーだけ。ドライバーは実行時に読み込む）
       make -C "$(source_of nv-codec-headers)" PREFIX="$prefix" install
       ffmpeg_flags+=(--pkg-config-flags=--static --enable-ffnvcodec --enable-nvenc --enable-nvdec --enable-cuvid)
@@ -198,6 +206,11 @@ for name in "${names[@]}"; do
     exit 1
   fi
 done
+
+# Vulkan-Headers（Vulkan の型と定数を FFmpeg に組み込んでいる。Windows・Linux）
+if [ "$os" != macos ]; then
+  cp "$root/native/downloads/src-vulkan-headers/LICENSE.md" "$licenses/vulkan-headers-LICENSE.txt"
+fi
 
 # Windows では、MinGW の zlib・winpthreads も静的にリンクしている（libgcc・libstdc++ は GCC Runtime Library Exception で、表記は要らない）
 if [ "$os" = windows ]; then
