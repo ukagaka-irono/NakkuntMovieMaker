@@ -5,6 +5,9 @@ struct Params
 {
     int width;
     int height;
+
+    // 1 なら、作業用の画像（リニア）を sRGB にしてから 8 ビットにする
+    int encodeSrgb;
 };
 
 [[vk::push_constant]] ConstantBuffer<Params> p;
@@ -27,5 +30,11 @@ void main(uint3 id : SV_DispatchThreadID)
 
     uint index = id.y * p.width + id.x;
     float4 c = nmmUnpackWork(source[index]);
+    if (p.encodeSrgb != 0)
+    {
+        c = clamp(c, 0.0, 1.0);
+        c = nmmPremultipliedToSrgb(float4(min(c.rgb, c.a), c.a));
+    }
+
     output[index] = unorm8(c.b) | (unorm8(c.g) << 8) | (unorm8(c.r) << 16) | (unorm8(c.a) << 24);
 }

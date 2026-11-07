@@ -38,6 +38,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     private long _gpuEffectNodes;
     private long _cpuLayers;
     private long _gpuTransitionNodes;
+
+    // 今記録している仕事の作業用の画像がリニアか（GPU のスレッドだけで使う）
+    private bool _linear;
     private readonly SkiaCpuBackend _cpu;
     private readonly ConcurrentDictionary<LayerKey, Layer?> _layers = new();
     private long _layerBytes;
@@ -115,8 +118,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             }
         }
 
-        var background = Premultiplied(plan.Background);
-        var task = _scheduler.RunAsync(context => Record(context, operations, background, width, height), cancellationToken);
+        var linear = plan.Color.IsLinear;
+        var background = linear ? LinearPremultiplied(plan.Background) : Premultiplied(plan.Background);
+        var task = _scheduler.RunAsync(context => Record(context, operations, background, width, height, linear), cancellationToken);
         return task.GetAwaiter().GetResult();
     }
 
@@ -323,8 +327,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     }
 
     // GPU のスレッドで：作業用の画像を背景で塗り、ノードを順に重ねて、BGRA にして読み戻す
-    private VulkanRenderResult Record(GpuCommandContext context, List<object> steps, Vector4 background, int width, int height)
+    private VulkanRenderResult Record(GpuCommandContext context, List<object> steps, Vector4 background, int width, int height, bool linear)
     {
+        _linear = linear;
         _sources.Collect(_scheduler.CompletedValue);
         _effectResults.Collect(_scheduler.CompletedValue);
 
@@ -344,7 +349,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
         var readback = _allocator.CreateBuffer((ulong)(width * height * 4), VkBufferUsageFlags.StorageBuffer, GpuBufferKind.Readback);
         var convert = _shaders.Get("to_bgra8", ConvertBindings, sizeof(ConvertParams));
-        convert.Dispatch(context, [work, readback], new ConvertParams { Width = width, Height = height }, ComputePipeline.Groups(width, 8), ComputePipeline.Groups(height, 8));
+        convert.Dispatch(context, [work, readback], new ConvertParams { Width = width, Height = height, EncodeSrgb = linear ? 1 : 0 }, ComputePipeline.Groups(width, 8), ComputePipeline.Groups(height, 8));
         GpuBarriers.AfterCompute(context);
         return new VulkanRenderResult(context.Fence, readback, width, height);
     }
@@ -369,7 +374,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     // トランジション：前後のアイテムを、それぞれ透明な画像に描いてから混ぜる（CPU 版の DrawTransition と同じ）
     private void RecordTransition(GpuCommandContext context, ComputePipeline composite, GpuBuffer work, TransitionStep step, int width, int height)
     {
-        var effects = new GpuEffectContext(context, _allocator, _shaders, step.Media);
+        var effects = new GpuEffectContext(context, _allocator, _shaders, step.Media) { Linear = _linear };
         var from = effects.CreateClearImage(0, 0, width, height, 1);
         var to = effects.CreateClearImage(0, 0, width, height, 1);
         effects.Release(from);
@@ -418,6 +423,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             Opacity = operation.Opacity,
             Blend = (int)operation.Blend,
             Antialias = operation.Antialias ? 1 : 0,
+            Linearize = _linear ? 1 : 0,
             TargetWidth = width,
         };
         composite.Dispatch(context, [work, source], parameters, ComputePipeline.Groups(region.Width, 8), ComputePipeline.Groups(region.Height, 8));
@@ -468,6 +474,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             Antialias = 1,
             TargetWidth = width,
             SourceFormat = 1,
+            Linearize = _linear ? 1 : 0,
         };
         composite.Dispatch(context, [work, result.Buffer], parameters, ComputePipeline.Groups(region.Width, 8), ComputePipeline.Groups(region.Height, 8));
         GpuBarriers.AfterCompute(context);
@@ -542,6 +549,19 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     private static float Round(double opacity) => (float)(Math.Round(Math.Clamp(opacity, 0, 1) * 255) / 255);
 
     // 背景（straight alpha の 8 ビット）を premultiplied にする（Skia の Clear と同じく、8 ビットで四捨五入）
+    // リニアのモードの背景：Skia と同じく、色をリニアにしてから premultiplied にする
+    private static Vector4 LinearPremultiplied(RgbaColor color)
+    {
+        static float Linear(byte value)
+        {
+            var c = value / 255.0;
+            return (float)(c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4));
+        }
+
+        var alpha = color.A / 255f;
+        return new Vector4(Linear(color.R) * alpha, Linear(color.G) * alpha, Linear(color.B) * alpha, alpha);
+    }
+
     private static Vector4 Premultiplied(RgbaColor color)
     {
         static float Channel(byte value, byte alpha) => (float)((value * alpha + 127) / 255) / 255f;
@@ -580,7 +600,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         public int OriginX, OriginY, RegionWidth, RegionHeight;
         public float Opacity;
         public int Blend, Antialias, TargetWidth;
-        public int SourceFormat, Padding0, Padding1, Padding2;
+        public int SourceFormat, Linearize, Padding1, Padding2;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -593,7 +613,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     [StructLayout(LayoutKind.Sequential)]
     private struct ConvertParams
     {
-        public int Width, Height;
+        public int Width, Height, EncodeSrgb;
     }
 }
 

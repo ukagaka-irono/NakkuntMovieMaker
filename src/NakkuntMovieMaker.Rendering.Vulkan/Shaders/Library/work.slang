@@ -76,6 +76,38 @@ public uint2 nmmPackWork(float4 color)
     return uint2(floatToHalf(color.r) | (floatToHalf(color.g) << 16), floatToHalf(color.b) | (floatToHalf(color.a) << 16));
 }
 
+// sRGB の伝達関数（Skia と同じ式）
+public float3 nmmSrgbToLinear(float3 c)
+{
+    float3 a = abs(c);
+    float3 encoded = float3(
+        a.r <= 0.04045 ? a.r / 12.92 : pow((a.r + 0.055) / 1.055, 2.4),
+        a.g <= 0.04045 ? a.g / 12.92 : pow((a.g + 0.055) / 1.055, 2.4),
+        a.b <= 0.04045 ? a.b / 12.92 : pow((a.b + 0.055) / 1.055, 2.4));
+    return sign(c) * encoded;
+}
+
+public float3 nmmLinearToSrgb(float3 c)
+{
+    float3 a = abs(c);
+    float3 encoded = float3(
+        a.r <= 0.0031308 ? a.r * 12.92 : 1.055 * pow(a.r, 1.0 / 2.4) - 0.055,
+        a.g <= 0.0031308 ? a.g * 12.92 : 1.055 * pow(a.g, 1.0 / 2.4) - 0.055,
+        a.b <= 0.0031308 ? a.b * 12.92 : 1.055 * pow(a.b, 1.0 / 2.4) - 0.055);
+    return sign(c) * encoded;
+}
+
+// premultiplied の sRGB ↔ リニア（いったん straight にして変換し、premultiplied に戻す。Skia の色の変換と同じ）
+public float4 nmmPremultipliedToLinear(float4 c)
+{
+    return c.a > 0.0 ? float4(nmmSrgbToLinear(c.rgb / c.a) * c.a, c.a) : float4(0.0);
+}
+
+public float4 nmmPremultipliedToSrgb(float4 c)
+{
+    return c.a > 0.0 ? float4(nmmLinearToSrgb(c.rgb / c.a) * c.a, c.a) : float4(0.0);
+}
+
 // エフェクトの「1 画素ずつの色の処理」の決まり（CPU 版の PixelOps.Map と同じ）：
 // 完全に透明な画素は飛ばし、色は straight alpha（0〜1）で処理し、最後に 0〜1 に収めて premultiplied に戻す
 public bool nmmIsTransparent(float4 premultiplied)

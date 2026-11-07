@@ -39,7 +39,9 @@ struct Params
 
     // 素材の形式：0 は premultiplied の BGRA（8 ビット、1 画素 1 uint）、1 は作業用の画像（16 ビット浮動小数点、1 画素 2 uint）
     int sourceFormat;
-    int padding0;
+
+    // 1 なら、補間した素材の色（sRGB）をリニアにしてから重ねる（作業用の画像がリニアのとき）
+    int linearize;
     int padding1;
     int padding2;
 };
@@ -113,7 +115,13 @@ void main(uint3 id : SV_DispatchThreadID)
 
     float u = (lx - p.left) / p.width * float(p.sourceWidth);
     float v = (ly - p.top) / p.height * float(p.sourceHeight);
-    float4 s = sampleBilinear(u, v) * p.opacity;
+    float4 s = sampleBilinear(u, v);
+    if (p.linearize != 0)
+    {
+        s = nmmPremultipliedToLinear(s);
+    }
+
+    s *= p.opacity;
     uint index = uint(pixel.y * p.targetWidth + pixel.x);
     float4 d = nmmUnpackWork(target[index]);
     float4 blended = nmmBlend(p.blend, s, d);

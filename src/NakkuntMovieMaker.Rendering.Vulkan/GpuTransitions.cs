@@ -27,6 +27,9 @@ internal static class GpuTransitions
 
     public static IGpuTransition? Find(string type) => ByType.GetValueOrDefault(type);
 
+    /// <summary>sRGB の値（0〜1）をリニアにする</summary>
+    public static float SrgbToLinear(float c) => c <= 0.04045f ? c / 12.92f : MathF.Pow((c + 0.055f) / 1.055f, 2.4f);
+
     /// <summary>不透明度を、CPU 版（Skia の 8 ビットの不透明度）と同じく 1/255 の単位にする</summary>
     public static float Uniform(float alpha) => (float)Math.Round(Math.Clamp(alpha, 0, 1) * 255) / 255f;
 
@@ -90,8 +93,14 @@ internal sealed class DipGpu : IGpuTransition
         var amount = first ? progress * 2 : 2 - progress * 2;
         var color = parameters.GetColor("color");
         var alpha = (float)Math.Round(color.A * Math.Clamp(amount, 0, 1)) / 255f;
+        var rgb = new Vector3(color.R, color.G, color.B) / 255f;
+        if (context.Linear)
+        {
+            rgb = new Vector3(GpuTransitions.SrgbToLinear(rgb.X), GpuTransitions.SrgbToLinear(rgb.Y), GpuTransitions.SrgbToLinear(rgb.Z));
+        }
+
         GpuTransitions.Mix(context, target, first ? from : to, first ? from : to,
-            new GpuTransitions.MixPush(target.Width, target.Height, 2, 0, 0, 0, 0, 0, color.R / 255f, color.G / 255f, color.B / 255f, alpha));
+            new GpuTransitions.MixPush(target.Width, target.Height, 2, 0, 0, 0, 0, 0, rgb.X, rgb.Y, rgb.Z, alpha));
     }
 }
 

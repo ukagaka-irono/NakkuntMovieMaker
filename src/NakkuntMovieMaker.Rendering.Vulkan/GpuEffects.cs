@@ -85,6 +85,9 @@ public sealed class GpuEffectContext(GpuCommandContext command, GpuAllocator all
 
     public IMediaSource Media => media;
 
+    /// <summary>作業用の画像がリニアか（トランジションで、指定した色をリニアにするのに使う。エフェクトの中は常に sRGB）</summary>
+    public bool Linear { get; init; }
+
     /// <summary>ピクセル座標の範囲の、透明な画像（中身は未定義なので、塗るか写してから使う）</summary>
     public GpuEffectImage CreateImage(int pixelLeft, int pixelTop, int width, int height, float scale)
     {
