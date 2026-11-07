@@ -76,6 +76,7 @@ jobs:
           NMM_REQUIRE_NMM_AUDIO: '1'
           NMM_REQUIRE_FONTS: '1'
           NMM_REQUIRE_COLORFULTALK: '1'
+          NMM_REQUIRE_OCIO: '1'
           # Linux では GPU（lavapipe）のテストを必ず回す。Windows・macOS の CI では、使える GPU がなければスキップする
           NMM_REQUIRE_VULKAN: ${{ runner.os == 'Linux' && '1' || '0' }}
 

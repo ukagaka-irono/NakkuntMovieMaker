@@ -6,6 +6,7 @@
     <Project Path="src/NakkuntMovieMaker.App/NakkuntMovieMaker.App.csproj" />
     <Project Path="src/NakkuntMovieMaker.Audio/NakkuntMovieMaker.Audio.csproj" />
     <Project Path="src/NakkuntMovieMaker.Cli/NakkuntMovieMaker.Cli.csproj" />
+    <Project Path="src/NakkuntMovieMaker.ColorManagement/NakkuntMovieMaker.ColorManagement.csproj" />
     <Project Path="src/NakkuntMovieMaker.Core/NakkuntMovieMaker.Core.csproj" />
     <Project Path="src/NakkuntMovieMaker.Engine/NakkuntMovieMaker.Engine.csproj" />
     <Project Path="src/NakkuntMovieMaker.Media/NakkuntMovieMaker.Media.csproj" />
@@ -21,6 +22,7 @@
     <Project Path="tests/NakkuntMovieMaker.App.Tests/NakkuntMovieMaker.App.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Audio.Tests/NakkuntMovieMaker.Audio.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Cli.Tests/NakkuntMovieMaker.Cli.Tests.csproj" />
+    <Project Path="tests/NakkuntMovieMaker.ColorManagement.Tests/NakkuntMovieMaker.ColorManagement.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Core.Tests/NakkuntMovieMaker.Core.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.E2E.Tests/NakkuntMovieMaker.E2E.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Engine.Tests/NakkuntMovieMaker.Engine.Tests.csproj" />

@@ -26,6 +26,22 @@ public sealed class CubeLut
         _domainScale = new Vector3(1 / range.X, 1 / range.Y, 1 / range.Z);
     }
 
+    /// <summary>
+    /// 格子の色から作る（OpenColorIO の変換を焼いたものなど）。table は赤が一番速く変わる順で、要素の数は size³。
+    /// 入力の範囲は domainMin〜domainMax
+    /// </summary>
+    public static CubeLut FromTable(int size, Vector3[] table, Vector3 domainMin, Vector3 domainMax)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentOutOfRangeException.ThrowIfLessThan(size, 2);
+        if (table.Length != size * size * size)
+        {
+            throw new ArgumentException("格子の色の数は size³ にしてください", nameof(table));
+        }
+
+        return new CubeLut(size, table, domainMin, domainMax);
+    }
+
     /// <summary>1 辺の格子の数</summary>
     public int Size => _size;
 

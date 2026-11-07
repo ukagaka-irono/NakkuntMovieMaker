@@ -291,6 +291,16 @@ internal static class Program
             exitCode = 1;
         }
 
+        if (ColorManagement.Ocio.TryLoad(out var ocioError))
+        {
+            Console.WriteLine($"OpenColorIO {ColorManagement.Ocio.Version}（nmm_ocio API {ColorManagement.Ocio.ApiVersion}、既定の構成 {ColorManagement.Ocio.DefaultBuiltinConfig}）");
+        }
+        else
+        {
+            Console.Error.WriteLine($"nmm_ocio: {ocioError}");
+            exitCode = 1;
+        }
+
         return exitCode;
     }
 }
