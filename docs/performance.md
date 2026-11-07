@@ -131,3 +131,24 @@ nmm bench --project samples/general/general.nmmproj --only export --repeat 60
 | タイムラインの描画の 6 割以上が、アイテム名の文字の配置（スクロールで新しい名前が見えるたびに `FormattedText` を作る）と描画だった | アイテム名は、文字ごとのグリフと幅を覚えておき、グリフを並べて描くようにした（`GlyphLabels`。グリフのない文字はほかのフォントに切り替える）。塗りのブラシも使い回し、名前が収まるアイテムでは切り抜かない |
 
 あわせて、I-39 の「Linux・macOS」の課題も片付けました。macOS 用の FFmpeg（LGPL・OpenH264・kvazaar 付き）をソースからビルドするようにし、CI の Ubuntu と macOS（arm64）で、CLI での書き出しを含むテストが通ることを確かめました。
+
+## 2026-11-07（M2 A-2：GPU の事前調査）
+
+基準の PC（Let's note SV1、Iris Xe、ドライバー 32.0.101.7080）で、M2 の GPU 描画の前提を確かめました。
+vulkaninfo と、コミットしない使い捨てのプログラム（Vortice.Vulkan 3.3.0、SkiaSharp 3.119.4）で調べています。
+
+| 項目 | 結果 |
+| --- | --- |
+| Vulkan の版 | 1.4.323（ローダーは 1.4.313） |
+| RGBA16F（`R16G16B16A16_SFLOAT`） | 読み書き（storage）・サンプリング・描画先・ブレンド・線形の補間のすべてに対応 |
+| 機能 | タイムラインセマフォ、synchronization2、dynamic rendering、`VK_EXT_memory_budget`、`VK_KHR_external_memory_win32`、shaderFloat16 |
+| Vulkan Video | `VK_KHR_video_decode_h264`・`h265`・`av1` に対応。デコード専用のキューファミリー（キュー 2 つ）がある |
+| キュー | グラフィックス・コンピュート・転送のキューファミリーは 1 つで、キューも 1 つ |
+| Skia（SkiaSharp）で自前のデバイスを使う | `GRContext.CreateVulkan` に自前の VkInstance・VkDevice・VkQueue を渡して動いた。自前で作った RGBA16F の VkImage を `GRBackendTexture` で包んで描け、読み戻しも正しい |
+| 速さ | デバイスの作成 98ms。320×120 の文字の描画と完了待ち 0.28ms |
+
+計画への反映：
+
+- **コピーしないデコード**：基準の PC は Vulkan Video に対応しているので、第 1 段（Vulkan Video を同じデバイスで使う）で進めます。F-32（D3D11 から取り込む）は作りません。
+- **キュー**：グラフィックスのキューは 1 つしかないので、計画どおり Skia と自前のシェーダーで 1 つのキューを共有し、GPU のスレッドを 1 本にします。FFmpeg のデコードは、デコード専用のキューファミリーを使います。
+- **Skia**：Windows の SkiaSharp は Vulkan に対応していて、自前のデバイスと FP16 の画像で使えます（macOS は計画どおり、CPU で描いて送ります）。
