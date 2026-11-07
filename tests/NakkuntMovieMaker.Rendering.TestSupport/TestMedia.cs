@@ -3,10 +3,10 @@ using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Core.Time;
 using NakkuntMovieMaker.Media;
 
-namespace NakkuntMovieMaker.Rendering.Tests;
+namespace NakkuntMovieMaker.Rendering.TestSupport;
 
 /// <summary>テスト用の素材。画像はメモリ上に作り、動画は時刻から画像を作る関数で表す</summary>
-internal sealed class TestMedia : IMediaSource
+public sealed class TestMedia : IMediaSource
 {
     private readonly ConcurrentDictionary<AssetId, SourceImage> _images = new();
     private readonly ConcurrentDictionary<AssetId, Func<Rational, SourceImage>> _videos = new();
@@ -54,7 +54,7 @@ internal sealed class TestMedia : IMediaSource
 }
 
 /// <summary>テスト用の画像を作る。色は (R, G, B, A) の straight alpha で指定し、premultiplied にして持つ</summary>
-internal static class TestImages
+public static class TestImages
 {
     public static BgraImage Solid(int width, int height, (byte R, byte G, byte B, byte A) color) =>
         Create(width, height, (_, _) => color);

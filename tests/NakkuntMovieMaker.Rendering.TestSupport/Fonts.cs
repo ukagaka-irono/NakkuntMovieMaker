@@ -1,12 +1,12 @@
 using NakkuntMovieMaker.Text;
 
-namespace NakkuntMovieMaker.Rendering.Tests;
+namespace NakkuntMovieMaker.Rendering.TestSupport;
 
 /// <summary>
 /// 同梱のフォントが必要なテストの前提。tools/fetch-native でフォントを取得していない環境ではスキップする。
 /// CI では NMM_REQUIRE_FONTS=1 にして、スキップで失敗を見逃さないようにする
 /// </summary>
-internal static class Fonts
+public static class Fonts
 {
     public static void RequireOrSkip()
     {

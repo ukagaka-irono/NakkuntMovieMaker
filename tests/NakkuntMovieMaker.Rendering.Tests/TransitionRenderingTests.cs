@@ -111,23 +111,4 @@ public class TransitionRenderingTests
         Pixels.AssertColor(image, 80, 40, (255, 255, 255, 255), tolerance: 1); // 45 度回した正方形は、上の角が中心から約 7 ピクセル上にある
         Pixels.AssertColor(image, 74, 39, (0, 0, 0, 255), tolerance: 1); // 回す前の角の位置は空く
     }
-
-    // 各トランジションのゴールデン画像（半分の時点。回転と色を挟んだフェードは、半分では何も見えないので 1/4 の時点）
-    public static TheoryData<string> GoldenTransitions => new(BuiltInTransitions.All.Select(transition => transition.Type));
-
-    [Theory]
-    [MemberData(nameof(GoldenTransitions))]
-    public void MatchesTheGoldenImage(string type)
-    {
-        var definition = BuiltInTransitions.All.Single(transition => transition.Type == type);
-        var from = new ImageItem(ItemId.New(), Empty.Layers[0].Id, 0, 30, _media.AddImage(TestImages.Subject(120, 72)));
-        var to = new ImageItem(ItemId.New(), Empty.Layers[0].Id, 30, 30, _media.AddImage(TestImages.Quadrants(72, 72)))
-        {
-            Transition = Transition(definition),
-        };
-
-        var image = Render(type == BuiltInTransitions.Spin.Type || type == BuiltInTransitions.Dip.Type ? 25 : 30, from, to);
-
-        Golden.AssertMatches(image, "transition-" + type["nmm.".Length..]);
-    }
 }

@@ -223,8 +223,8 @@ public class EffectRenderingTests
     public void LutTransformsColors()
     {
         using var folder = new TempFiles();
-        var identity = folder.Write("identity.cube", Cube(2, rgb => rgb));
-        var invert = folder.Write("invert.cube", Cube(2, rgb => (1 - rgb.R, 1 - rgb.G, 1 - rgb.B)));
+        var identity = folder.Write("identity.cube", TestLuts.Cube(2, rgb => rgb));
+        var invert = folder.Write("invert.cube", TestLuts.Cube(2, rgb => (1 - rgb.R, 1 - rgb.G, 1 - rgb.B)));
         var subject = TestImages.Subject(96, 60);
 
         var original = Render(Image(subject));
@@ -240,77 +240,5 @@ public class EffectRenderingTests
         }
 
         Assert.Equal(original.Pixels, missing.Pixels);
-    }
-
-    // 各エフェクトのゴールデン画像
-    public static TheoryData<string> GoldenEffects => new(BuiltInEffects.All.Select(effect => effect.Type));
-
-    [Theory]
-    [MemberData(nameof(GoldenEffects))]
-    public void MatchesTheGoldenImage(string type)
-    {
-        using var folder = new TempFiles();
-        var subject = TestImages.Subject(96, 60);
-        var (item, frame) = type switch
-        {
-            "nmm.colorAdjust" => ((Item)Image(subject, Effect(BuiltInEffects.ColorAdjust,
-                ("brightness", 10), ("contrast", 30), ("saturation", 40), ("hue", 30), ("gamma", 1.2), ("temperature", 30))), 0L),
-            "nmm.lut" => (Image(subject, Effect(BuiltInEffects.Lut,
-                ("file", folder.Write("warm.cube", Cube(8, rgb => (Math.Pow(rgb.R, 0.8), rgb.G, rgb.B * 0.8)))), ("intensity", 80))), 0),
-            "nmm.blur" => (Image(subject, Effect(BuiltInEffects.Blur, ("radius", 8))), 0),
-            "nmm.mosaic" => (Image(subject, Effect(BuiltInEffects.Mosaic, ("size", 8))), 0),
-            "nmm.sharpen" => (Image(subject, Effect(BuiltInEffects.Sharpen, ("amount", 200), ("radius", 3))), 0),
-            "nmm.chromaKey" => (Image(subject, Effect(BuiltInEffects.ChromaKey)), 0),
-            "nmm.colorKey" => (Image(subject, Effect(BuiltInEffects.ColorKey, ("color", new RgbaColor(128, 128, 128)), ("tolerance", 15))), 0),
-            "nmm.dropShadow" => (Star(Effect(BuiltInEffects.DropShadow)), 0),
-            "nmm.border" => (Star(Effect(BuiltInEffects.Border, ("color", new RgbaColor(30, 120, 255)), ("width", 5), ("blur", 2))), 0),
-            "nmm.glow" => (Star(Effect(BuiltInEffects.Glow, ("radius", 16), ("strength", 150), ("tint", true), ("color", new RgbaColor(255, 120, 0)))), 0),
-            "nmm.mask" => (Image(subject, Effect(BuiltInEffects.Mask, ("shape", "ellipse"), ("width", 80), ("height", 50), ("x", 5), ("feather", 10))), 0),
-            "nmm.fade" => (Image(subject, Effect(BuiltInEffects.Fade, ("fadeIn", 1.0))), 12),
-            "nmm.noise" => (Image(subject, Effect(BuiltInEffects.Noise, ("amount", 30), ("monochrome", false))), 3),
-            "nmm.shake" => (Star(Effect(BuiltInEffects.Shake, ("amplitudeX", 15), ("amplitudeY", 10), ("rotation", 20), ("seed", 3))), 4),
-            "nmm.monochrome" => (Image(subject, Effect(BuiltInEffects.Monochrome, ("color", new RgbaColor(255, 230, 190)))), 0),
-            _ => throw new ArgumentException($"ゴールデン画像の用意がないエフェクトです: {type}", nameof(type)),
-        };
-
-        Golden.AssertMatches(Render(item, Backdrop, frame), "effect-" + type["nmm.".Length..]);
-    }
-
-    // size×size×size の .cube（赤が一番速く変わる順）
-    private static string Cube(int size, Func<(double R, double G, double B), (double R, double G, double B)> map)
-    {
-        var lines = new List<string> { "# テスト用の LUT", $"LUT_3D_SIZE {size}" };
-        for (var b = 0; b < size; b++)
-        {
-            for (var g = 0; g < size; g++)
-            {
-                for (var r = 0; r < size; r++)
-                {
-                    var (mr, mg, mb) = map((r / (size - 1.0), g / (size - 1.0), b / (size - 1.0)));
-                    lines.Add(string.Create(CultureInfo.InvariantCulture, $"{mr:F6} {mg:F6} {mb:F6}"));
-                }
-            }
-        }
-
-        return string.Join("\n", lines);
-    }
-
-    /// <summary>テスト用の一時フォルダ</summary>
-    private sealed class TempFiles : IDisposable
-    {
-        private readonly string _path = Path.Combine(Path.GetTempPath(), "nmm-tests", Guid.NewGuid().ToString("N"));
-
-        public TempFiles() => Directory.CreateDirectory(_path);
-
-        public string Combine(string name) => Path.Combine(_path, name);
-
-        public string Write(string name, string content)
-        {
-            var path = Combine(name);
-            File.WriteAllText(path, content);
-            return path;
-        }
-
-        public void Dispose() => Directory.Delete(_path, recursive: true);
     }
 }

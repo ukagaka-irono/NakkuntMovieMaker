@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 描画のテスト（CPU 版・GPU 版）で共通に使うもの：場面、画像の比べ方、ゴールデン画像、テスト用の素材 -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Remove="xunit.v3" />
+    <PackageReference Include="xunit.v3.assert" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/NakkuntMovieMaker.Engine/NakkuntMovieMaker.Engine.csproj" />
+  </ItemGroup>
+</Project>

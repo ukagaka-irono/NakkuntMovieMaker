@@ -25,6 +25,7 @@
     <Project Path="tests/NakkuntMovieMaker.Engine.Tests/NakkuntMovieMaker.Engine.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Media.Tests/NakkuntMovieMaker.Media.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Rendering.Tests/NakkuntMovieMaker.Rendering.Tests.csproj" />
+    <Project Path="tests/NakkuntMovieMaker.Rendering.TestSupport/NakkuntMovieMaker.Rendering.TestSupport.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Voice.Tests/NakkuntMovieMaker.Voice.Tests.csproj" />
   </Folder>
 </Solution>

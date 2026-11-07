@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using NakkuntMovieMaker.Media;
 using SkiaSharp;
 
-namespace NakkuntMovieMaker.Rendering.Tests;
+namespace NakkuntMovieMaker.Rendering.TestSupport;
 
 /// <summary>
 /// ゴールデン画像（Golden/*.png）との比較。基準は、各チャンネルの差が 2 以下、かつ PSNR が 45dB 以上。
@@ -13,7 +13,7 @@ namespace NakkuntMovieMaker.Rendering.Tests;
 /// ゴールデン画像がなければ作って失敗する（中身を目で確かめてからコミットする）。
 /// NMM_UPDATE_GOLDEN=1 で実行すると、すべて作り直す
 /// </summary>
-internal static class Golden
+public static class Golden
 {
     private const int MaxChannelDifference = 2;
     private const double MinPsnr = 45;
@@ -43,18 +43,9 @@ internal static class Golden
         }
 
         var expected = Load(path);
-        Assert.Equal((expected.Width, expected.Height), (actual.Width, actual.Height));
-
-        var maxDifference = 0;
-        var squaredError = 0.0;
-        for (var i = 0; i < actual.Pixels.Length; i++)
-        {
-            var difference = Math.Abs(actual.Pixels[i] - expected.Pixels[i]);
-            maxDifference = Math.Max(maxDifference, difference);
-            squaredError += difference * difference;
-        }
-
-        var psnr = squaredError == 0 ? double.PositiveInfinity : 10 * Math.Log10(255.0 * 255.0 / (squaredError / actual.Pixels.Length));
+        var difference = ImageCompare.Compare(expected, actual);
+        var maxDifference = difference.MaxDifference;
+        var psnr = difference.Psnr;
         var matches = (maxDifference <= MaxChannelDifference && psnr >= MinPsnr) || (platformGolden && psnr >= PlatformNearlyIdenticalPsnr);
         if (!matches)
         {

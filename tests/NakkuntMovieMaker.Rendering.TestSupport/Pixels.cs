@@ -1,8 +1,8 @@
 using NakkuntMovieMaker.Media;
 
-namespace NakkuntMovieMaker.Rendering.Tests;
+namespace NakkuntMovieMaker.Rendering.TestSupport;
 
-internal static class Pixels
+public static class Pixels
 {
     /// <summary>(x, y) の色が、各チャンネル tolerance 以内で expected（premultiplied の R, G, B, A）と同じか</summary>
     public static void AssertColor(BgraImage image, int x, int y, (int R, int G, int B, int A) expected, int tolerance = 1)

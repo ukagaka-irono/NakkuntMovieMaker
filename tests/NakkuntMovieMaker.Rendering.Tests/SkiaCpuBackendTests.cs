@@ -220,37 +220,6 @@ public class SkiaCpuBackendTests
     }
 
     // 変形・反転・切り抜き・不透明度・合成モードを組み合わせたシーン
-    private Item[] Composition() =>
-    [
-        Image(TestImages.Gradient(160, 90)) with
-        {
-            Transform = Transform2D.Identity with { ScaleX = 1.5, ScaleY = 1.5, Rotation = 15.0 },
-        },
-        Image(TestImages.Quadrants(64, 64), layer: 1) with
-        {
-            Transform = Transform2D.Identity with { X = -80.0, Y = 20.0, FlipHorizontal = true, Rotation = -20.0 },
-            Opacity = 0.8,
-        },
-        Image(TestImages.Halves(80, 60, Red, Blue), layer: 2) with
-        {
-            Transform = Transform2D.Identity with { X = 90.0, Y = 40.0, Rotation = -30.0, AnchorX = 20.0, ScaleX = 0.75 },
-            Crop = new Crop(10, 5, 0, 15),
-            Blend = BlendMode.Screen,
-        },
-    ];
-
-    [Fact]
-    public void MatchesTheGoldenImage()
-    {
-        Golden.AssertMatches(Render(Composition(), new RgbaColor(40, 40, 48)), "composition");
-    }
-
-    [Fact]
-    public void MatchesTheGoldenImageAtHalfSize()
-    {
-        Golden.AssertMatches(Render(Composition(), new RgbaColor(40, 40, 48), scale: 0.5), "composition-half");
-    }
-
     [Fact]
     public void MeasuresContentAfterCropping()
     {

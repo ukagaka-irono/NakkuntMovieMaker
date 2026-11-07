@@ -87,23 +87,4 @@ public class ShapeRenderingTests
         Pixels.AssertColor(image, 115, 90, (128, 0, 0, 255), tolerance: 2); // 線の内側の半分
         Pixels.AssertColor(image, 160, 90, (255, 128, 128, 255), tolerance: 1); // 塗りだけの部分
     }
-
-    [Fact]
-    public void MatchesGoldenShapes()
-    {
-        var white = new SolidPaint(RgbaColor.White);
-        var orange = new RgbaColor(255, 140, 0);
-        var image = Render(
-            new RgbaColor(32, 36, 48),
-            Shape(new ShapeStyle(ShapeKind.Rectangle, 70, 50, new SolidPaint(new RgbaColor(80, 160, 255)), RgbaColor.White, 3, CornerRadius: 12), 0, -110, -45),
-            Shape(new ShapeStyle(ShapeKind.Ellipse, 70, 50, new LinearGradientPaint(orange, new RgbaColor(200, 0, 120), 45)), 1, -30, -45),
-            Shape(new ShapeStyle(ShapeKind.Triangle, 60, 55, white, orange, 4), 2, 45, -45),
-            Shape(new ShapeStyle(ShapeKind.Polygon, 60, 60, new SolidPaint(new RgbaColor(120, 220, 120)), Sides: 6), 3, 115, -45),
-            Shape(new ShapeStyle(ShapeKind.Star, 64, 64, new SolidPaint(new RgbaColor(255, 220, 0)), new RgbaColor(160, 80, 0), 2, Sides: 5, InnerRadiusRatio: 0.45), 4, -110, 40),
-            Shape(new ShapeStyle(ShapeKind.Line, 80, 6, white), 5, -30, 40),
-            Shape(new ShapeStyle(ShapeKind.Arrow, 80, 40, new SolidPaint(new RgbaColor(255, 80, 80))), 6, 55, 40),
-            Shape(new ShapeStyle(ShapeKind.Star, 50, 50, new SolidPaint(new RgbaColor(200, 120, 255)), Sides: 8, InnerRadiusRatio: 0.7), 7, 125, 40));
-
-        Golden.AssertMatches(image, "shapes");
-    }
 }

@@ -115,45 +115,4 @@ public class TextRenderingTests
         Pixels.AssertColor(image, left, top, (0, 0, 0, 255), tolerance: 0);
         Pixels.AssertColor(image, left - 3, top, (30, 40, 60, 255), tolerance: 0);
     }
-
-    [Fact]
-    public void MatchesGoldenHorizontalText()
-    {
-        Fonts.RequireOrSkip();
-        var style = Style(20) with
-        {
-            Outline = new TextOutline(new RgbaColor(200, 40, 80), 3),
-            Shadow = new TextShadow(new RgbaColor(0, 0, 0, 160), 4, 4, Blur: 2),
-            Background = new TextBackground(new RgbaColor(255, 255, 255, 60), Padding: 8, CornerRadius: 10),
-        };
-
-        var image = Render(0, Text("ゆっくり解説の字幕\nNakkunt Movie Maker 123", style));
-
-        Golden.AssertMatches(image, "text-horizontal");
-    }
-
-    [Fact]
-    public void MatchesGoldenTextStyles()
-    {
-        Fonts.RequireOrSkip();
-
-        var image = Render(
-            0,
-            Text("左揃え・太字\n2 行目", Style(22) with { Bold = true, Alignment = TextAlignment.Left }, 0, Transform2D.Identity with { X = -80.0, Y = -50.0 }),
-            Text("右揃え・斜体\nItalic", Style(22) with { Italic = true, Alignment = TextAlignment.Right, Color = new RgbaColor(255, 220, 120) }, 1, Transform2D.Identity with { X = 80.0, Y = -50.0 }),
-            Text("字 間 と 行 間", Style(24) with { LetterSpacing = 6, LineSpacing = 1.6, Outline = new TextOutline(RgbaColor.Black, 2) }, 2, Transform2D.Identity with { Y = 50.0, Rotation = -8.0 }));
-
-        Golden.AssertMatches(image, "text-styles");
-    }
-
-    [Fact]
-    public void MatchesGoldenVerticalText()
-    {
-        Fonts.RequireOrSkip();
-        var style = Style(26) with { Vertical = true, Outline = new TextOutline(new RgbaColor(40, 40, 160), 2) };
-
-        var image = Render(0, Text("「縦書き」。\nラーメン、", style));
-
-        Golden.AssertMatches(image, "text-vertical");
-    }
 }
