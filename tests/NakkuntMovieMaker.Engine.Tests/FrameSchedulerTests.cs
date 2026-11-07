@@ -221,8 +221,15 @@ public class FrameSchedulerTests
 
         public List<long> Rendered => [.. _rendered];
 
-        public BgraImage Render(FramePlan plan, IMediaSource media, double scale = 1, CancellationToken cancellationToken = default)
+        public RenderBackendInfo Info { get; } = new(RenderBackendKind.Cpu, "テスト", null, 2);
+
+        public void Dispose()
         {
+        }
+
+        public RenderResult Render(FramePlan plan, IMediaSource media, RenderRequest request, CancellationToken cancellationToken = default)
+        {
+            var scale = request.Scale;
             Started.Set();
             Gate.Wait(cancellationToken);
             Thread.Sleep(Delay);
@@ -237,7 +244,7 @@ public class FrameSchedulerTests
             _rendered.Enqueue(frame);
             var width = Math.Max(1, (int)Math.Round(plan.Width * scale));
             var height = Math.Max(1, (int)Math.Round(plan.Height * scale));
-            return new BgraImage(width, height, new byte[width * height * 4]);
+            return new CpuRenderResult(new BgraImage(width, height, new byte[width * height * 4]));
         }
     }
 

@@ -46,6 +46,15 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         _layouts = layouts ?? new TextLayoutCache(fonts);
     }
 
+    public RenderBackendInfo Info { get; } = new(RenderBackendKind.Cpu, "Skia（CPU）", null, Math.Clamp(Environment.ProcessorCount / 2, 1, 4));
+
+    public RenderResult Render(FramePlan plan, IMediaSource media, RenderRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return new CpuRenderResult(Render(plan, media, request.Scale, cancellationToken));
+    }
+
+    /// <summary>plan を描いて、BGRA の画像として返す（CPU 版なので、そのまま返せる）</summary>
     public BgraImage Render(FramePlan plan, IMediaSource media, double scale = 1, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -80,6 +89,11 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         }
 
         return new BgraImage(width, height, pixels);
+    }
+
+    public void Dispose()
+    {
+        // CPU 版は、破棄するまで持ち続ける資源がない（キャッシュはメモリだけ）
     }
 
     private void DrawNode(SKCanvas canvas, RenderNode node, IMediaSource media, SKMatrix outputScale, FramePlan plan, SKImageInfo output)

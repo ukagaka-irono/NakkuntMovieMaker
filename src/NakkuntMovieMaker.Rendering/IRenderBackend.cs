@@ -4,17 +4,80 @@ using NakkuntMovieMaker.Media;
 
 namespace NakkuntMovieMaker.Rendering;
 
+/// <summary>描画の方式</summary>
+public enum RenderBackendKind
+{
+    /// <summary>Skia の CPU 描画（GPU 版の結果が正しいかを比べる基準でもある）</summary>
+    Cpu,
+
+    /// <summary>Vulkan での GPU 描画</summary>
+    Vulkan,
+}
+
+/// <summary>
+/// 描画の方式の情報。PreferredConcurrency は、同時に描かせるとよいフレームの数（CPU 版はスレッドの数、GPU 版は同時に処理するフレームの数）
+/// </summary>
+public sealed record RenderBackendInfo(RenderBackendKind Kind, string Name, string? Device, int PreferredConcurrency);
+
+/// <summary>描き方の指定。Scale はシーンの大きさに対する出力の大きさの倍率（プレビューの 1/2 なら 0.5）</summary>
+public sealed record RenderRequest(double Scale = 1);
+
 /// <summary>
 /// FramePlan を実行して、フレームの画像を作る。M1 は Skia の CPU 描画、M2 から Vulkan での描画を加える。
-/// CPU 版は、GPU 版の結果が正しいかを比べるための基準としても残す
+/// CPU 版は、GPU 版の結果が正しいかを比べるための基準としても残す。複数のスレッドから同時に呼んでよい
 /// </summary>
-public interface IRenderBackend
+public interface IRenderBackend : IDisposable
+{
+    RenderBackendInfo Info { get; }
+
+    /// <summary>plan を描く。素材は media から取り出す。結果は、使い終わったら破棄すること（GPU 版では GPU のメモリを持つ）</summary>
+    RenderResult Render(FramePlan plan, IMediaSource media, RenderRequest request, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// 描いた結果。GPU 版では GPU のメモリにあり、ReadBgra でメインメモリに読み出す。破棄すると、持っている資源を返す
+/// </summary>
+public abstract class RenderResult : IDisposable
+{
+    public abstract int Width { get; }
+
+    public abstract int Height { get; }
+
+    /// <summary>premultiplied の BGRA（8 ビット）として読み出す。GPU 版では、描き終わるのを待つ</summary>
+    public abstract BgraImage ReadBgra();
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+    }
+}
+
+/// <summary>メインメモリにある結果（CPU 版）</summary>
+public sealed class CpuRenderResult(BgraImage image) : RenderResult
+{
+    public override int Width => image.Width;
+
+    public override int Height => image.Height;
+
+    public override BgraImage ReadBgra() => image;
+}
+
+public static class RenderBackendExtensions
 {
     /// <summary>
-    /// plan を描く。scale はシーンの大きさに対する出力の大きさの倍率（プレビューの 1/2 なら 0.5）。
-    /// 素材は media から取り出す
+    /// plan を描いて、BGRA の画像として受け取る。scale はシーンの大きさに対する出力の大きさの倍率
     /// </summary>
-    BgraImage Render(FramePlan plan, IMediaSource media, double scale = 1, CancellationToken cancellationToken = default);
+    public static BgraImage Render(this IRenderBackend backend, FramePlan plan, IMediaSource media, double scale = 1, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(backend);
+        using var result = backend.Render(plan, media, new RenderRequest(scale), cancellationToken);
+        return result.ReadBgra();
+    }
 }
 
 /// <summary>

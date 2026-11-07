@@ -183,8 +183,14 @@ public class PlaybackControllerTests
     // 何も描かない描画の処理（時間のかからない代わり）
     private sealed class BlankBackend : IRenderBackend
     {
-        public BgraImage Render(FramePlan plan, IMediaSource media, double scale = 1, CancellationToken cancellationToken = default) =>
-            new(plan.Width, plan.Height, new byte[plan.Width * plan.Height * 4]);
+        public RenderBackendInfo Info { get; } = new(RenderBackendKind.Cpu, "テスト", null, 1);
+
+        public void Dispose()
+        {
+        }
+
+        public RenderResult Render(FramePlan plan, IMediaSource media, RenderRequest request, CancellationToken cancellationToken = default) =>
+            new CpuRenderResult(new BgraImage(plan.Width, plan.Height, new byte[plan.Width * plan.Height * 4]));
     }
 
     private sealed class NoMedia : IMediaSource
