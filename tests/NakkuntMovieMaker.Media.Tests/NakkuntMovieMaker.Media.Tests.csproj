@@ -1,4 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- 書いたファイルのタグやパケットを、FFmpeg で直接確かめるため -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="../../src/NakkuntMovieMaker.Media/NakkuntMovieMaker.Media.csproj" />
   </ItemGroup>

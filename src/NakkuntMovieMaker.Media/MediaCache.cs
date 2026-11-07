@@ -7,7 +7,7 @@ using NakkuntMovieMaker.Core.Time;
 namespace NakkuntMovieMaker.Media;
 
 /// <summary>
-/// 素材から作るキャッシュ（音声の PCM・波形のピーク・画像の縮小版）を、フォルダに保存して使い回す。
+/// 素材から作るキャッシュ（音声の PCM・波形のピーク・画像の縮小版・動画のプロキシ）を、フォルダに保存して使い回す。
 /// プロジェクトでは .nmm/cache を使う（Git では除外する）。
 /// キャッシュの名前は素材の場所・大きさ・更新日時と設定から決めるので、素材を差し替えると作り直す。
 /// ファイルは一時ファイルに書いてから名前を変えるので、途中で止まっても壊れたキャッシュは残らない。
@@ -77,6 +77,42 @@ public sealed class MediaCache
                 ImageFile.Save(stream, image);
             },
             ImageFile.Load);
+    }
+
+    /// <summary>
+    /// 動画の素材のプロキシ（ProxyGenerator を参照）の場所を返す。キャッシュがなければ作る（素材の長さに応じて時間がかかる）。
+    /// 同じ素材・設定のプロキシを別のスレッドが作っているときは、できるまで待つ
+    /// </summary>
+    /// <exception cref="MediaException">ファイルを開けない、映像が含まれていない、または使えるエンコーダーがない</exception>
+    /// <exception cref="OperationCanceledException">キャンセルした（作りかけのファイルは残らない）</exception>
+    public string GetProxy(
+        string sourcePath,
+        ProxySettings? settings = null,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        settings ??= ProxySettings.Default;
+        var path = CachePath("proxies", sourcePath, ".mp4", settings.CacheKey);
+        return Use(path, temp => ProxyGenerator.Generate(sourcePath, temp, settings, progress, cancellationToken), file => file);
+    }
+
+    /// <summary>素材のプロキシがもう作ってあれば、その場所を返す。なければ（素材が見つからなければ）null。作りはしない</summary>
+    public string? FindProxy(string sourcePath, ProxySettings? settings = null)
+    {
+        if (string.IsNullOrEmpty(sourcePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var path = CachePath("proxies", sourcePath, ".mp4", (settings ?? ProxySettings.Default).CacheKey);
+            return File.Exists(path) ? path : null;
+        }
+        catch (MediaException)
+        {
+            return null;
+        }
     }
 
     // キャッシュがあれば開き、なければ作ってから開く。開けない（壊れている・古い）キャッシュは作り直す
