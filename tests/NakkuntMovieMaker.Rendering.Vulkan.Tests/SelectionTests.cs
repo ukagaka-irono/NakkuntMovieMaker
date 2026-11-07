@@ -52,13 +52,20 @@ public sealed class SelectionTests
     }
 
     [Fact]
-    public void AutoUsesTheCpuUntilTheGpuDrawsEverything()
+    public void AutoTriesTheGpuAndFallsBackToTheCpu()
     {
-        // エフェクトとトランジションを GPU に移すまで（M2 の手順 D）は、自動では CPU を使う
+        // 自動では GPU を試す。ソフトウェアの Vulkan（CI の lavapipe）や、自己テストに通らない GPU では、理由を付けて CPU を使う
         var selection = RenderBackendFactory.Create();
         using var backend = selection.Backend;
 
-        Assert.False(RenderBackendFactory.AutoUsesGpu);
-        Assert.Equal((RenderBackendKind.Cpu, (string?)null), (backend.Info.Kind, selection.FallbackReason));
+        Assert.True(RenderBackendFactory.AutoUsesGpu);
+        if (backend.Info.Kind == RenderBackendKind.Cpu)
+        {
+            Assert.NotNull(selection.FallbackReason);
+        }
+        else
+        {
+            Assert.Null(selection.FallbackReason);
+        }
     }
 }

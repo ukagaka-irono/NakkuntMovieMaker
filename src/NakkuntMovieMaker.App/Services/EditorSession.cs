@@ -409,7 +409,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
             var folder = session.ProjectFolder;
             Cache = new MediaCache(Path.Combine(folder, ".nmm", "cache"));
             var layouts = new TextLayoutCache();
-            Backend = RenderBackendFactory.Create(RendererOptions.Default, layouts).Backend;
+            // GPU の準備の途中で止まったら、次の起動で CPU を使えるように、設定のファイルの隣に目印を置く
+            var marker = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(session._settingsPath)) ?? ".", "gpu-starting");
+            Backend = RenderBackendFactory.Create(RendererOptions.Default with { CrashMarkerPath = marker }, layouts).Backend;
             Measurer = new ContentMeasurer(layouts);
             Media = new ProjectMediaSource(project, folder, Cache);
             var timeline = new TimelineContext(project.Characters, new TachieLoader(folder), new ProjectLipSync(Media));

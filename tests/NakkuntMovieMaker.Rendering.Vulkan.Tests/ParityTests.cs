@@ -88,8 +88,15 @@ public sealed class ParityTests : IDisposable
         Assert.Equal(first.Pixels, second.Pixels);
     }
 
-    // 場面ごとの基準（PSNR、dB）。M2 の手順 D で GPU に移すときに見直す
-    private static double Tolerance(string name) => 45;
+    // 場面ごとの基準（PSNR、dB）。CPU 版と計算の順番や精度が違う（16 ビット浮動小数点で計算し、途中で 8 ビットに丸めない）ので、
+    // ぼかしを使うもの・境界を距離から求めるものは緩くする。docs/rendering.md の表と合わせる
+    private static double Tolerance(string name) => name switch
+    {
+        "effect-blur" or "effect-dropShadow" or "effect-glow" or "effect-mask" or "effect-shake" => 38,
+        "effect-border" => 42,
+        _ when name.StartsWith("transition-", StringComparison.Ordinal) => 42,
+        _ => 45,
+    };
 
     private static VulkanBackend SkipOrFail()
     {

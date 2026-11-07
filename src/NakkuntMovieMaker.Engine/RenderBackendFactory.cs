@@ -43,10 +43,10 @@ public sealed record RenderBackendSelection(IRenderBackend Backend, string? Fall
 public static class RenderBackendFactory
 {
     /// <summary>
-    /// 自動のときに GPU を選ぶか。GPU 版がまだ CPU で描いている部分（エフェクト・トランジション）を GPU に移すまで（M2 の手順 D）は、
-    /// 自動では CPU を使う（GPU 版のほうが遅くなることがあるため）
+    /// 自動のときに GPU を選ぶか。エフェクトとトランジションも GPU で描くようになった（M2 の手順 D）ので、
+    /// 自動では GPU を試し、使えなければ（自己テストに通らない・ソフトウェアの Vulkan しかないなど）CPU を使う
     /// </summary>
-    public static bool AutoUsesGpu { get; } = false;
+    public static bool AutoUsesGpu { get; } = true;
 
     /// <param name="layouts">文字の配置のキャッシュ（大きさを測る処理と共有するとき）</param>
     public static RenderBackendSelection Create(RendererOptions? options = null, TextLayoutCache? layouts = null)
