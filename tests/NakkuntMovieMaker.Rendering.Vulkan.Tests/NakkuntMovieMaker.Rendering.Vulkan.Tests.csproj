@@ -13,6 +13,14 @@
     <Using Include="NakkuntMovieMaker.Rendering.TestSupport" />
   </ItemGroup>
 
+  <!--
+    GPU のテストは、テストのクラスを並べて回さない（CI の Linux の lavapipe と検証レイヤーで、
+    いくつものデバイスを同時に使うと、ときどきプロセスごと落ちたため）
+  -->
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- Media のテスト用の動画を使い回す（Vulkan Video のデコード） -->
   <ItemGroup>
     <None Include="../NakkuntMovieMaker.Media.Tests/Fixtures/frames-2997.mp4;../NakkuntMovieMaker.Media.Tests/Fixtures/hevc-main10-320x240.mp4"
