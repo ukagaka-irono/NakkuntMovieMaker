@@ -109,7 +109,7 @@ public static unsafe class ProxyGenerator
                     cancellationToken.ThrowIfCancellationRequested();
 
                     // 最初のフレームは 0 秒に置く。素材でも、最初のフレームより前の時刻は最初のフレームになるので、時刻の対応は変わらない
-                    writer.WriteVideo(Fit(frame.Image, width, height), frames == 0 ? Rational.Zero : frame.Time);
+                    writer.WriteVideo(Fit(frame.Bgra, width, height), frames == 0 ? Rational.Zero : frame.Time);
                     frames++;
                     if (source.Duration is { } duration && duration > Rational.Zero)
                     {

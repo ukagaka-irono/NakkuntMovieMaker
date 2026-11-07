@@ -51,7 +51,7 @@ public sealed class ExportPipelineTests : IDisposable
     private static (byte R, byte G, byte B) ColorAt(string path, long frame, int x = -1, int y = -1)
     {
         using var decoder = VideoDecoder.Open(path, new VideoDecoderOptions(Hardware: HardwareDecoding.Disabled));
-        var image = decoder.GetFrame(TimeMath.FrameToSeconds(frame, 30)).Image;
+        var image = decoder.GetFrame(TimeMath.FrameToSeconds(frame, 30)).Bgra;
         var (b, g, r, _) = image.GetPixel(x < 0 ? image.Width / 2 : x, y < 0 ? image.Height / 2 : y);
         return (r, g, b);
     }

@@ -21,6 +21,6 @@ public static class ThumbnailExtractor
 
         // たくさんのファイルを次々に開くので、準備に時間のかかるハードウェアデコードは使わない
         using var decoder = VideoDecoder.Open(path, new VideoDecoderOptions(maxWidth, maxHeight, HardwareDecoding.Disabled, CacheCapacity: 1));
-        return [.. times.Select(time => decoder.GetFrame(time).Image)];
+        return [.. times.Select(time => decoder.GetFrame(time).Bgra)];
     }
 }

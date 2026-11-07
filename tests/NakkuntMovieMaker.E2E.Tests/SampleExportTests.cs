@@ -194,7 +194,7 @@ public sealed class SampleExportTests : IDisposable
     private static BgraImage DecodeFrame(string path, long frame, Rational fps)
     {
         using var decoder = VideoDecoder.Open(path, new VideoDecoderOptions(Hardware: HardwareDecoding.Disabled));
-        return decoder.GetFrame(TimeMath.FrameToSeconds(frame, fps)).Image;
+        return decoder.GetFrame(TimeMath.FrameToSeconds(frame, fps)).Bgra;
     }
 
     private static BgraImage LoadPng(string path)

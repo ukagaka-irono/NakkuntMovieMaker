@@ -99,7 +99,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         {
             try
             {
-                var image = slot.Decoder.GetFrame(time).Image;
+                var image = slot.Decoder.GetFrame(time).Bgra;
                 if (InputLut(asset) is { } lut)
                 {
                     image = ColorLutImage.Apply(lut, image);

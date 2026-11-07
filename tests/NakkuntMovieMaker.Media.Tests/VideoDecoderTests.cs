@@ -12,14 +12,14 @@ public class VideoDecoderTests(ITestOutputHelper output)
     // フレームの色から、埋め込んだフレーム番号を読み取る（赤 = (N mod 8)×32+16、緑 = (N÷8)×32+16）
     private static int FrameIndex(DecodedFrame frame)
     {
-        var (_, g, r, _) = frame.Image.GetPixel(frame.Image.Width / 2, frame.Image.Height / 2);
+        var (_, g, r, _) = frame.Bgra.GetPixel(frame.Bgra.Width / 2, frame.Bgra.Height / 2);
         return (int)Math.Round((r - 16) / 32.0) + 8 * (int)Math.Round((g - 16) / 32.0);
     }
 
     // 長い動画（frames-long.mp4）は、青にも番号を埋め込む（青 = (N÷64)×32+16）
     private static int LongFrameIndex(DecodedFrame frame)
     {
-        var (b, _, _, _) = frame.Image.GetPixel(frame.Image.Width / 2, frame.Image.Height / 2);
+        var (b, _, _, _) = frame.Bgra.GetPixel(frame.Bgra.Width / 2, frame.Bgra.Height / 2);
         return FrameIndex(frame) % 64 + 64 * (int)Math.Round((b - 16) / 32.0);
     }
 
@@ -150,7 +150,7 @@ public class VideoDecoderTests(ITestOutputHelper output)
         var frame = decoder.GetFrame(TimeMath.FrameToSeconds(10, Ntsc));
 
         Assert.Equal((128, 96), (decoder.SourceWidth, decoder.SourceHeight));
-        Assert.Equal((64, 48), (frame.Image.Width, frame.Image.Height));
+        Assert.Equal((64, 48), (frame.Bgra.Width, frame.Bgra.Height));
         Assert.Equal(10, FrameIndex(frame));
     }
 
@@ -161,7 +161,7 @@ public class VideoDecoderTests(ITestOutputHelper output)
         Ffmpeg.RequireOrSkip();
         using var decoder = Open("color-c83c28-bt709.mp4", hardware, quality: quality);
 
-        var (b, g, r, a) = decoder.GetFrame(Rational.Zero).Image.GetPixel(64, 48);
+        var (b, g, r, a) = decoder.GetFrame(Rational.Zero).Bgra.GetPixel(64, 48);
 
         // 元の色は RGB (200, 60, 40)。BT.601 で変換すると緑が 20 以上ずれる
         Assert.InRange(r, 194, 206);
@@ -178,9 +178,9 @@ public class VideoDecoderTests(ITestOutputHelper output)
 
         var frame = decoder.GetFrame(new Rational(3, 1));
 
-        Assert.Equal((64, 48), (frame.Image.Width, frame.Image.Height));
+        Assert.Equal((64, 48), (frame.Bgra.Width, frame.Bgra.Height));
         // PNG の画素は (0, 127, 0)。RGB の素材は YUV を通さないので、そのままの値になる
-        Assert.Equal((0, 127, 0, 255), frame.Image.GetPixel(10, 10) is var (b, g, r, a) ? (r, g, b, a) : default);
+        Assert.Equal((0, 127, 0, 255), frame.Bgra.GetPixel(10, 10) is var (b, g, r, a) ? (r, g, b, a) : default);
     }
 
     [Fact]

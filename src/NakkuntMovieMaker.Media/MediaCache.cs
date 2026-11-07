@@ -72,7 +72,7 @@ public sealed class MediaCache
             temp =>
             {
                 using var decoder = VideoDecoder.Open(sourcePath, new VideoDecoderOptions(maxWidth, maxHeight, HardwareDecoding.Disabled, CacheCapacity: 1));
-                var image = decoder.GetFrame(Rational.Zero).Image;
+                var image = decoder.GetFrame(Rational.Zero).Bgra;
                 using var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write);
                 ImageFile.Save(stream, image);
             },

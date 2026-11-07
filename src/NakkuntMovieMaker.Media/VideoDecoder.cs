@@ -24,8 +24,21 @@ public enum ConversionQuality
     Fast,
 }
 
+/// <summary>デコードしたフレームの渡し方</summary>
+public enum VideoFrameOutput
+{
+    /// <summary>BGRA の画像（swscale で RGB にし、縮小する）</summary>
+    Bgra,
+
+    /// <summary>
+    /// 4:2:0 の YUV の平面のまま（NV12・P010。RGB にするのと縮小は、使う側が GPU で行う）。
+    /// それ以外の形式（4:2:2・4:4:4・RGB・透明あり）は、BGRA の画像にする
+    /// </summary>
+    Planes,
+}
+
 /// <summary>
-/// デコーダーの設定。MaxWidth・MaxHeight を指定すると、縦横比を保ってその枠に収まる大きさに縮小する（拡大はしない）。
+/// デコーダーの設定。MaxWidth・MaxHeight を指定すると、縦横比を保ってその枠に収まる大きさに縮小する（拡大はしない。平面のまま渡すときは縮小しない）。
 /// CacheCapacity は覚えておくフレームの数（逆再生や行ったり来たりのシークを速くする）
 /// </summary>
 public sealed record VideoDecoderOptions(
@@ -33,11 +46,21 @@ public sealed record VideoDecoderOptions(
     int? MaxHeight = null,
     HardwareDecoding Hardware = HardwareDecoding.Auto,
     int CacheCapacity = 32,
-    ConversionQuality Quality = ConversionQuality.Accurate);
+    ConversionQuality Quality = ConversionQuality.Accurate,
+    VideoFrameOutput Output = VideoFrameOutput.Bgra);
 
-/// <summary>デコードしたフレーム。Time は素材の先頭からの表示時刻（秒）、Duration は次のフレームまでの長さ</summary>
-public sealed record DecodedFrame(BgraImage Image, Rational Time, Rational? Duration)
+/// <summary>
+/// デコードしたフレーム。Time は素材の先頭からの表示時刻（秒）、Duration は次のフレームまでの長さ。
+/// Image（BGRA）か Planes（YUV の平面）のどちらかがある
+/// </summary>
+public sealed record DecodedFrame(BgraImage? Image, Rational Time, Rational? Duration)
 {
+    /// <summary>平面のまま渡したときの YUV の平面（BGRA にしたときは null）</summary>
+    public VideoPlanes? Planes { get; init; }
+
+    /// <summary>BGRA の画像（平面のまま渡したときは、CPU で RGB にする）</summary>
+    public BgraImage Bgra => Image ?? YuvConversion.ToBgra(Planes!);
+
     /// <summary>
     /// フレームの色の情報（タグがなければ推測した値）。Image はこの行列と範囲で RGB にしたもので、
     /// 原色と伝達特性は変えていない（PQ・HLG の素材なら、PQ・HLG のまま 8 ビットにした値）
@@ -269,8 +292,8 @@ public sealed unsafe class VideoDecoder : IDisposable
                 if (timestamp > target)
                 {
                     // 最初のフレームより前の時刻：最初のフレームを返す（次のフレームがまだ分からないので覚えない）
-                    var (image, color) = Convert(_held);
-                    return new DecodedFrame(image, ToSeconds(timestamp), null) { Color = color };
+                    var (image, planes, color) = Convert(_held);
+                    return new DecodedFrame(image, ToSeconds(timestamp), null) { Color = color, Planes = planes };
                 }
 
                 continue;
@@ -394,13 +417,14 @@ public sealed unsafe class VideoDecoder : IDisposable
             return existing;
         }
 
-        var (image, color) = Convert(frame);
+        var (image, planes, color) = Convert(frame);
         var decoded = new DecodedFrame(
             image,
             ToSeconds(start),
             end == long.MaxValue ? null : (end - start) * _timeBase)
         {
             Color = color,
+            Planes = planes,
         };
         _cache.AddFirst(new CacheEntry(start, end, decoded));
         while (_cache.Count > Math.Max(1, _options.CacheCapacity))
@@ -439,8 +463,8 @@ public sealed unsafe class VideoDecoder : IDisposable
         return null;
     }
 
-    // フレームを BGRA にする。ハードウェアデコードしたフレームは、先にメインメモリへ移す
-    private (BgraImage Image, VideoColorInfo Color) Convert(AVFrame* frame)
+    // フレームを BGRA にする（平面のまま渡す設定で、渡せる形式なら平面にする）。ハードウェアデコードしたフレームは、先にメインメモリへ移す
+    private (BgraImage? Image, VideoPlanes? Planes, VideoColorInfo Color) Convert(AVFrame* frame)
     {
         var source = frame;
         if (frame->hw_frames_ctx is not null)
@@ -452,6 +476,17 @@ public sealed unsafe class VideoDecoder : IDisposable
         }
 
         var format = (AVPixelFormat)source->format;
+        if (_options.Output == VideoFrameOutput.Planes
+            && CopyPlanes(source, format, FfmpegColor.FromFrame(source, format, _format->streams[_streamIndex]->codecpar)) is { } planes)
+        {
+            if (source == _transfer)
+            {
+                ffmpeg.av_frame_unref(_transfer);
+            }
+
+            return (null, planes, planes.Color);
+        }
+
         _scaler = ffmpeg.sws_getCachedContext(
             _scaler,
             source->width, source->height, format,
@@ -492,7 +527,95 @@ public sealed unsafe class VideoDecoder : IDisposable
             ffmpeg.av_frame_unref(_transfer);
         }
 
-        return (new BgraImage(OutputWidth, OutputHeight, pixels), color);
+        return (new BgraImage(OutputWidth, OutputHeight, pixels), null, color);
+    }
+
+    // 4:2:0 の YUV（8 ビット・10 ビット）を、NV12・P010 の平面に写す。ほかの形式なら null
+    private static VideoPlanes? CopyPlanes(AVFrame* frame, AVPixelFormat format, VideoColorInfo color)
+    {
+        var width = frame->width;
+        var height = frame->height;
+        var chromaWidth = (width + 1) / 2;
+        var chromaHeight = (height + 1) / 2;
+        switch (format)
+        {
+            case AVPixelFormat.AV_PIX_FMT_NV12:
+            {
+                var luma = CopyRows(frame->data[0], frame->linesize[0], width, height);
+                var chroma = CopyRows(frame->data[1], frame->linesize[1], chromaWidth * 2, chromaHeight);
+                return new VideoPlanes(VideoPlaneFormat.Nv12, width, height, luma, width, chroma, chromaWidth * 2, color);
+            }
+
+            case AVPixelFormat.AV_PIX_FMT_P010LE:
+            {
+                var luma = CopyRows(frame->data[0], frame->linesize[0], width * 2, height);
+                var chroma = CopyRows(frame->data[1], frame->linesize[1], chromaWidth * 4, chromaHeight);
+                return new VideoPlanes(VideoPlaneFormat.P010, width, height, luma, width * 2, chroma, chromaWidth * 4, color);
+            }
+
+            case AVPixelFormat.AV_PIX_FMT_YUV420P or AVPixelFormat.AV_PIX_FMT_YUVJ420P:
+            {
+                var luma = CopyRows(frame->data[0], frame->linesize[0], width, height);
+                var chroma = new byte[chromaWidth * 2 * chromaHeight];
+                for (var y = 0; y < chromaHeight; y++)
+                {
+                    var u = frame->data[1] + (long)y * frame->linesize[1];
+                    var v = frame->data[2] + (long)y * frame->linesize[2];
+                    var row = chroma.AsSpan(y * chromaWidth * 2, chromaWidth * 2);
+                    for (var x = 0; x < chromaWidth; x++)
+                    {
+                        row[x * 2] = u[x];
+                        row[x * 2 + 1] = v[x];
+                    }
+                }
+
+                return new VideoPlanes(VideoPlaneFormat.Nv12, width, height, luma, width, chroma, chromaWidth * 2, color);
+            }
+
+            case AVPixelFormat.AV_PIX_FMT_YUV420P10LE:
+            {
+                // 値を上位の 10 ビットに移して、P010 と同じ並びにする
+                var luma = new byte[width * 2 * height];
+                for (var y = 0; y < height; y++)
+                {
+                    var source = (ushort*)(frame->data[0] + (long)y * frame->linesize[0]);
+                    var row = MemoryMarshal.Cast<byte, ushort>(luma.AsSpan(y * width * 2, width * 2));
+                    for (var x = 0; x < width; x++)
+                    {
+                        row[x] = (ushort)(source[x] << 6);
+                    }
+                }
+
+                var chroma = new byte[chromaWidth * 4 * chromaHeight];
+                for (var y = 0; y < chromaHeight; y++)
+                {
+                    var u = (ushort*)(frame->data[1] + (long)y * frame->linesize[1]);
+                    var v = (ushort*)(frame->data[2] + (long)y * frame->linesize[2]);
+                    var row = MemoryMarshal.Cast<byte, ushort>(chroma.AsSpan(y * chromaWidth * 4, chromaWidth * 4));
+                    for (var x = 0; x < chromaWidth; x++)
+                    {
+                        row[x * 2] = (ushort)(u[x] << 6);
+                        row[x * 2 + 1] = (ushort)(v[x] << 6);
+                    }
+                }
+
+                return new VideoPlanes(VideoPlaneFormat.P010, width, height, luma, width * 2, chroma, chromaWidth * 4, color);
+            }
+
+            default:
+                return null;
+        }
+    }
+
+    private static byte[] CopyRows(byte* source, int sourceStride, int rowBytes, int rows)
+    {
+        var bytes = new byte[rowBytes * rows];
+        for (var y = 0; y < rows; y++)
+        {
+            new ReadOnlySpan<byte>(source + (long)y * sourceStride, rowBytes).CopyTo(bytes.AsSpan(y * rowBytes, rowBytes));
+        }
+
+        return bytes;
     }
 
     // YUV → RGB の変換式を、映像のタグ（BT.709・BT.601・BT.2020 など）と範囲（リミテッド・フル）に合わせる。

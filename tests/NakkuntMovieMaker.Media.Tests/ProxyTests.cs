@@ -308,7 +308,7 @@ public class ProxyTests(ITestOutputHelper output)
             var actual = proxy.GetFrame(time);
             Assert.True(FrameIndex(expected) == FrameIndex(actual), $"{time} 秒：素材は {FrameIndex(expected)}、プロキシは {FrameIndex(actual)} フレーム目");
             Assert.Equal(expected.Time, actual.Time);
-            var psnr = Psnr(expected.Image, actual.Image);
+            var psnr = Psnr(expected.Bgra, actual.Bgra);
             worst = Math.Min(worst, psnr);
             Assert.True(psnr >= MinPsnr, $"{time} 秒の PSNR が {psnr:0.0}dB");
             matched.Add(FrameIndex(expected));
@@ -321,11 +321,11 @@ public class ProxyTests(ITestOutputHelper output)
     // フレームの色から、埋め込んだフレーム番号を読み取る（赤 = (N mod 8)×32+16、緑 = (N÷8)×32+16）
     private static int FrameIndex(DecodedFrame frame)
     {
-        var (_, g, r, _) = frame.Image.GetPixel(frame.Image.Width / 2, frame.Image.Height / 2);
+        var (_, g, r, _) = frame.Bgra.GetPixel(frame.Bgra.Width / 2, frame.Bgra.Height / 2);
         return (int)Math.Round((r - 16) / 32.0) + 8 * (int)Math.Round((g - 16) / 32.0);
     }
 
-    private static double Psnr(BgraImage expected, BgraImage actual)
+    internal static double Psnr(BgraImage expected, BgraImage actual)
     {
         double sum = 0;
         long count = 0;
@@ -346,7 +346,7 @@ public class ProxyTests(ITestOutputHelper output)
     private static void AssertColor(string path, int red, int green, int blue)
     {
         using var decoder = VideoDecoder.Open(path, new VideoDecoderOptions(Hardware: HardwareDecoding.Disabled));
-        var image = decoder.GetFrame(Rational.Zero).Image;
+        var image = decoder.GetFrame(Rational.Zero).Bgra;
         var (b, g, r, _) = image.GetPixel(image.Width / 2, image.Height / 2);
         Assert.True(Math.Abs(r - red) <= 6 && Math.Abs(g - green) <= 6 && Math.Abs(b - blue) <= 6, $"色が違います: R{r} G{g} B{b}（{red}, {green}, {blue} のはず）");
     }

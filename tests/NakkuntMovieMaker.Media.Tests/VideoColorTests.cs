@@ -108,7 +108,7 @@ public class VideoColorTests(ITestOutputHelper output)
         output.WriteLine($"ハードウェアデコード: {decoder.HardwareDevice ?? "なし"}");
 
         var frame = decoder.GetFrame(Rational.Zero);
-        var (b, g, r, a) = frame.Image.GetPixel(frame.Image.Width / 2, frame.Image.Height / 2);
+        var (b, g, r, a) = frame.Bgra.GetPixel(frame.Bgra.Width / 2, frame.Bgra.Height / 2);
         output.WriteLine($"{file}: R={r} G={g} B={b}");
 
         // 行列を取り違えると緑が 8 以上（BT.2020 を BT.709 とみなした場合。BT.601 ↔ BT.709 なら 20 以上）、範囲を取り違えると 10 以上ずれる
