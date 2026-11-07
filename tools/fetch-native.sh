@@ -30,7 +30,7 @@ fetch_verified() {
   verified="$downloads/$(basename "$url")"
   if [ ! -f "$verified" ]; then
     echo "ダウンロード: $url"
-    curl -fL --retry 3 -o "$verified" "$url"
+    curl -fL --retry 5 --retry-delay 15 --retry-all-errors -o "$verified" "$url"
   fi
 
   actual="$(sha256_of "$verified")"
@@ -50,7 +50,7 @@ fetch_archive() {
   if [ ! -f "$archive" ]; then
     echo "ダウンロード: $url"
     # （if の条件の中で呼ぶので set -e が効かない。失敗をここで止める）
-    curl -fL --retry 3 -o "$archive" "$url" || { rm -f "$archive"; echo "ダウンロードに失敗しました: $url" >&2; exit 1; }
+    curl -fL --retry 5 --retry-delay 15 --retry-all-errors -o "$archive" "$url" || { rm -f "$archive"; echo "ダウンロードに失敗しました: $url" >&2; exit 1; }
   fi
 
   actual="$(sha256_of "$archive")"
@@ -103,7 +103,7 @@ for i in $(seq 0 $((colorful_count - 1))); do
   if [ ! -f "$target" ]; then
     mkdir -p "$(dirname "$target")"
     echo "ダウンロード: $colorful_base$path"
-    curl -fL --retry 3 -o "$target" "$colorful_base$path"
+    curl -fL --retry 5 --retry-delay 15 --retry-all-errors -o "$target" "$colorful_base$path"
   fi
   actual="$(sha256_of "$target")"
   if [ "$actual" != "$expected" ]; then
