@@ -36,7 +36,14 @@ public sealed record VideoDecoderOptions(
     ConversionQuality Quality = ConversionQuality.Accurate);
 
 /// <summary>デコードしたフレーム。Time は素材の先頭からの表示時刻（秒）、Duration は次のフレームまでの長さ</summary>
-public sealed record DecodedFrame(BgraImage Image, Rational Time, Rational? Duration);
+public sealed record DecodedFrame(BgraImage Image, Rational Time, Rational? Duration)
+{
+    /// <summary>
+    /// フレームの色の情報（タグがなければ推測した値）。Image はこの行列と範囲で RGB にしたもので、
+    /// 原色と伝達特性は変えていない（PQ・HLG の素材なら、PQ・HLG のまま 8 ビットにした値）
+    /// </summary>
+    public VideoColorInfo Color { get; init; } = VideoColorInfo.Srgb;
+}
 
 /// <summary>
 /// 動画の 1 つの映像ストリームをデコードする。時刻を指定すると、その時刻に表示されているフレーム
@@ -262,7 +269,8 @@ public sealed unsafe class VideoDecoder : IDisposable
                 if (timestamp > target)
                 {
                     // 最初のフレームより前の時刻：最初のフレームを返す（次のフレームがまだ分からないので覚えない）
-                    return new DecodedFrame(Convert(_held), ToSeconds(timestamp), null);
+                    var (image, color) = Convert(_held);
+                    return new DecodedFrame(image, ToSeconds(timestamp), null) { Color = color };
                 }
 
                 continue;
@@ -386,10 +394,14 @@ public sealed unsafe class VideoDecoder : IDisposable
             return existing;
         }
 
+        var (image, color) = Convert(frame);
         var decoded = new DecodedFrame(
-            Convert(frame),
+            image,
             ToSeconds(start),
-            end == long.MaxValue ? null : (end - start) * _timeBase);
+            end == long.MaxValue ? null : (end - start) * _timeBase)
+        {
+            Color = color,
+        };
         _cache.AddFirst(new CacheEntry(start, end, decoded));
         while (_cache.Count > Math.Max(1, _options.CacheCapacity))
         {
@@ -428,7 +440,7 @@ public sealed unsafe class VideoDecoder : IDisposable
     }
 
     // フレームを BGRA にする。ハードウェアデコードしたフレームは、先にメインメモリへ移す
-    private BgraImage Convert(AVFrame* frame)
+    private (BgraImage Image, VideoColorInfo Color) Convert(AVFrame* frame)
     {
         var source = frame;
         if (frame->hw_frames_ctx is not null)
@@ -453,11 +465,12 @@ public sealed unsafe class VideoDecoder : IDisposable
             throw new MediaException("映像の変換の準備に失敗しました");
         }
 
+        var color = FfmpegColor.FromFrame(source, format, _format->streams[_streamIndex]->codecpar);
         var descriptor = ffmpeg.av_pix_fmt_desc_get(format);
-        if (descriptor is null || (descriptor->flags & ffmpeg.AV_PIX_FMT_FLAG_RGB) == 0)
+        if (color.Matrix != VideoMatrix.Rgb)
         {
             // YUV の素材だけ、YUV → RGB の変換式を設定する
-            ApplyColorspace(source, format);
+            ApplyColorspace(color, source->height);
         }
 
         var pixels = new byte[OutputWidth * OutputHeight * 4];
@@ -479,26 +492,15 @@ public sealed unsafe class VideoDecoder : IDisposable
             ffmpeg.av_frame_unref(_transfer);
         }
 
-        return new BgraImage(OutputWidth, OutputHeight, pixels);
+        return (new BgraImage(OutputWidth, OutputHeight, pixels), color);
     }
 
-    // YUV → RGB の変換式を、映像のタグ（BT.709・BT.601 など）と範囲（リミテッド・フル）に合わせる。
-    // タグがない映像は、HD 以上なら BT.709、それ未満なら BT.601 とみなす
-    private void ApplyColorspace(AVFrame* frame, AVPixelFormat format)
+    // YUV → RGB の変換式を、映像のタグ（BT.709・BT.601・BT.2020 など）と範囲（リミテッド・フル）に合わせる。
+    // タグがない映像は、HD 以上なら BT.709、それ未満なら BT.601 とみなす（VideoColorInfo.Resolve を参照）
+    private void ApplyColorspace(VideoColorInfo color, int height)
     {
-        var colorspace = frame->colorspace switch
-        {
-            AVColorSpace.AVCOL_SPC_BT709 => ffmpeg.SWS_CS_ITU709,
-            AVColorSpace.AVCOL_SPC_BT470BG or AVColorSpace.AVCOL_SPC_SMPTE170M => ffmpeg.SWS_CS_ITU601,
-            AVColorSpace.AVCOL_SPC_SMPTE240M => ffmpeg.SWS_CS_SMPTE240M,
-            AVColorSpace.AVCOL_SPC_FCC => ffmpeg.SWS_CS_FCC,
-            AVColorSpace.AVCOL_SPC_BT2020_NCL or AVColorSpace.AVCOL_SPC_BT2020_CL => ffmpeg.SWS_CS_BT2020,
-            _ => frame->height >= 720 ? ffmpeg.SWS_CS_ITU709 : ffmpeg.SWS_CS_ITU601,
-        };
-
-        var formatName = ffmpeg.av_get_pix_fmt_name(format) ?? "";
-        var fullRange = frame->color_range == AVColorRange.AVCOL_RANGE_JPEG || formatName.StartsWith("yuvj", StringComparison.Ordinal);
-        var coefficients = *(int4*)ffmpeg.sws_getCoefficients(colorspace);
+        var fullRange = color.Range == VideoColorRange.Full;
+        var coefficients = *(int4*)ffmpeg.sws_getCoefficients(FfmpegColor.SwsColorspace(color, height));
         ffmpeg.sws_setColorspaceDetails(_scaler, coefficients, fullRange ? 1 : 0, coefficients, 1, 0, 1 << 16, 1 << 16);
     }
 

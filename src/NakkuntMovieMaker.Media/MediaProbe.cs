@@ -35,7 +35,11 @@ public sealed record VideoStreamInfo(
     string PixelFormat,
     int Rotation,
     long? FrameCount,
-    Rational? Duration);
+    Rational? Duration)
+{
+    /// <summary>ストリームに付いている色の情報（タグがなければ推測した値）</summary>
+    public VideoColorInfo Color { get; init; } = VideoColorInfo.Srgb;
+}
 
 /// <summary>音声ストリームの情報</summary>
 public sealed record AudioStreamInfo(int Index, string Codec, int SampleRate, int Channels, Rational? Duration);
@@ -89,7 +93,10 @@ public static unsafe class MediaProbe
                             ffmpeg.av_get_pix_fmt_name((AVPixelFormat)parameters->format) ?? "unknown",
                             GetRotation(parameters),
                             stream->nb_frames > 0 ? stream->nb_frames : null,
-                            StreamDuration(stream)));
+                            StreamDuration(stream))
+                        {
+                            Color = FfmpegColor.FromParameters(parameters),
+                        });
                         break;
                     case AVMediaType.AVMEDIA_TYPE_AUDIO:
                         audios.Add(new AudioStreamInfo(
