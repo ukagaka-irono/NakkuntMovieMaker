@@ -10,4 +10,13 @@
     <Version>0.0.1.1-beta</Version>
     <Copyright>Copyright (c) NakkuntMovieMaker contributors</Copyright>
   </PropertyGroup>
+  <!--
+    RID を決めないと、NuGet のネイティブライブラリ（SkiaSharp など）が全プラットフォーム分 bin に入り、プロジェクトごとに 0.5GB ほどになる。
+    tools/fetch-native と同じく、ビルドする環境の RID の分だけにする。出力先は今までどおり bin/<構成>/net10.0/（RID を付けない）
+  -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == '' and '$(MSBuildRuntimeType)' == 'Core'">
+    <RuntimeIdentifier>$([System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier)</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
 </Project>
