@@ -18,8 +18,11 @@ public enum RendererPreference
     Vulkan,
 }
 
-/// <summary>描画の方式の設定。Device は使う GPU の名前（null なら自動で選ぶ）</summary>
-public sealed record RendererOptions(RendererPreference Preference = RendererPreference.Auto, string? Device = null)
+/// <summary>
+/// 描画の方式の設定。Device は使う GPU の名前（null なら自動で選ぶ）。
+/// CrashMarkerPath を指定すると、GPU の準備の間だけそのファイルを置き、準備の途中でアプリが止まったら、次からは GPU を使わない
+/// </summary>
+public sealed record RendererOptions(RendererPreference Preference = RendererPreference.Auto, string? Device = null, string? CrashMarkerPath = null)
 {
     public static RendererOptions Default { get; } = new();
 
@@ -39,33 +42,88 @@ public sealed record RenderBackendSelection(IRenderBackend Backend, string? Fall
 /// <summary>設定から描画の方式を作る（アプリ・書き出し・CLI・ベンチマークで共通）</summary>
 public static class RenderBackendFactory
 {
+    /// <summary>
+    /// 自動のときに GPU を選ぶか。GPU 版がまだ CPU で描いている部分（エフェクト・トランジション）を GPU に移すまで（M2 の手順 D）は、
+    /// 自動では CPU を使う（GPU 版のほうが遅くなることがあるため）
+    /// </summary>
+    public static bool AutoUsesGpu { get; } = false;
+
     /// <param name="layouts">文字の配置のキャッシュ（大きさを測る処理と共有するとき）</param>
     public static RenderBackendSelection Create(RendererOptions? options = null, TextLayoutCache? layouts = null)
     {
         options ??= RendererOptions.Default;
-
-        // 自動のときに GPU を選ぶのは、GPU 版の自己テストを入れてから（M2 の手順 C-14）。それまでは、指定したときだけ使う
-        if (options.Preference == RendererPreference.Vulkan)
+        var wantsGpu = options.Preference == RendererPreference.Vulkan || (options.Preference == RendererPreference.Auto && AutoUsesGpu);
+        if (!wantsGpu)
         {
+            return new RenderBackendSelection(new SkiaCpuBackend(layouts: layouts), null);
+        }
+
+        if (options.CrashMarkerPath is { } marker && File.Exists(marker))
+        {
+            return Cpu(layouts, "前回、GPU の準備の途中でアプリが止まったので、CPU で描きます（設定の「描画」で GPU を選び直せます）");
+        }
+
+        // 準備の途中で止まったら（ドライバーの不具合など）、次の起動でわかるように目印を置いておく
+        TryWriteMarker(options.CrashMarkerPath);
+        try
+        {
+            VulkanBackend gpu;
             try
             {
-                var device = VulkanDevice.Create(new VulkanDeviceOptions(options.Device));
-                try
-                {
-                    return new RenderBackendSelection(new VulkanBackend(device, layouts, ownsDevice: true), null);
-                }
-                catch
-                {
-                    device.Dispose();
-                    throw;
-                }
+                gpu = new VulkanBackend(VulkanDevice.Create(new VulkanDeviceOptions(options.Device)), layouts, ownsDevice: true);
             }
             catch (VulkanException ex)
             {
-                return new RenderBackendSelection(new SkiaCpuBackend(layouts: layouts), $"GPU（Vulkan）で描けません（{ex.Message}）。CPU で描きます");
+                return Cpu(layouts, $"GPU（Vulkan）で描けません（{ex.Message}）。CPU で描きます");
             }
+
+            if (GpuSelfTest.Run(gpu) is { } problem)
+            {
+                gpu.Dispose();
+                return Cpu(layouts, $"{problem}。CPU で描きます");
+            }
+
+            var fallback = new FallbackBackend(gpu, new SkiaCpuBackend(layouts: layouts), ex => ex is VulkanException);
+            return new RenderBackendSelection(fallback, null);
+        }
+        finally
+        {
+            TryDeleteMarker(options.CrashMarkerPath);
+        }
+    }
+
+    private static RenderBackendSelection Cpu(TextLayoutCache? layouts, string reason) => new(new SkiaCpuBackend(layouts: layouts), reason);
+
+    private static void TryWriteMarker(string? path)
+    {
+        if (path is null)
+        {
+            return;
         }
 
-        return new RenderBackendSelection(new SkiaCpuBackend(layouts: layouts), null);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+            File.WriteAllText(path, DateTimeOffset.Now.ToString("O"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private static void TryDeleteMarker(string? path)
+    {
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 }
