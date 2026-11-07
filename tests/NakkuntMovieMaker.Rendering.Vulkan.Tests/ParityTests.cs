@@ -55,6 +55,14 @@ public sealed class ParityTests : IDisposable
             Assert.True(gpu.GpuEffectNodes > effectNodes, $"{name}: エフェクトを GPU でかけていません");
         }
 
+        // 調べるとき：NMM_PARITY_DUMP にフォルダーを指定すると、両方の画像を PNG で書き出す
+        if (Environment.GetEnvironmentVariable("NMM_PARITY_DUMP") is { Length: > 0 } dump)
+        {
+            Directory.CreateDirectory(dump);
+            Golden.Save(expected, Path.Combine(dump, name + ".cpu.png"));
+            Golden.Save(actual, Path.Combine(dump, name + ".gpu.png"));
+        }
+
         var difference = ImageCompare.Compare(expected, actual);
         TestContext.Current.TestOutputHelper?.WriteLine($"{name}: {difference}");
         Assert.True(difference.Psnr >= Tolerance(name), $"{name}: CPU 版と違います（{difference}、基準は PSNR {Tolerance(name)}dB 以上）");

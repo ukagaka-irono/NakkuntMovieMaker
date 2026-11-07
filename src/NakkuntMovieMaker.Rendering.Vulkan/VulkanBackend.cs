@@ -23,7 +23,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     private const long LayerCacheBytes = 256L << 20;
 
     private static readonly GpuBindingKind[] ClearBindings = [GpuBindingKind.StorageBuffer];
-    private static readonly GpuBindingKind[] CompositeBindings = [GpuBindingKind.StorageBuffer, GpuBindingKind.StorageBuffer];
+    internal static readonly GpuBindingKind[] CompositeBindings = [GpuBindingKind.StorageBuffer, GpuBindingKind.StorageBuffer];
     private static readonly GpuBindingKind[] ConvertBindings = [GpuBindingKind.StorageBuffer, GpuBindingKind.StorageBuffer];
 
     private readonly VulkanDevice _device;
@@ -518,7 +518,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         BgraImage Image, bool Owned, Matrix3x2 Inverse, Rect Destination, SourceRect Source, float Opacity, BlendMode Blend, bool Antialias, Region Region);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct CompositeParams
+    internal struct CompositeParams
     {
         public float Ax, Ay, Bx, By, Cx, Cy;
         public float Left, Top, Width, Height;
