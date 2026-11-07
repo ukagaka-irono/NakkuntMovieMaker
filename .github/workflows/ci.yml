@@ -21,6 +21,18 @@ jobs:
         with:
           global-json-file: global.json
 
+      # 取得したアーカイブ（Slang・MoltenVK・Vulkan-Headers・OpenColorIO・FFmpeg などのソース）を使い回す。
+      # 取得し直す時間を省くのと、取得先が一時的に切れたとき（ffmpeg.org で接続が切られ、1 分ほど待ったことがある）に止まらないようにするため。
+      # 使うたびに fetch-native が SHA-256 を確かめるので、版が変わったものだけ取得し直す。展開したソース（src-*）は入れない
+      - name: 取得したアーカイブのキャッシュ
+        uses: actions/cache@v5
+        with:
+          path: |
+            native/downloads
+            !native/downloads/src-*
+          key: downloads-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/native-deps.json') }}
+          restore-keys: downloads-${{ runner.os }}-${{ runner.arch }}-
+
       # FFmpeg はソースからビルドするので（数分かかる）、ソースの版とビルドの手順が同じあいだは前の結果を使う
       - name: FFmpeg のビルドのキャッシュ
         uses: actions/cache@v5
