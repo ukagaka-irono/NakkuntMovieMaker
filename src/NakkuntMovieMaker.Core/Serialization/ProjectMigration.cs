@@ -28,5 +28,15 @@ public interface IProjectMigration
 /// <summary>組み込みの移行処理。形式を変えたら、ここに追加して Project.CurrentSchemaVersion を上げる</summary>
 public static class ProjectMigrations
 {
-    public static IReadOnlyList<IProjectMigration> All { get; } = [];
+    public static IReadOnlyList<IProjectMigration> All { get; } = [new AddColorSettings()];
+
+    // 1 → 2：色の設定・プロキシの設定・素材の入力の色空間を加えた。どれも、ないときは既定値（M1 と同じ処理）なので、書き換えるものはない
+    private sealed class AddColorSettings : IProjectMigration
+    {
+        public int FromVersion => 1;
+
+        public void Apply(ProjectJsonFiles files)
+        {
+        }
+    }
 }

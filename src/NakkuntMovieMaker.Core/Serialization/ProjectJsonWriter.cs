@@ -34,6 +34,38 @@ internal static class ProjectJsonWriter
         }
 
         writer.WriteEndArray();
+
+        // 色とプロキシの設定は、既定値と違う項目だけを書く（M1 の形式からの差分を小さくするため）
+        var color = project.Color;
+        var defaultColor = ProjectColorSettings.Default;
+        if (color != defaultColor)
+        {
+            writer.WriteStartObject("color");
+            if (color.Compositing != defaultColor.Compositing)
+            {
+                writer.WriteString("compositing", EnumNames.ToName(color.Compositing));
+            }
+
+            if (color.OcioConfig is not null)
+            {
+                writer.WriteString("ocioConfig", color.OcioConfig);
+            }
+
+            if (color.ExportColorSpace is not null)
+            {
+                writer.WriteString("exportColorSpace", color.ExportColorSpace);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        if (project.Proxies != ProjectProxySettings.Default)
+        {
+            writer.WriteStartObject("proxies");
+            writer.WriteString("mode", EnumNames.ToName(project.Proxies.Mode));
+            writer.WriteEndObject();
+        }
+
         writer.WriteEndObject();
     });
 
@@ -129,6 +161,11 @@ internal static class ProjectJsonWriter
             if (asset.Hash is not null)
             {
                 writer.WriteString("hash", asset.Hash);
+            }
+
+            if (asset.ColorSpace is not null)
+            {
+                writer.WriteString("colorSpace", asset.ColorSpace);
             }
 
             writer.WriteEndObject();

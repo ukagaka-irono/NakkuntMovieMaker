@@ -7,7 +7,8 @@ using NakkuntMovieMaker.Core.Time;
 namespace NakkuntMovieMaker.Core.Serialization;
 
 /// <summary>プロジェクトの入口のファイル（.nmmproj）の中身</summary>
-internal sealed record ProjectEntry(int SchemaVersion, string Name, SceneId RootScene, ImmutableArray<SceneId> Scenes);
+internal sealed record ProjectEntry(
+    int SchemaVersion, string Name, SceneId RootScene, ImmutableArray<SceneId> Scenes, ProjectColorSettings Color, ProjectProxySettings Proxies);
 
 /// <summary>
 /// JSON からモデルを読む。足りない項目や型の違いは、ファイル名と項目名を付けた ProjectFormatException にする。
@@ -19,7 +20,34 @@ internal sealed class ProjectJsonReader(string file)
         GetInt(root, "schemaVersion"),
         GetString(root, "name"),
         new SceneId(GetGuid(root, "rootScene")),
-        [.. GetArray(root, "scenes").Select(element => new SceneId(ParseGuid(element, "scenes")))]);
+        [.. GetArray(root, "scenes").Select(element => new SceneId(ParseGuid(element, "scenes")))],
+        ReadColorSettings(root),
+        ReadProxySettings(root));
+
+    // 色の設定。既定値の項目は書かれないので、ない項目は既定値にする
+    private ProjectColorSettings ReadColorSettings(JsonElement root)
+    {
+        if (!TryGet(root, "color", out var color))
+        {
+            return ProjectColorSettings.Default;
+        }
+
+        var defaults = ProjectColorSettings.Default;
+        return new ProjectColorSettings(
+            TryGet(color, "compositing", out _) ? GetEnum<CompositingSpace>(color, "compositing") : defaults.Compositing,
+            TryGet(color, "ocioConfig", out var config) ? ReadString(config, "ocioConfig") : defaults.OcioConfig,
+            TryGet(color, "exportColorSpace", out var export) ? ReadString(export, "exportColorSpace") : defaults.ExportColorSpace);
+    }
+
+    private ProjectProxySettings ReadProxySettings(JsonElement root)
+    {
+        if (!TryGet(root, "proxies", out var proxies))
+        {
+            return ProjectProxySettings.Default;
+        }
+
+        return new ProjectProxySettings(TryGet(proxies, "mode", out _) ? GetEnum<ProxyMode>(proxies, "mode") : ProjectProxySettings.Default.Mode);
+    }
 
     /// <summary>schemaVersion だけを読む（移行処理の前に使う）</summary>
     public int ReadSchemaVersion(JsonElement root) => GetInt(root, "schemaVersion");
@@ -85,7 +113,8 @@ internal sealed class ProjectJsonReader(string file)
                 new AssetId(GetGuid(element, "id")),
                 GetEnum<AssetKind>(element, "kind"),
                 GetString(element, "path"),
-                TryGet(element, "hash", out var hash) ? ReadString(hash, "hash") : null);
+                TryGet(element, "hash", out var hash) ? ReadString(hash, "hash") : null,
+                TryGet(element, "colorSpace", out var colorSpace) ? ReadString(colorSpace, "colorSpace") : null);
             if (!assets.TryAdd(asset.Id, asset))
             {
                 throw Error($"素材の ID が重複しています: {asset.Id}");

@@ -85,11 +85,16 @@ public class ProjectStoreTests : IDisposable
         };
 
         var character = project.Characters[t.Voice.Character] with { Tachie = new TachieSpec(TachieKind.Parts, "立ち絵/霊夢") };
+        var hdr = AssetId.New();
         var second = Scene.CreateNew("サブ", SceneFormat.Vertical1080x1920p30 with { Fps = new(30000, 1001) }, 2);
         return project.WithScene(scene).WithScene(second) with
         {
             Characters = project.Characters.SetItem(character.Id, character),
-            Assets = project.Assets.Add(recorded.Asset, new Asset(recorded.Asset, AssetKind.Audio, "recordings/2026-11-03.wav", "abc123")),
+            Assets = project.Assets
+                .Add(recorded.Asset, new Asset(recorded.Asset, AssetKind.Audio, "recordings/2026-11-03.wav", "abc123"))
+                .Add(hdr, new Asset(hdr, AssetKind.Video, "media/hdr.mov", ColorSpace: "Rec.2100-PQ - Display")),
+            Color = new ProjectColorSettings(CompositingSpace.Linear, "cg-config-v4.0.0_aces-v2.0_ocio-v2.5", "sRGB - Display"),
+            Proxies = new ProjectProxySettings(ProxyMode.AllVideos),
         };
     }
 
@@ -276,6 +281,82 @@ public class ProjectStoreTests : IDisposable
     }
 
     [Fact]
+    public void DefaultColorAndProxySettingsAreNotWritten()
+    {
+        // 既定値（M1 と同じ処理）のときは、形式 1 と同じ項目だけを書く
+        var t = new TestProject();
+        _store.Save(t.Project, EntryPath);
+
+        var entry = JsonNode.Parse(File.ReadAllText(EntryPath))!.AsObject();
+        Assert.Equal(Project.CurrentSchemaVersion, (int)entry["schemaVersion"]!);
+        Assert.False(entry.ContainsKey("color"));
+        Assert.False(entry.ContainsKey("proxies"));
+        Assert.DoesNotContain("colorSpace", File.ReadAllText(_folder.Combine("assets.json")));
+    }
+
+    [Fact]
+    public void ColorSettingsWriteOnlyTheChangedFields()
+    {
+        var project = new TestProject().Project with { Color = ProjectColorSettings.Default with { Compositing = CompositingSpace.Linear } };
+        _store.Save(project, EntryPath);
+
+        var color = JsonNode.Parse(File.ReadAllText(EntryPath))!["color"]!.AsObject();
+        Assert.Equal("linear", (string)color["compositing"]!);
+        Assert.Single(color);
+        Assert.Equal(project, _store.Load(EntryPath));
+    }
+
+    [Theory]
+    [InlineData("general")]
+    [InlineData("yukkuri")]
+    public void Version1SamplesLoadAndResaveStably(string sample)
+    {
+        // リポジトリのサンプル（形式 1）を読み、今の形式で保存する。読み直して保存し直しても、同じバイト列になる
+        var folder = Path.Combine(RepositoryRoot(), "samples", sample);
+        var original = JsonNode.Parse(File.ReadAllText(Path.Combine(folder, sample + ".nmmproj")))!;
+        Assert.Equal(1, (int)original["schemaVersion"]!);
+
+        var project = _store.Load(Path.Combine(folder, sample + ".nmmproj"));
+        Assert.Equal(Project.CurrentSchemaVersion, project.SchemaVersion);
+        Assert.Equal(ProjectColorSettings.Default, project.Color);
+        Assert.Equal(ProjectProxySettings.Default, project.Proxies);
+
+        _store.Save(project, EntryPath);
+        var first = Snapshot();
+        _store.Save(_store.Load(EntryPath), _folder.Combine("again", "MyVideo.nmmproj"));
+        var second = Snapshot(_folder.Combine("again"));
+        Assert.Equal(first.Keys.Order(), second.Keys.Order());
+        foreach (var (path, bytes) in first)
+        {
+            Assert.Equal(bytes, second[path]);
+        }
+    }
+
+    // フォルダーの中の JSON のファイル（相対パス → 中身）
+    private Dictionary<string, byte[]> Snapshot(string? folder = null)
+    {
+        folder ??= _folder.Path;
+        return Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
+            .Where(path => path.EndsWith(".json", StringComparison.Ordinal) || path.EndsWith(".nmmproj", StringComparison.Ordinal))
+            .ToDictionary(path => Path.GetRelativePath(folder, path).Replace(Path.DirectorySeparatorChar, '/'), File.ReadAllBytes)
+            .Where(pair => !pair.Key.StartsWith("again/", StringComparison.Ordinal))
+            .ToDictionary();
+    }
+
+    private static string RepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            if (Directory.Exists(Path.Combine(directory.FullName, "samples")) && File.Exists(Path.Combine(directory.FullName, "README.md")))
+            {
+                return directory.FullName;
+            }
+        }
+
+        throw new DirectoryNotFoundException("リポジトリのフォルダーが見つかりません");
+    }
+
+    [Fact]
     public void ProjectsFromNewerVersionsAreRejected()
     {
         _store.Save(RichProject(), EntryPath);
@@ -299,7 +380,7 @@ public class ProjectStoreTests : IDisposable
         entry.Remove("name");
         File.WriteAllText(EntryPath, entry.ToJsonString());
 
-        var migrating = new ProjectStore([new RenameTitleMigration()], Project.CurrentSchemaVersion);
+        var migrating = new ProjectStore([new RenameTitleMigration(), .. ProjectMigrations.All], Project.CurrentSchemaVersion);
         var loaded = migrating.Load(EntryPath);
 
         Assert.Equal(project, loaded);

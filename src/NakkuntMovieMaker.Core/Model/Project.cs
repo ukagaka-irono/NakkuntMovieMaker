@@ -16,8 +16,17 @@ public sealed record Project(
     ImmutableDictionary<CharacterId, Character> Characters,
     ImmutableDictionary<AssetId, Asset> Assets)
 {
-    /// <summary>今のプロジェクト形式のバージョン。形式を変えたら上げ、移行処理を追加する</summary>
-    public const int CurrentSchemaVersion = 1;
+    /// <summary>
+    /// 今のプロジェクト形式のバージョン。形式を変えたら上げ、移行処理を追加する。
+    /// 2：色の設定・プロキシの設定・素材の入力の色空間（M2）
+    /// </summary>
+    public const int CurrentSchemaVersion = 2;
+
+    /// <summary>色の設定（合成の色空間・OpenColorIO の構成・書き出しの変換）</summary>
+    public ProjectColorSettings Color { get; init; } = ProjectColorSettings.Default;
+
+    /// <summary>プロキシの設定</summary>
+    public ProjectProxySettings Proxies { get; init; } = ProjectProxySettings.Default;
 
     /// <summary>新しいプロジェクト。指定した形式のシーンを 1 つと、空のレイヤーを用意する</summary>
     public static Project CreateNew(string name, SceneFormat format, int layerCount = 10)
@@ -46,6 +55,8 @@ public sealed record Project(
             && SchemaVersion == other.SchemaVersion
             && Name == other.Name
             && RootScene == other.RootScene
+            && Color == other.Color
+            && Proxies == other.Proxies
             && CollectionEquality.DictionaryEquals(Scenes, other.Scenes)
             && CollectionEquality.DictionaryEquals(Characters, other.Characters)
             && CollectionEquality.DictionaryEquals(Assets, other.Assets));
@@ -79,6 +90,7 @@ public enum AssetKind
 
 /// <summary>
 /// 素材ファイル。Path はプロジェクトのフォルダからの相対パスか、絶対パス。
-/// Hash は内容のハッシュ（リンク切れのときに同じファイルを探すのに使う）
+/// Hash は内容のハッシュ（リンク切れのときに同じファイルを探すのに使う）。
+/// ColorSpace は入力の色空間（OpenColorIO の構成の中の名前）。null なら、動画の色のタグなどから自動で決める
 /// </summary>
-public sealed record Asset(AssetId Id, AssetKind Kind, string Path, string? Hash = null);
+public sealed record Asset(AssetId Id, AssetKind Kind, string Path, string? Hash = null, string? ColorSpace = null);

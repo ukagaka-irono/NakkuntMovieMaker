@@ -144,7 +144,11 @@ public sealed class ProjectStore
 
         var assets = Parse(AssetsFile, files[AssetsFile], root => new ProjectJsonReader(AssetsFile).ReadAssets(root));
 
-        return new Project(_currentVersion, entry.Name, entry.RootScene, scenes.ToImmutable(), characters.ToImmutable(), assets);
+        return new Project(_currentVersion, entry.Name, entry.RootScene, scenes.ToImmutable(), characters.ToImmutable(), assets)
+        {
+            Color = entry.Color,
+            Proxies = entry.Proxies,
+        };
     }
 
     public static string SceneFileName(SceneId id) => id + SceneExtension;
