@@ -21,14 +21,35 @@ public enum EncoderPreference
     Software,
 }
 
-/// <summary>映像の設定。大きさは偶数にすること（YUV 4:2:0 のため）</summary>
+/// <summary>
+/// 映像の設定。大きさは偶数にすること（YUV 4:2:0 のため）。
+/// Color は付ける色のタグと、BGRA → YUV の変換式（省くと BT.709・リミテッドレンジ）。
+/// KeyframeInterval はキーフレームの間隔（フレーム数。省くと 2 秒）、MaxBFrames は B フレームの数の上限（省くとエンコーダーに任せる）。
+/// TimeBase はタイムスタンプの単位（省くと 1 / FrameRate）。WriteVideo(image, time) で時刻を指定するときは、素材と同じ単位にすると誤差が出ない
+/// </summary>
 public sealed record VideoEncoderSettings(
     VideoCodecKind Codec,
     int Width,
     int Height,
     Rational FrameRate,
     int BitrateKbps,
-    EncoderPreference Preference = EncoderPreference.Auto);
+    EncoderPreference Preference = EncoderPreference.Auto,
+    VideoColorTags? Color = null,
+    int? KeyframeInterval = null,
+    int? MaxBFrames = null,
+    Rational? TimeBase = null);
+
+/// <summary>
+/// 映像の色のタグ。値は ITU-T H.273 の番号（FFmpeg の AVColorPrimaries・AVColorTransferCharacteristic・AVColorSpace と同じ）。
+/// 2 は「指定なし」。FullRange はフルレンジ（0〜255）なら true、リミテッドレンジ（16〜235）なら false
+/// </summary>
+public sealed record VideoColorTags(int Primaries, int Transfer, int Matrix, bool FullRange)
+{
+    public const int Unspecified = 2;
+
+    /// <summary>BT.709・リミテッドレンジ（書き出しの既定）</summary>
+    public static VideoColorTags Bt709 { get; } = new(1, 1, 1, false);
+}
 
 /// <summary>音声の設定（AAC・ステレオ）</summary>
 public sealed record AudioEncoderSettings(int SampleRate = 48000, int BitrateKbps = 192);
@@ -37,7 +58,7 @@ public sealed record AudioEncoderSettings(int SampleRate = 48000, int BitrateKbp
 /// MP4（映像と音声）を書く。映像は BGRA の画像を 1 枚ずつ、音声はステレオの float32 を順に渡す。
 /// 映像のエンコーダーは、OS ごとの候補を順に開いてみて、最初に開けたものを使う
 /// （Windows：QSV → NVENC → AMF → Media Foundation、macOS：VideoToolbox、Linux：VA-API → NVENC、最後はソフトウェア）。
-/// 色は BT.709・リミテッドレンジとしてタグを付け、MP4 は faststart（先頭に索引を置く）で書く
+/// 色は設定のタグ（既定は BT.709・リミテッドレンジ）を付け、MP4 は faststart（先頭に索引を置く）で書く
 /// </summary>
 public sealed unsafe class MediaWriter : IMediaFileWriter
 {
@@ -52,7 +73,10 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
     private AVFrame* _audioFrame;
     private AVPacket* _packet;
     private SwsContext* _scaler;
-    private long _videoPts;
+    private long _videoFrames;
+    private long _lastVideoPts = long.MinValue;
+    private Rational _videoTimeBase;
+    private Rational _frameDuration;
     private long _audioPts;
     private float[] _audioPending = [];
     private int _audioPendingFrames;
@@ -118,8 +142,14 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
         return available;
     }
 
-    /// <summary>映像の 1 フレーム（premultiplied の BGRA）を書く。大きさは設定と同じにすること</summary>
-    public void WriteVideo(BgraImage image)
+    /// <summary>映像の 1 フレーム（premultiplied の BGRA）を書く。大きさは設定と同じにすること。時刻は前のフレームの 1 フレーム後</summary>
+    public void WriteVideo(BgraImage image) => WriteVideo(image, _videoFrames * _frameDuration);
+
+    /// <summary>
+    /// 映像の 1 フレーム（premultiplied の BGRA）を、指定した表示時刻（ファイルの先頭からの秒）で書く。
+    /// 可変フレームレートの動画を作るときに使う。時刻は前のフレームより後にすること（タイムベースの単位に切り捨てる）
+    /// </summary>
+    public void WriteVideo(BgraImage image, Rational time)
     {
         ObjectDisposedException.ThrowIf(_format is null, this);
         if (_video is null)
@@ -132,6 +162,12 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
             throw new ArgumentException($"画像の大きさが違います（{image.Width}×{image.Height}、設定は {_video->width}×{_video->height}）", nameof(image));
         }
 
+        var pts = Rational.Rescale(1, time, _videoTimeBase, Rounding.Down);
+        if (pts <= _lastVideoPts)
+        {
+            throw new ArgumentException($"映像の時刻が前のフレームより後ではありません（{time}）", nameof(time));
+        }
+
         ffmpeg.av_frame_make_writable(_videoFrame).ThrowIfError("映像のフレームの準備");
         fixed (byte* pixels = image.Pixels)
         {
@@ -140,7 +176,9 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
             ffmpeg.sws_scale(_scaler, source, stride, 0, image.Height, _videoFrame->data.ToArray(), _videoFrame->linesize.ToArray()).ThrowIfError("映像の変換");
         }
 
-        _videoFrame->pts = _videoPts++;
+        _videoFrame->pts = pts;
+        _lastVideoPts = pts;
+        _videoFrames++;
         if (_video->hw_frames_ctx is null)
         {
             Encode(_video, _videoStream, _videoFrame);
@@ -323,6 +361,8 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
             ffmpeg.avcodec_parameters_from_context(_videoStream->codecpar, _video).ThrowIfError("映像の設定");
             _videoStream->time_base = _video->time_base;
             _videoStream->avg_frame_rate = _video->framerate;
+            _videoTimeBase = new Rational(_video->time_base.num, _video->time_base.den);
+            _frameDuration = video.FrameRate.Reciprocal();
 
             // ハードウェアのフレームを使うエンコーダーには、メインメモリ側の形式（NV12）で作ってから写す
             var softwareFormat = _video->hw_frames_ctx is null ? _video->pix_fmt : (AVPixelFormat)((AVHWFramesContext*)_video->hw_frames_ctx->data)->sw_format;
@@ -335,19 +375,20 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
             _videoFrame->format = (int)softwareFormat;
             _videoFrame->width = _video->width;
             _videoFrame->height = _video->height;
-            _videoFrame->color_primaries = AVColorPrimaries.AVCOL_PRI_BT709;
-            _videoFrame->color_trc = AVColorTransferCharacteristic.AVCOL_TRC_BT709;
-            _videoFrame->colorspace = AVColorSpace.AVCOL_SPC_BT709;
-            _videoFrame->color_range = AVColorRange.AVCOL_RANGE_MPEG;
+            var color = video.Color ?? VideoColorTags.Bt709;
+            _videoFrame->color_primaries = (AVColorPrimaries)color.Primaries;
+            _videoFrame->color_trc = (AVColorTransferCharacteristic)color.Transfer;
+            _videoFrame->colorspace = (AVColorSpace)color.Matrix;
+            _videoFrame->color_range = color.FullRange ? AVColorRange.AVCOL_RANGE_JPEG : AVColorRange.AVCOL_RANGE_MPEG;
             ffmpeg.av_frame_get_buffer(_videoFrame, 0).ThrowIfError("映像のフレームの準備");
 
-            // BGRA → YUV（BT.709・リミテッドレンジ）
+            // BGRA → YUV（タグの変換式と範囲。既定は BT.709・リミテッドレンジ）
             _scaler = ffmpeg.sws_getContext(
                 video.Width, video.Height, AVPixelFormat.AV_PIX_FMT_BGRA,
                 video.Width, video.Height, softwareFormat,
                 (int)(SwsFlags.SWS_BILINEAR | SwsFlags.SWS_ACCURATE_RND | SwsFlags.SWS_FULL_CHR_H_INT), null, null, null);
-            var coefficients = *(int4*)ffmpeg.sws_getCoefficients(ffmpeg.SWS_CS_ITU709);
-            ffmpeg.sws_setColorspaceDetails(_scaler, coefficients, 1, coefficients, 0, 0, 1 << 16, 1 << 16);
+            var coefficients = *(int4*)ffmpeg.sws_getCoefficients(SwsColorspace(color.Matrix));
+            ffmpeg.sws_setColorspaceDetails(_scaler, coefficients, 1, coefficients, color.FullRange ? 1 : 0, 0, 1 << 16, 1 << 16);
         }
 
         if (audio is not null)
@@ -390,7 +431,8 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
             return null;
         }
 
-        context->time_base = new AVRational { num = (int)settings.FrameRate.Denominator, den = (int)settings.FrameRate.Numerator };
+        var timeBase = settings.TimeBase ?? settings.FrameRate.Reciprocal();
+        context->time_base = new AVRational { num = checked((int)timeBase.Numerator), den = checked((int)timeBase.Denominator) };
         context->framerate = new AVRational { num = (int)settings.FrameRate.Numerator, den = (int)settings.FrameRate.Denominator };
         if (context->hw_frames_ctx is null)
         {
@@ -400,12 +442,18 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
         context->bit_rate = settings.BitrateKbps * 1000L;
         context->rc_max_rate = context->bit_rate * 2;
         context->rc_buffer_size = (int)Math.Min(int.MaxValue, context->bit_rate * 2);
-        context->gop_size = (int)Math.Max(1, Math.Round(settings.FrameRate.ToDouble() * 2));
+        context->gop_size = settings.KeyframeInterval ?? (int)Math.Max(1, Math.Round(settings.FrameRate.ToDouble() * 2));
+        if (settings.MaxBFrames is { } bFrames)
+        {
+            context->max_b_frames = bFrames;
+        }
+
         context->thread_count = 0;
-        context->color_primaries = AVColorPrimaries.AVCOL_PRI_BT709;
-        context->color_trc = AVColorTransferCharacteristic.AVCOL_TRC_BT709;
-        context->colorspace = AVColorSpace.AVCOL_SPC_BT709;
-        context->color_range = AVColorRange.AVCOL_RANGE_MPEG;
+        var color = settings.Color ?? VideoColorTags.Bt709;
+        context->color_primaries = (AVColorPrimaries)color.Primaries;
+        context->color_trc = (AVColorTransferCharacteristic)color.Transfer;
+        context->colorspace = (AVColorSpace)color.Matrix;
+        context->color_range = color.FullRange ? AVColorRange.AVCOL_RANGE_JPEG : AVColorRange.AVCOL_RANGE_MPEG;
         if (globalHeader)
         {
             context->flags |= ffmpeg.AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -419,6 +467,16 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
 
         return context;
     }
+
+    // 変換式のタグ（H.273 の matrix_coefficients）を swscale の係数の番号にする。分からなければ BT.709
+    private static int SwsColorspace(int matrix) => (AVColorSpace)matrix switch
+    {
+        AVColorSpace.AVCOL_SPC_BT470BG or AVColorSpace.AVCOL_SPC_SMPTE170M => ffmpeg.SWS_CS_ITU601,
+        AVColorSpace.AVCOL_SPC_SMPTE240M => ffmpeg.SWS_CS_SMPTE240M,
+        AVColorSpace.AVCOL_SPC_FCC => ffmpeg.SWS_CS_FCC,
+        AVColorSpace.AVCOL_SPC_BT2020_NCL or AVColorSpace.AVCOL_SPC_BT2020_CL => ffmpeg.SWS_CS_BT2020,
+        _ => ffmpeg.SWS_CS_ITU709,
+    };
 
     // VA-API のエンコーダーに、GPU のフレーム（NV12）の置き場を付ける。VA-API を使えなければ false
     private static bool TryAttachVaapiFrames(AVCodecContext* context, VideoEncoderSettings settings)
