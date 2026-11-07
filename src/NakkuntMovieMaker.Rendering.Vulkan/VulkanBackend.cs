@@ -288,10 +288,16 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     }
 
     // 素材を切り抜き、残った部分の中心をローカル座標の原点に置いて描く（SkiaCpuBackend.ImageContent と同じ）
-    private static Operation? PrepareImage(DrawNode node, IMediaSource media, Matrix3x2 output, int width, int height)
+    private static object? PrepareImage(DrawNode node, IMediaSource media, Matrix3x2 output, int width, int height)
     {
         var matrix = node.Transform * output;
         var hint = Math.Max(Math.Sqrt(matrix.M11 * matrix.M11 + matrix.M12 * matrix.M12), Math.Sqrt(matrix.M21 * matrix.M21 + matrix.M22 * matrix.M22));
+        // 動画は、渡せれば YUV の平面のまま受け取り、GPU で RGB にする（swscale を使わない）
+        if (node.Content is VideoFrameContent planesVideo && media.GetVideoPlanes(planesVideo.Asset, planesVideo.SourceTime) is { } planes)
+        {
+            return PreparePlanes(node, planes, matrix, width, height);
+        }
+
         var source = node.Content switch
         {
             VideoFrameContent video => media.GetVideoFrame(video.Asset, video.SourceTime, hint),
@@ -332,6 +338,39 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         var opacity = node.Opacity < 1 || node.Blend != BlendMode.Normal ? Round(node.Opacity) : 1f;
         var owned = node.Content is VideoFrameContent;
         return new Operation(image, owned, inverse, destination, new SourceRect(left, top, right - left, bottom - top), opacity, node.Blend, Antialias: true, region);
+    }
+
+    // 平面のままの動画のフレーム：切り抜き・置き方は画像と同じ（平面は縮小していないので、素材の画素がそのまま切り抜く単位）
+    private static PlanesStep? PreparePlanes(DrawNode node, VideoPlaneFrame frame, Matrix3x2 matrix, int width, int height)
+    {
+        if (!Matrix3x2.Invert(matrix, out var inverse))
+        {
+            return null;
+        }
+
+        var crop = node.Crop;
+        var planes = frame.Planes;
+        var visibleWidth = frame.Width - crop.Left - crop.Right;
+        var visibleHeight = frame.Height - crop.Top - crop.Bottom;
+        var ratioX = planes.Width / (double)frame.Width;
+        var ratioY = planes.Height / (double)frame.Height;
+        var left = Math.Clamp((int)Math.Round(crop.Left * ratioX), 0, planes.Width);
+        var top = Math.Clamp((int)Math.Round(crop.Top * ratioY), 0, planes.Height);
+        var right = Math.Clamp((int)Math.Round((frame.Width - crop.Right) * ratioX), 0, planes.Width);
+        var bottom = Math.Clamp((int)Math.Round((frame.Height - crop.Bottom) * ratioY), 0, planes.Height);
+        if (visibleWidth <= 0 || visibleHeight <= 0 || right <= left || bottom <= top)
+        {
+            return null;
+        }
+
+        var destination = new Rect((float)(-visibleWidth / 2), (float)(-visibleHeight / 2), (float)visibleWidth, (float)visibleHeight);
+        if (Bounds(destination, matrix, width, height) is not { } region)
+        {
+            return null;
+        }
+
+        var opacity = node.Opacity < 1 || node.Blend != BlendMode.Normal ? Round(node.Opacity) : 1f;
+        return new PlanesStep(frame, inverse, destination, new SourceRect(left, top, right - left, bottom - top), opacity, node.Blend, region);
     }
 
     // GPU のスレッドで：作業用の画像を背景で塗り、ノードを順に重ねて、BGRA にして読み戻す
@@ -394,6 +433,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             case Operation operation:
                 CompositeOperation(context, composite, work, operation, width);
                 break;
+            case PlanesStep planesStep:
+                CompositePlanes(context, composite, work, planesStep, width);
+                break;
         }
     }
 
@@ -418,6 +460,106 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         // 出力の作業用の画像は、この仕事の終わりに捨てるので、ここでは包むだけ
         var target = new GpuEffectImage(work, width, height, 0, 0, 1);
         step.Processor.Draw(effects, target, from, to, step.Progress, step.Parameters);
+    }
+
+    // 平面を GPU に送って RGB の作業用の画像にし（入力の色の変換もかける）、変形・不透明度・合成モードを付けて重ねる
+    private void CompositePlanes(GpuCommandContext context, ComputePipeline composite, GpuBuffer work, PlanesStep step, int width)
+    {
+        var planes = step.Frame.Planes;
+        var rgb = YuvToWork(context, planes, step.Frame.Input);
+        var region = step.Region;
+        var parameters = new CompositeParams
+        {
+            Ax = step.Inverse.M11,
+            Ay = step.Inverse.M12,
+            Bx = step.Inverse.M21,
+            By = step.Inverse.M22,
+            Cx = step.Inverse.M31,
+            Cy = step.Inverse.M32,
+            Left = step.Destination.Left,
+            Top = step.Destination.Top,
+            Width = step.Destination.Width,
+            Height = step.Destination.Height,
+            SourceX = step.Source.X,
+            SourceY = step.Source.Y,
+            SourceWidth = step.Source.Width,
+            SourceHeight = step.Source.Height,
+            Stride = planes.Width,
+            OriginX = region.X,
+            OriginY = region.Y,
+            RegionWidth = region.Width,
+            RegionHeight = region.Height,
+            Opacity = step.Opacity,
+            Blend = (int)step.Blend,
+            Antialias = 1,
+            TargetWidth = width,
+            SourceFormat = 1,
+            Linearize = _linear ? 1 : 0,
+        };
+        composite.Dispatch(context, [work, rgb], parameters, ComputePipeline.Groups(region.Width, 8), ComputePipeline.Groups(region.Height, 8));
+        GpuBarriers.AfterCompute(context);
+    }
+
+    /// <summary>
+    /// YUV の平面を GPU に送り、作業用の画像（16 ビット浮動小数点の RGBA。入力の色の変換をかけたもの）にする。
+    /// できた画像は、この仕事が終わったら捨てる
+    /// </summary>
+    internal GpuBuffer YuvToWork(GpuCommandContext context, VideoPlanes planes, ColorLut? input)
+    {
+        // 輝度と色差を 1 つのバッファーに続けて置く（4 バイトの境界にそろえる）
+        var chromaOffset = (planes.Luma.Length + 3) & ~3;
+        var upload = _allocator.CreateBuffer((ulong)(chromaOffset + ((planes.Chroma.Length + 3) & ~3)), VkBufferUsageFlags.StorageBuffer, GpuBufferKind.Upload);
+        var span = upload.Span;
+        planes.Luma.CopyTo(span);
+        planes.Chroma.CopyTo(span[chromaOffset..]);
+        upload.Flush();
+        context.OnCompleted(upload.Dispose);
+
+        var rgb = _allocator.CreateBuffer((ulong)planes.Width * (ulong)planes.Height * 8, VkBufferUsageFlags.StorageBuffer, GpuBufferKind.DeviceLocal);
+        context.OnCompleted(rgb.Dispose);
+
+        var color = planes.Color;
+        var (kr, kb) = YuvConversion.Coefficients(color.Matrix, planes.Height);
+        var (yOffset, yScale, cOffset, cScale) = YuvConversion.Range(color.Range, planes.BitDepth);
+        var (originX, originY) = YuvConversion.ChromaOrigin(color.ChromaLocation);
+        var parameters = new YuvParams
+        {
+            Width = planes.Width,
+            Height = planes.Height,
+            LumaStride = planes.LumaStride,
+            ChromaOffset = chromaOffset,
+            ChromaStride = planes.ChromaStride,
+            ChromaWidth = planes.ChromaWidth,
+            ChromaHeight = planes.ChromaHeight,
+            P010 = planes.Format == VideoPlaneFormat.P010 ? 1 : 0,
+            Kr = kr,
+            Kb = kb,
+            YOffset = yOffset,
+            YScale = yScale,
+            COffset = cOffset,
+            CScale = cScale,
+            OriginX = originX,
+            OriginY = originY,
+        };
+        GpuBuffer lut;
+        if (input is not null)
+        {
+            lut = OutputLut(context, input);
+            parameters.UseLut = 1;
+            parameters.ShaperLength = input.Shaper.Length;
+            parameters.CubeSize = input.Cube.Size;
+            parameters.CubeOffset = input.Shaper.Length;
+            parameters.LutEncodeSrgb = input.EncodeSrgb ? 1 : 0;
+        }
+        else
+        {
+            lut = _emptyLut ??= CreateEmptyLut();
+        }
+
+        _shaders.Get("yuv_to_work", OutputBindings, sizeof(YuvParams))
+            .Dispatch(context, [upload, rgb, lut], parameters, ComputePipeline.Groups(planes.Width, 8), ComputePipeline.Groups(planes.Height, 8));
+        GpuBarriers.AfterCompute(context);
+        return rgb;
     }
 
     // 素材の画像（の一部）を、変形・不透明度・合成モードを付けて重ねる
@@ -630,6 +772,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
     private sealed record TransitionStep(IGpuTransition Processor, float Progress, EffectParameters Parameters, object? From, object? To, IMediaSource Media);
 
+    // 平面のままの動画のフレームを重ねる処理（Source は平面の中の切り抜く範囲）
+    private sealed record PlanesStep(VideoPlaneFrame Frame, Matrix3x2 Inverse, Rect Destination, SourceRect Source, float Opacity, BlendMode Blend, Region Region);
+
     private sealed record LayerKey(RenderNode Node, double Scale, int SceneWidth, int SceneHeight);
 
     // CPU で描いた、ノード 1 つの画像と、出力の中の位置
@@ -660,6 +805,14 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     {
         public float R, G, B, A;
         public int Count;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct YuvParams
+    {
+        public int Width, Height, LumaStride, ChromaOffset, ChromaStride, ChromaWidth, ChromaHeight, P010;
+        public float Kr, Kb, YOffset, YScale, COffset, CScale, OriginX, OriginY;
+        public int UseLut, ShaperLength, CubeSize, CubeOffset, LutEncodeSrgb;
     }
 
     [StructLayout(LayoutKind.Sequential)]

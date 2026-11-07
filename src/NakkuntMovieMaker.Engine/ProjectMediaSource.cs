@@ -34,6 +34,10 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
     private readonly ConcurrentDictionary<AssetId, Lazy<PcmAudio?>> _audio = new();
     private readonly ConcurrentDictionary<AssetId, ColorLut?> _inputLuts = new();
     private readonly ConcurrentDictionary<AssetId, string> _inputErrors = new();
+    private readonly ConcurrentDictionary<AssetId, byte> _planesUnsupported = new();
+
+    // 平面のまま渡すデコーダーの段階の番号（縮小しない）
+    private const int PlanesStep = -1;
     private readonly ColorTransforms _transforms;
     private readonly ConcurrentDictionary<string, Lazy<PcmAudio?>> _voices = new(StringComparer.Ordinal);
     private long _imageBytes;
@@ -85,6 +89,43 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         }
 
         return _files.GetOrAdd((path, step), image);
+    }
+
+    /// <summary>
+    /// 動画のフレームを YUV の平面のまま（GPU 版が使う。縮小しない）。4:2:0 でない動画など、平面で渡せなければ null
+    /// （一度渡せなかった素材は、それからは試さない）
+    /// </summary>
+    public VideoPlaneFrame? GetVideoPlanes(AssetId asset, Rational time)
+    {
+        if (_planesUnsupported.ContainsKey(asset))
+        {
+            return null;
+        }
+
+        var slot = _decoders.GetOrAdd((asset, PlanesStep), key => OpenDecoder(key.Asset, key.Step));
+        if (slot is null)
+        {
+            return null;
+        }
+
+        lock (slot.Gate)
+        {
+            try
+            {
+                var frame = slot.Decoder.GetFrame(time);
+                if (frame.Planes is not { } planes)
+                {
+                    _planesUnsupported[asset] = 0;
+                    return null;
+                }
+
+                return new VideoPlaneFrame(planes, slot.Decoder.SourceWidth, slot.Decoder.SourceHeight, InputLut(asset));
+            }
+            catch (Exception ex) when (ex is MediaException or ObjectDisposedException)
+            {
+                return null;
+            }
+        }
     }
 
     public SourceImage? GetVideoFrame(AssetId asset, Rational time, double scale)
@@ -145,6 +186,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
             _inputLuts.TryRemove(id, out _);
             _inputErrors.TryRemove(id, out _);
+            _planesUnsupported.TryRemove(id, out _);
 
             foreach (var key in _images.Keys.Where(key => key.Asset == id))
             {
@@ -362,7 +404,9 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
         try
         {
-            var options = new VideoDecoderOptions(MaxSize(video.Width, step), MaxSize(video.Height, step), Quality: _quality);
+            var options = step == PlanesStep
+                ? new VideoDecoderOptions(Output: VideoFrameOutput.Planes)
+                : new VideoDecoderOptions(MaxSize(video.Width, step), MaxSize(video.Height, step), Quality: _quality);
             return new DecoderSlot(VideoDecoder.Open(path, options));
         }
         catch (MediaException)

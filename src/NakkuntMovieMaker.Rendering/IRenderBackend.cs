@@ -1,6 +1,7 @@
 using NakkuntMovieMaker.Core.Model;
 using NakkuntMovieMaker.Core.Time;
 using NakkuntMovieMaker.Media;
+using NakkuntMovieMaker.Rendering.Color;
 
 namespace NakkuntMovieMaker.Rendering;
 
@@ -99,7 +100,19 @@ public interface IMediaSource
 
     /// <summary>ファイルの場所で指定した画像（立ち絵のパーツなど）。読めなければ null</summary>
     SourceImage? GetImageFile(string path, double scale) => null;
+
+    /// <summary>
+    /// GPU 版が使う：動画のフレームを、RGB にせず縮小もしない YUV の平面のまま。平面で渡せない（4:2:0 でないなど）か、
+    /// 対応していなければ null（そのときは GetVideoFrame を使う）
+    /// </summary>
+    VideoPlaneFrame? GetVideoPlanes(AssetId asset, Rational time) => null;
 }
+
+/// <summary>
+/// 平面のままの動画のフレーム。Width・Height は素材の元の大きさ（ローカル座標の単位）。
+/// Input は、RGB にした後にかける入力の色の変換（GetVideoFrame の画像にかかっているものと同じ。なければ null）
+/// </summary>
+public sealed record VideoPlaneFrame(VideoPlanes Planes, int Width, int Height, ColorLut? Input);
 
 /// <summary>
 /// 素材の画像。Width・Height は素材の元の大きさ（ローカル座標の単位）で、Image はそれを縮小したものでもよい
