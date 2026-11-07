@@ -24,6 +24,9 @@ NakkuntMovieMaker 自体は MIT ライセンスです（[LICENSE](LICENSE)）。
 | minizip-ng（`nmm_ocio` に組み込み） | 4.0.10 | zlib | [zlib-ng/minizip-ng](https://github.com/zlib-ng/minizip-ng)（ソースからビルド） |
 | zlib（`nmm_ocio` に組み込み） | 1.3.2 | zlib | [madler/zlib](https://github.com/madler/zlib)（ソースからビルド。FFmpeg の zlib とは別） |
 | MoltenVK（macOS だけ） | 1.4.2 | Apache-2.0 | [KhronosGroup/MoltenVK](https://github.com/KhronosGroup/MoltenVK)（公式のビルド済みのもの） |
+| Vulkan-Headers（Windows・Linux の FFmpeg に組み込み） | 1.4.363 | Apache-2.0 または MIT | [KhronosGroup/Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers)（ヘッダーだけ。FFmpeg を Vulkan 対応でビルドするときに使う） |
+| Vortice.Vulkan | 3.3.0 | MIT | [amerkoleci/Vortice.Vulkan](https://github.com/amerkoleci/Vortice.Vulkan)（Vulkan を .NET から呼ぶ部分） |
+| Vortice.VulkanMemoryAllocator | 1.8.0 | MIT | [amerkoleci/Vortice.Vulkan](https://github.com/amerkoleci/Vortice.Vulkan)（中のネイティブライブラリ `vma.dll`・`libvma` は、AMD の [VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)。MIT） |
 | BIZ UDPゴシック | Google Fonts の版 | SIL Open Font License 1.1 | [google/fonts](https://github.com/google/fonts/tree/main/ofl/bizudpgothic) |
 | SkiaSharp・HarfBuzzSharp | 3.119.4・8.3.1.3 | MIT（中の Skia は BSD-3-Clause、HarfBuzz は Old MIT） | [mono/SkiaSharp](https://github.com/mono/SkiaSharp) |
 | Avalonia | 12.1.5 | MIT | [AvaloniaUI/Avalonia](https://github.com/AvaloniaUI/Avalonia) |
@@ -40,19 +43,20 @@ NakkuntMovieMaker 自体は MIT ライセンスです（[LICENSE](LICENSE)）。
 - 版とハッシュは `tools/native-deps.json` と `Directory.Packages.props` で固定しています。
 
 - OpenColorIO と、それが依存するライブラリは静的ライブラリにして `nmm_ocio`（共有ライブラリ）に組み込みます。OCIO の構成ファイルは同梱せず、OCIO に組み込まれた ACES の構成を使います。
+- GPU 版のシェーダーは、ビルドのときに Slang（slangc）で SPIR-V にして、`NakkuntMovieMaker.Rendering.Vulkan` に埋め込みます。slangc 自体は同梱しません。
 
 ## ビルドにだけ使うもの（配布物には含めない）
 
 | 名称 | 版 | ライセンス | 説明 |
 | --- | --- | --- | --- |
 | Slang（slangc） | 2026.21 | Apache-2.0 WITH LLVM-exception | シェーダーを SPIR-V にコンパイルする。[shader-slang/slang](https://github.com/shader-slang/slang) の公式のビルド済みのものを `tools/fetch-native` で取得する |
-| Vulkan-Headers | 1.4.363 | Apache-2.0 または MIT | FFmpeg を Vulkan 対応でビルドするときのヘッダー。[KhronosGroup/Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers) |
 
 ## 同梱しないもの
 
 | 名称 | 説明 |
 | --- | --- |
 | SAPI の音声 | Windows に標準で入っているもの |
+| Vulkan のローダー（`vulkan-1.dll`・`libvulkan.so.1`） | Windows・Linux では、GPU のドライバーや OS に入っているものを使う（macOS は MoltenVK を直接読み込む） |
 | 外部の ffmpeg（x264・x265） | x264・x265 で書き出したい人が、自分で入手して設定で指定するもの（GPL）。ソフトは別のプロセスとして呼ぶだけで、同梱しない |
 
 ## テストにだけ使うもの

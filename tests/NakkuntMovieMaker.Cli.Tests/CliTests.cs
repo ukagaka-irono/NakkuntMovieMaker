@@ -45,6 +45,21 @@ public sealed class CliTests : IDisposable
     private string Output(string name) => Path.Combine(_folder, "out", name);
 
     [Fact]
+    public void CreatesAProxy()
+    {
+        RequireFfmpeg();
+        var source = Path.Combine(_folder, "clip.mp4");
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "frames-2997.mp4"), source);
+
+        Assert.Equal(0, Program.Main(["proxy", source]));
+
+        // 元の動画（128×96）の 1/2 の大きさで、隣に <名前>.proxy.mp4 を作る
+        var video = MediaProbe.Probe(Path.Combine(_folder, "clip.proxy.mp4")).Video!;
+        Assert.Equal(("h264", 64, 48), (video.Codec, video.Width, video.Height));
+        Assert.Equal(2, Program.Main(["proxy", Path.Combine(_folder, "missing.mp4")]));
+    }
+
+    [Fact]
     public void ExportsVideoWithSubtitles()
     {
         RequireFfmpeg();

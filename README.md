@@ -42,7 +42,7 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 ## 開発状況
 
 最初の段階（M1）として、一般的な動画編集ソフトに必要な機能と、ゆっくり解説動画を最初から最後まで作るための機能を作りました。
-描画は CPU（Skia）で行います。GPU での描画（Vulkan）は次の段階（M2）で入れます。
+次の段階（M2）として、GPU での描画（Vulkan）と、色の管理（OpenColorIO）、プロキシ編集を入れました。
 
 | 項目 | 状況 |
 | --- | --- |
@@ -53,14 +53,19 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 | 音声 | ミキサー（音量・パン・フェード・キーフレーム）、音の高さを保った速度変更、ラウドネスの正規化、ダッキング、レベルメーター、録音 |
 | セリフ | キャラクター、セリフ入力欄、台本の一括貼り付け、ColorfulTalk（旧版。同梱）と SAPI（Windows）、セリフごとの収録、立ち絵（口パク・目パチ）、字幕（SRT） |
 | 書き出し | MP4（H.264・HEVC、ハードウェアエンコード）、プリセット、範囲、WAV、静止画。x264・x265 を使いたいときは、自分で入手した ffmpeg を設定の「全般」（コマンドラインは `--ffmpeg`）で指定できます |
+| 描画（M2） | 既定では GPU（Vulkan）で描き、使えないときは CPU（Skia）で描きます。エフェクト 15 種類とトランジション 7 種類も GPU で描きます。設定の「描画」で、方式・使う GPU・GPU のメモリの上限を選べ、状態バーに今の方式を表示します。書き出しでは、GPU が NV12 を作ってエンコーダーに渡します |
+| 色（M2） | 合成の色空間（sRGB・リニア）、OpenColorIO の構成と書き出しの色空間（プロジェクトの設定）、プレビューの表示の色空間（設定の「描画」）、素材ごとの入力の色空間（素材の一覧の右クリック）。HDR（PQ・HLG）の素材は SDR にトーンマップします |
+| プロキシ（M2） | 編集用の軽い動画（H.264、1/2 の大きさ・最大 1080p）をプレビューだけで使い、書き出しでは元の素材を使います。使う範囲はプロジェクトの設定、作る・削除するは素材の一覧の右クリック、プレビューでの切り替えは「表示」のメニューです |
 
 まだ確かめていないこと：
 
 - 本物のマイクでの録音は確かめていません（仮の入力デバイスでテストしています）。
 - 立ち絵は、YMM4 の「動く立ち絵」と同じフォルダ構成を想定していますが、実際の素材では確かめていません。
+- GPU 版は、Windows の Intel Iris Xe と、Linux の lavapipe（CI。CPU で動く Vulkan）で確かめています。NVIDIA・AMD の GPU と、macOS（MoltenVK）では、まだ確かめていません。
+- 動画を GPU のメモリのままデコードする Vulkan Video は、FFmpeg とドライバーの不具合で落ちることがあるため、試験的な機能として既定では使いません（設定の「描画」で使えます）。
 - Linux の FFmpeg には VA-API を入れていません（libva がない環境でも FFmpeg を読み込めるようにするため）。Linux のハードウェアエンコードは NVENC だけで、GPU のある実機では確かめていません（使えないときは OpenH264・kvazaar で書き出します）。
 
-性能の記録は [docs/performance.md](docs/performance.md) にあります。
+性能の記録は [docs/performance.md](docs/performance.md) に、GPU 版の描画の設計は [docs/rendering.md](docs/rendering.md) にあります。
 
 ## ビルドと実行
 
@@ -97,8 +102,15 @@ dotnet run --project src/NakkuntMovieMaker.App
 dotnet run --project src/NakkuntMovieMaker.Cli -- export samples/general/general.nmmproj -o general.mp4 --preset youtube-1080p
 # 1 フレームを画像に
 dotnet run --project src/NakkuntMovieMaker.Cli -- render-frame samples/yukkuri/yukkuri.nmmproj -f 1.5s -o frame.png
-# 性能の計測
+# 描画の方式を選ぶ（auto・vulkan・cpu。export・render-frame・bench で使える）
+dotnet run --project src/NakkuntMovieMaker.Cli -- render-frame samples/general/general.nmmproj -f 1s -o frame.png --renderer cpu
+# 使える GPU の一覧
+dotnet run --project src/NakkuntMovieMaker.Cli -- probe --gpu
+# プロキシ（プレビュー用の軽い動画）を作る
+dotnet run --project src/NakkuntMovieMaker.Cli -- proxy movie.mp4 -o movie.proxy.mp4
+# 性能の計測（プロジェクトの再生・書き出し。--video を付けると、1080p60 の動画で 60fps の再生も測る）
 dotnet run --project src/NakkuntMovieMaker.Cli -c Release -- bench --project samples/general/general.nmmproj
+dotnet run --project src/NakkuntMovieMaker.Cli -c Release -- bench --video movie-1080p60.mp4 --only playback60
 ```
 
 `samples/` に、一般的な動画編集とゆっくり解説のサンプルプロジェクトがあります（[samples/README.md](samples/README.md)）。
@@ -478,7 +490,9 @@ NakkuntMovieMaker のプラグインを作るための資料とツールを用�
 | 名称 | 用途 | 対応 OS |
 | --- | --- | --- |
 | [Avalonia](https://avaloniaui.net/) | 画面 | Windows（M1）/ Linux / macOS |
-| [SkiaSharp](https://github.com/mono/SkiaSharp) | 描画（CPU） | Windows / Linux / macOS |
+| [SkiaSharp](https://github.com/mono/SkiaSharp) | 描画（CPU）。GPU 版でも、文字と図形は Skia で描いて送る | Windows / Linux / macOS |
+| [Vulkan](https://www.vulkan.org/)（[Vortice.Vulkan](https://github.com/amerkoleci/Vortice.Vulkan)・[VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)） | 描画（GPU） | Windows / Linux / macOS（[MoltenVK](https://github.com/KhronosGroup/MoltenVK) を同梱） |
+| [Slang](https://shader-slang.org/) | GPU 版のシェーダーのコンパイル（ビルドのときだけ使う） | Windows / Linux / macOS |
 | [HarfBuzzSharp](https://github.com/mono/SkiaSharp) | 文字の配置 | Windows / Linux / macOS |
 | [miniaudio](https://miniaud.io/) | 音の再生と録音 | Windows / Linux / macOS |
 | [BIZ UDPゴシック](https://github.com/googlefonts/morisawa-biz-ud-gothic) | 既定のフォント（同梱） | Windows / Linux / macOS |

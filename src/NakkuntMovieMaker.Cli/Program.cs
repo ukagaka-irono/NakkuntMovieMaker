@@ -18,6 +18,7 @@ internal static class Program
         root.Subcommands.Add(ExportCommands.CreateRenderFrameCommand());
         root.Subcommands.Add(CreateProbeCommand());
         root.Subcommands.Add(CreateBenchCommand());
+        root.Subcommands.Add(CreateProxyCommand());
         return root.Parse(args).Invoke();
     }
 
@@ -94,6 +95,41 @@ internal static class Program
         }
 
         return 0;
+    }
+
+    // プロキシ（プレビュー用の軽い動画）を作る（M2 の手順 H-35）。アプリは、プロジェクトの .nmm/cache/proxies に自動で作る
+    private static Command CreateProxyCommand()
+    {
+        var sourceArgument = new Argument<FileInfo>("video") { Description = "元の動画" };
+        var outputOption = new Option<FileInfo?>("--output", "-o") { Description = "作るプロキシの場所（省略すると、元の動画の隣に <名前>.proxy.mp4）" };
+        var command = new Command("proxy", "動画のプロキシ（H.264、1/2 の大きさ・最大 1080p、短いキーフレームの間隔、B フレームなし）を作る");
+        command.Arguments.Add(sourceArgument);
+        command.Options.Add(outputOption);
+        command.SetAction(parseResult =>
+        {
+            var source = parseResult.GetValue(sourceArgument)!;
+            if (!source.Exists)
+            {
+                Console.Error.WriteLine($"動画が見つかりません: {source.FullName}");
+                return 2;
+            }
+
+            var output = parseResult.GetValue(outputOption)?.FullName
+                ?? Path.Combine(source.DirectoryName!, Path.GetFileNameWithoutExtension(source.Name) + ".proxy.mp4");
+            Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+            try
+            {
+                var info = ProxyGenerator.Generate(source.FullName, output);
+                Console.WriteLine($"{output} に作りました（{info.Width}×{info.Height}、{info.Frames} フレーム、{info.Encoder}）");
+                return 0;
+            }
+            catch (MediaException ex)
+            {
+                Console.Error.WriteLine($"プロキシを作れません: {ex.Message}");
+                return 1;
+            }
+        });
+        return command;
     }
 
     private static Command CreateBenchCommand()
