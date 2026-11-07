@@ -28,6 +28,11 @@ internal static class Program
             Description = "読み込んだ FFmpeg と nmm_audio のバージョン・ライセンスを表示する",
         };
 
+        var gpuOption = new Option<bool>("--gpu")
+        {
+            Description = "Vulkan に対応した GPU の一覧と、描画に使う GPU を表示する",
+        };
+
         var fileArgument = new Argument<FileInfo?>("file")
         {
             Description = "情報を表示するメディアファイル",
@@ -36,12 +41,18 @@ internal static class Program
 
         var command = new Command("probe", "FFmpeg・nmm_audio やメディアファイルの情報を表示する");
         command.Options.Add(versionOption);
+        command.Options.Add(gpuOption);
         command.Arguments.Add(fileArgument);
         command.SetAction(parseResult =>
         {
             if (parseResult.GetValue(versionOption))
             {
                 return PrintNativeVersions();
+            }
+
+            if (parseResult.GetValue(gpuOption))
+            {
+                return PrintGpus();
             }
 
             var file = parseResult.GetValue(fileArgument);
@@ -54,6 +65,35 @@ internal static class Program
             return PrintMediaInfo(file.FullName);
         });
         return command;
+    }
+
+    // Vulkan に対応した GPU の一覧と、選ばれる GPU
+    private static int PrintGpus()
+    {
+        var devices = Rendering.Vulkan.VulkanDevice.ListDevices();
+        if (devices.Count == 0)
+        {
+            Console.WriteLine("Vulkan に対応した GPU が見つかりません（CPU で描きます）");
+            return 0;
+        }
+
+        foreach (var device in devices)
+        {
+            var state = device.Suitable ? "使える" : $"使えない：{device.Unsuitable}";
+            Console.WriteLine($"{device.Name}（{device.Type}、Vulkan {device.ApiVersion}、ドライバー {device.Driver}）：{state}");
+        }
+
+        try
+        {
+            using var chosen = Rendering.Vulkan.VulkanDevice.Create();
+            Console.WriteLine($"描画に使う GPU：{chosen.Info.Name}");
+        }
+        catch (Rendering.Vulkan.VulkanException ex)
+        {
+            Console.WriteLine($"GPU を使えません：{ex.Message}");
+        }
+
+        return 0;
     }
 
     private static Command CreateBenchCommand()

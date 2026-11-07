@@ -6,6 +6,7 @@
     <ProjectReference Include="../NakkuntMovieMaker.Text/NakkuntMovieMaker.Text.csproj" />
     <ProjectReference Include="../NakkuntMovieMaker.Rendering/NakkuntMovieMaker.Rendering.csproj" />
     <ProjectReference Include="../NakkuntMovieMaker.Rendering.Skia/NakkuntMovieMaker.Rendering.Skia.csproj" />
+    <ProjectReference Include="../NakkuntMovieMaker.Rendering.Vulkan/NakkuntMovieMaker.Rendering.Vulkan.csproj" />
     <ProjectReference Include="../NakkuntMovieMaker.Audio/NakkuntMovieMaker.Audio.csproj" />
     <ProjectReference Include="../NakkuntMovieMaker.Voice/NakkuntMovieMaker.Voice.csproj" />
     <ProjectReference Include="../NakkuntMovieMaker.Voice.ColorfulTalk/NakkuntMovieMaker.Voice.ColorfulTalk.csproj" />

@@ -10,6 +10,7 @@
     <Project Path="src/NakkuntMovieMaker.Engine/NakkuntMovieMaker.Engine.csproj" />
     <Project Path="src/NakkuntMovieMaker.Media/NakkuntMovieMaker.Media.csproj" />
     <Project Path="src/NakkuntMovieMaker.Rendering.Skia/NakkuntMovieMaker.Rendering.Skia.csproj" />
+    <Project Path="src/NakkuntMovieMaker.Rendering.Vulkan/NakkuntMovieMaker.Rendering.Vulkan.csproj" />
     <Project Path="src/NakkuntMovieMaker.Rendering/NakkuntMovieMaker.Rendering.csproj" />
     <Project Path="src/NakkuntMovieMaker.Text/NakkuntMovieMaker.Text.csproj" />
     <Project Path="src/NakkuntMovieMaker.Voice.ColorfulTalk/NakkuntMovieMaker.Voice.ColorfulTalk.csproj" />
@@ -26,6 +27,7 @@
     <Project Path="tests/NakkuntMovieMaker.Media.Tests/NakkuntMovieMaker.Media.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Rendering.Tests/NakkuntMovieMaker.Rendering.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Rendering.TestSupport/NakkuntMovieMaker.Rendering.TestSupport.csproj" />
+    <Project Path="tests/NakkuntMovieMaker.Rendering.Vulkan.Tests/NakkuntMovieMaker.Rendering.Vulkan.Tests.csproj" />
     <Project Path="tests/NakkuntMovieMaker.Voice.Tests/NakkuntMovieMaker.Voice.Tests.csproj" />
   </Folder>
 </Solution>

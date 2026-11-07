@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/NakkuntMovieMaker.Rendering.Vulkan/NakkuntMovieMaker.Rendering.Vulkan.csproj" />
+    <ProjectReference Include="../../src/NakkuntMovieMaker.Engine/NakkuntMovieMaker.Engine.csproj" />
+    <ProjectReference Include="../NakkuntMovieMaker.Rendering.TestSupport/NakkuntMovieMaker.Rendering.TestSupport.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NakkuntMovieMaker.Rendering.TestSupport" />
+  </ItemGroup>
+</Project>
