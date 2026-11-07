@@ -39,6 +39,8 @@ elseif(APPLE)
     # 静的にリンクした OCIO などの記号を外に出さない（nmm_ocio_* だけを出す）
     target_link_options(nmm_ocio PRIVATE "LINKER:-exported_symbol,_nmm_ocio_*")
 else()
+    find_package(Threads REQUIRED)
+    target_link_libraries(nmm_ocio PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
     target_link_options(nmm_ocio PRIVATE "LINKER:--exclude-libs,ALL" "LINKER:--no-undefined")
 endif()
 
