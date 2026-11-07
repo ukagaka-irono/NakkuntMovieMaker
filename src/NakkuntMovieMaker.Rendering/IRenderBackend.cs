@@ -20,8 +20,18 @@ public enum RenderBackendKind
 /// </summary>
 public sealed record RenderBackendInfo(RenderBackendKind Kind, string Name, string? Device, int PreferredConcurrency);
 
-/// <summary>描き方の指定。Scale はシーンの大きさに対する出力の大きさの倍率（プレビューの 1/2 なら 0.5）</summary>
-public sealed record RenderRequest(double Scale = 1);
+/// <summary>
+/// 描き方の指定。Scale はシーンの大きさに対する出力の大きさの倍率（プレビューの 1/2 なら 0.5）。
+/// Yuv を指定すると、書き出し用の NV12 も作る（GPU 版だけ。RenderResult.ReadPlanes で読む）
+/// </summary>
+public sealed record RenderRequest(double Scale = 1, YuvOutput? Yuv = null);
+
+/// <summary>書き出し用の YUV（NV12、色差の位置は左）の、行列と範囲</summary>
+public sealed record YuvOutput(VideoMatrix Matrix, VideoColorRange Range)
+{
+    /// <summary>BT.709・リミテッドレンジ（書き出しの既定）</summary>
+    public static YuvOutput Bt709 { get; } = new(VideoMatrix.Bt709, VideoColorRange.Limited);
+}
 
 /// <summary>
 /// FramePlan を実行して、フレームの画像を作る。M1 は Skia の CPU 描画、M2 から Vulkan での描画を加える。
@@ -46,6 +56,11 @@ public abstract class RenderResult : IDisposable
 
     /// <summary>premultiplied の BGRA（8 ビット）として読み出す。GPU 版では、描き終わるのを待つ</summary>
     public abstract BgraImage ReadBgra();
+
+    /// <summary>
+    /// RenderRequest.Yuv を指定して描いたときの、書き出し用の NV12。作っていなければ null（そのときは ReadBgra を使う）
+    /// </summary>
+    public virtual VideoPlanes? ReadPlanes() => null;
 
     public void Dispose()
     {

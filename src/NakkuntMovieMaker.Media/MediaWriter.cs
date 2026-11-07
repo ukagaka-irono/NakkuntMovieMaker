@@ -146,6 +146,55 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
     public void WriteVideo(BgraImage image) => WriteVideo(image, _videoFrames * _frameDuration);
 
     /// <summary>
+    /// 映像の 1 フレームを、NV12 の平面で書く（swscale を通さない）。大きさ・行列・範囲は設定と同じにすること。時刻は前のフレームの 1 フレーム後。
+    /// エンコーダーが NV12 を受け取らない（YUV420P の）ときは、色差の平面を分けて写す
+    /// </summary>
+    public void WriteVideo(VideoPlanes planes)
+    {
+        ArgumentNullException.ThrowIfNull(planes);
+        ObjectDisposedException.ThrowIf(_format is null, this);
+        if (_video is null)
+        {
+            throw new InvalidOperationException("映像なしで作った書き出しです");
+        }
+
+        if (planes.Format != VideoPlaneFormat.Nv12 || planes.Width != _video->width || planes.Height != _video->height)
+        {
+            throw new ArgumentException($"NV12 で、大きさが設定と同じ（{_video->width}×{_video->height}）平面にしてください", nameof(planes));
+        }
+
+        ffmpeg.av_frame_make_writable(_videoFrame).ThrowIfError("映像のフレームの準備");
+        var width = planes.Width;
+        var chromaWidth = planes.ChromaWidth;
+        for (var y = 0; y < planes.Height; y++)
+        {
+            planes.Luma.AsSpan(y * planes.LumaStride, width).CopyTo(new Span<byte>(_videoFrame->data[0] + (long)y * _videoFrame->linesize[0], width));
+        }
+
+        var format = (AVPixelFormat)_videoFrame->format;
+        for (var y = 0; y < planes.ChromaHeight; y++)
+        {
+            var row = planes.Chroma.AsSpan(y * planes.ChromaStride, chromaWidth * 2);
+            if (format == AVPixelFormat.AV_PIX_FMT_NV12)
+            {
+                row.CopyTo(new Span<byte>(_videoFrame->data[1] + (long)y * _videoFrame->linesize[1], chromaWidth * 2));
+            }
+            else
+            {
+                var u = _videoFrame->data[1] + (long)y * _videoFrame->linesize[1];
+                var v = _videoFrame->data[2] + (long)y * _videoFrame->linesize[2];
+                for (var x = 0; x < chromaWidth; x++)
+                {
+                    u[x] = row[x * 2];
+                    v[x] = row[x * 2 + 1];
+                }
+            }
+        }
+
+        SendVideoFrame(_videoFrames * _frameDuration);
+    }
+
+    /// <summary>
     /// 映像の 1 フレーム（premultiplied の BGRA）を、指定した表示時刻（ファイルの先頭からの秒）で書く。
     /// 可変フレームレートの動画を作るときに使う。時刻は前のフレームより後にすること（タイムベースの単位に切り捨てる）
     /// </summary>
@@ -174,6 +223,18 @@ public sealed unsafe class MediaWriter : IMediaFileWriter
             byte*[] source = [pixels];
             int[] stride = [image.Stride];
             ffmpeg.sws_scale(_scaler, source, stride, 0, image.Height, _videoFrame->data.ToArray(), _videoFrame->linesize.ToArray()).ThrowIfError("映像の変換");
+        }
+
+        SendVideoFrame(time);
+    }
+
+    // _videoFrame に入れた映像を、時刻 time（ファイルの先頭からの秒）でエンコーダーに送る
+    private void SendVideoFrame(Rational time)
+    {
+        var pts = Rational.Rescale(1, time, _videoTimeBase, Rounding.Down);
+        if (pts <= _lastVideoPts)
+        {
+            throw new ArgumentException($"映像の時刻が前のフレームより後ではありません（{time}）", nameof(time));
         }
 
         _videoFrame->pts = pts;

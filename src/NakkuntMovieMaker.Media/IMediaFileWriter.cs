@@ -9,6 +9,12 @@ public interface IMediaFileWriter : IDisposable
     /// <summary>映像の 1 フレーム（premultiplied の BGRA）を書く。大きさは設定と同じにすること</summary>
     void WriteVideo(BgraImage image);
 
+    /// <summary>
+    /// 映像の 1 フレームを、YUV の平面（NV12）で書く（GPU 版の書き出し。swscale を通さない）。行列と範囲は、書き出しの設定と同じにすること。
+    /// 既定では、BGRA にしてから書く
+    /// </summary>
+    void WriteVideo(VideoPlanes planes) => WriteVideo(YuvConversion.ToBgra(planes));
+
     /// <summary>音声（ステレオのインターリーブ、-1〜1）を書く</summary>
     void WriteAudio(ReadOnlySpan<float> stereo);
 

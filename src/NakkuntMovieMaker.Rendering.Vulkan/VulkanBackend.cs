@@ -141,7 +141,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         var linear = plan.Color.IsLinear;
         var background = linear ? LinearPremultiplied(plan.Background) : Premultiplied(plan.Background);
         var outputLut = plan.Color.Output;
-        var task = _scheduler.RunAsync(context => Record(context, operations, background, width, height, linear, outputLut), cancellationToken);
+        // NV12 は 2 × 2 の画素ごとに色差を持つので、縦横が偶数のときだけ作る
+        var yuv = request.Yuv is { } wanted && width % 2 == 0 && height % 2 == 0 ? wanted : null;
+        var task = _scheduler.RunAsync(context => Record(context, operations, background, width, height, linear, outputLut, yuv), cancellationToken);
         try
         {
             return task.GetAwaiter().GetResult();
@@ -454,7 +456,8 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     }
 
     // GPU のスレッドで：作業用の画像を背景で塗り、ノードを順に重ねて、BGRA にして読み戻す
-    private VulkanRenderResult Record(GpuCommandContext context, List<object> steps, Vector4 background, int width, int height, bool linear, ColorLut? output)
+    private VulkanRenderResult Record(
+        GpuCommandContext context, List<object> steps, Vector4 background, int width, int height, bool linear, ColorLut? output, YuvOutput? yuv)
     {
         _linear = linear;
         _sources.Collect(_scheduler.CompletedValue);
@@ -473,6 +476,11 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         foreach (var step in steps)
         {
             RecordStep(context, composite, work, step, width, height);
+        }
+
+        if (yuv is not null)
+        {
+            return RecordNv12(context, work, width, height, linear, output, yuv);
         }
 
         var readback = _allocator.CreateBuffer((ulong)(width * height * 4), VkBufferUsageFlags.StorageBuffer, GpuBufferKind.Readback);
@@ -496,7 +504,49 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
         convert.Dispatch(context, [work, readback, lut], parameters, ComputePipeline.Groups(width, 8), ComputePipeline.Groups(height, 8));
         GpuBarriers.AfterCompute(context);
-        return new VulkanRenderResult(context.Fence, readback, width, height);
+        return new VulkanRenderResult(context.Fence, readback, width, height, null);
+    }
+
+    // 書き出し用：作業用の画像を NV12 にして読み戻す（BGRA は作らない。swscale も使わない）
+    private VulkanRenderResult RecordNv12(GpuCommandContext context, GpuBuffer work, int width, int height, bool linear, ColorLut? output, YuvOutput yuv)
+    {
+        var layout = Nv12Layout.For(width, height, yuv);
+        var readback = _allocator.CreateBuffer((ulong)layout.Bytes, VkBufferUsageFlags.StorageBuffer, GpuBufferKind.Readback);
+        var (kr, kb) = YuvConversion.Coefficients(yuv.Matrix, height);
+        var full = yuv.Range == VideoColorRange.Full;
+        var parameters = new Nv12Params
+        {
+            Width = width,
+            Height = height,
+            LumaStride = layout.LumaStride,
+            ChromaOffset = layout.ChromaOffset,
+            ChromaStride = layout.ChromaStride,
+            EncodeSrgb = linear ? 1 : 0,
+            Kr = kr,
+            Kb = kb,
+            YOffset = full ? 0 : 16,
+            YScale = full ? 255 : 219,
+            CScale = full ? 255 : 224,
+        };
+        GpuBuffer lut;
+        if (output is not null)
+        {
+            lut = OutputLut(context, output);
+            parameters.UseLut = 1;
+            parameters.ShaperLength = output.Shaper.Length;
+            parameters.CubeSize = output.Cube.Size;
+            parameters.CubeOffset = output.Shaper.Length;
+            parameters.LutEncodeSrgb = output.EncodeSrgb ? 1 : 0;
+        }
+        else
+        {
+            lut = _emptyLut ??= CreateEmptyLut();
+        }
+
+        _shaders.Get("to_nv12", OutputBindings, sizeof(Nv12Params))
+            .Dispatch(context, [work, readback, lut], parameters, ComputePipeline.Groups((width + 3) / 4, 8), ComputePipeline.Groups(height / 2, 8));
+        GpuBarriers.AfterCompute(context);
+        return new VulkanRenderResult(context.Fence, readback, width, height, layout);
     }
 
     // ノード 1 つを、作業用の画像 work（出力と同じ大きさ）に重ねる
@@ -994,6 +1044,14 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct Nv12Params
+    {
+        public int Width, Height, LumaStride, ChromaOffset, ChromaStride, EncodeSrgb;
+        public int UseLut, ShaperLength, CubeSize, CubeOffset, LutEncodeSrgb;
+        public float Kr, Kb, YOffset, YScale, CScale;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     private struct YuvParams
     {
         public int Width, Height, LumaStride, ChromaOffset, ChromaStride, ChromaWidth, ChromaHeight, P010;
@@ -1010,7 +1068,21 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 }
 
 /// <summary>GPU で描いた結果。ReadBgra で GPU の完了を待って読み出す</summary>
-internal sealed class VulkanRenderResult(GpuFence fence, GpuBuffer buffer, int width, int height) : RenderResult
+/// <summary>読み戻す NV12 の並び（1 行のバイト数は 4 の倍数。輝度の後に色差を続けて置く）</summary>
+internal sealed record Nv12Layout(int LumaStride, int ChromaOffset, int ChromaStride, int ChromaHeight, YuvOutput Yuv)
+{
+    public long Bytes => ChromaOffset + (long)ChromaStride * ChromaHeight;
+
+    public static Nv12Layout For(int width, int height, YuvOutput yuv)
+    {
+        var lumaStride = (width + 3) & ~3;
+        var chromaStride = (((width + 1) / 2 * 2) + 3) & ~3;
+        return new Nv12Layout(lumaStride, lumaStride * height, chromaStride, (height + 1) / 2, yuv);
+    }
+}
+
+/// <summary>GPU で描いた結果。nv12 があれば、書き出し用の NV12 を読み戻す（BGRA は、そこから CPU で作る）</summary>
+internal sealed class VulkanRenderResult(GpuFence fence, GpuBuffer buffer, int width, int height, Nv12Layout? nv12) : RenderResult
 {
     private int _disposed;
 
@@ -1020,10 +1092,33 @@ internal sealed class VulkanRenderResult(GpuFence fence, GpuBuffer buffer, int w
 
     public override BgraImage ReadBgra()
     {
+        if (ReadPlanes() is { } planes)
+        {
+            return YuvConversion.ToBgra(planes);
+        }
+
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         fence.Wait();
         buffer.Invalidate();
         return new BgraImage(width, height, buffer.Span.ToArray());
+    }
+
+    public override VideoPlanes? ReadPlanes()
+    {
+        if (nv12 is null)
+        {
+            return null;
+        }
+
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        fence.Wait();
+        buffer.Invalidate();
+        var bytes = buffer.Span;
+        var luma = bytes[..nv12.ChromaOffset].ToArray();
+        var chroma = bytes.Slice(nv12.ChromaOffset, nv12.ChromaStride * nv12.ChromaHeight).ToArray();
+        var color = new VideoColorInfo(
+            VideoColorPrimaries.Bt709, VideoTransferCharacteristic.Bt709, nv12.Yuv.Matrix, nv12.Yuv.Range, VideoChromaLocation.Left);
+        return new VideoPlanes(VideoPlaneFormat.Nv12, width, height, luma, nv12.LumaStride, chroma, nv12.ChromaStride, color);
     }
 
     protected override void Dispose(bool disposing)

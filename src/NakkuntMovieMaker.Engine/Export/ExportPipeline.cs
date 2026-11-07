@@ -142,9 +142,16 @@ public sealed class ExportPipeline : IDisposable
         try
         {
             var workers = options.Workers > 0 ? options.Workers : _backend.Info.PreferredConcurrency;
-            var pending = new Queue<(long Frame, Task<BgraImage> Image)>();
+
+            // GPU 版で、描く大きさが出力と同じなら、GPU で NV12 にして受け取り、そのまま書く（swscale を通さない）
+            var tags = videoSettings.Color ?? VideoColorTags.Bt709;
+            var yuv = _backend.Info.Kind == RenderBackendKind.Vulkan && options.ExternalFfmpeg is null
+                && (int)Math.Round(format.Width * size.Scale) == size.Width && (int)Math.Round(format.Height * size.Scale) == size.Height
+                ? new YuvOutput((VideoMatrix)tags.Matrix, tags.FullRange ? VideoColorRange.Full : VideoColorRange.Limited)
+                : null;
+            var pending = new Queue<(long Frame, Task<ExportFrame> Image)>();
             FramePlan? previousPlan = null;
-            Task<BgraImage>? previousImage = null;
+            Task<ExportFrame>? previousImage = null;
             var next = start;
             var writtenSamples = 0L;
             for (var frame = start; frame < end; frame++)
@@ -155,7 +162,7 @@ public sealed class ExportPipeline : IDisposable
                     var plan = TimelineEvaluator.Evaluate(_scene, next, timeline: _timeline);
                     var image = plan == previousPlan && previousImage is not null
                         ? previousImage
-                        : Task.Run(() => Fit(_backend.Render(plan, _media, size.Scale, cancellationToken), size), cancellationToken);
+                        : Task.Run(() => RenderForExport(plan, size, yuv, cancellationToken), cancellationToken);
                     pending.Enqueue((next, image));
                     previousPlan = plan;
                     previousImage = image;
@@ -163,7 +170,15 @@ public sealed class ExportPipeline : IDisposable
                 }
 
                 var (_, rendered) = pending.Dequeue();
-                writer.WriteVideo(rendered.GetAwaiter().GetResult());
+                var exported = rendered.GetAwaiter().GetResult();
+                if (exported.Planes is { } planes)
+                {
+                    writer.WriteVideo(planes);
+                }
+                else
+                {
+                    writer.WriteVideo(exported.Image!);
+                }
 
                 // そのフレームの終わりまでの音を書く
                 var sampleEnd = TimeMath.FrameToSample(frame + 1, format.Fps, format.SampleRate) - firstSample;
@@ -215,6 +230,20 @@ public sealed class ExportPipeline : IDisposable
 
         return samples;
     }
+
+    // 書き出す 1 フレーム：yuv を指定して、GPU 版が NV12 を作れたら NV12、そうでなければ出力の大きさの BGRA
+    private ExportFrame RenderForExport(FramePlan plan, Output size, YuvOutput? yuv, CancellationToken cancellationToken)
+    {
+        using var result = _backend.Render(plan, _media, new RenderRequest(size.Scale, yuv), cancellationToken);
+        if (yuv is not null && result.ReadPlanes() is { } planes)
+        {
+            return new ExportFrame(null, planes);
+        }
+
+        return new ExportFrame(Fit(result.ReadBgra(), size), null);
+    }
+
+    private sealed record ExportFrame(BgraImage? Image, VideoPlanes? Planes);
 
     private BgraImage RenderFrame(long frame, Output size, CancellationToken cancellationToken) =>
         Fit(_backend.Render(TimelineEvaluator.Evaluate(_scene, frame, timeline: _timeline), _media, size.Scale, cancellationToken), size);
