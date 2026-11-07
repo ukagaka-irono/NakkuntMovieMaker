@@ -70,6 +70,112 @@
       ]
     }
   },
+  "slang": {
+    "_comment": "シェーダーのコンパイラ（slangc）。ビルドのときだけ使う道具なので、配布物には含めない。tools/fetch-native が、ビルドする PC の RID（hosts）の版を native/tools/<host-rid>/slang/ に展開する",
+    "version": "2026.21",
+    "license": "Apache-2.0 WITH LLVM-exception",
+    "hosts": [
+      {
+        "rid": "win-x64",
+        "url": "https://github.com/shader-slang/slang/releases/download/v2026.21/slang-2026.21-windows-x86_64.tar.gz",
+        "sha256": "d2f4a1547f38d050aa87168bfd7379ad71aaa0a063c317ab6f727e9d8d901628"
+      },
+      {
+        "rid": "linux-x64",
+        "url": "https://github.com/shader-slang/slang/releases/download/v2026.21/slang-2026.21-linux-x86_64-glibc-2.28.tar.gz",
+        "sha256": "7b8800e7115668bfb073456ada3b20fa40718d7be41e7beec7c46c31351ba569"
+      },
+      {
+        "rid": "osx-arm64",
+        "url": "https://github.com/shader-slang/slang/releases/download/v2026.21/slang-2026.21-macos-aarch64.tar.gz",
+        "sha256": "c3d3c959ba3e0c8fdb6c2a5cf6a471ed097ed19c41820af9fb21625779794fb2"
+      }
+    ]
+  },
+  "moltenVk": {
+    "_comment": "macOS で Vulkan を使うための実行時のライブラリ。tools/fetch-native が libMoltenVK.dylib と MoltenVK_icd.json を native/bin/osx-arm64/ に置く",
+    "version": "1.4.2",
+    "license": "Apache-2.0",
+    "rids": [
+      "osx-arm64"
+    ],
+    "url": "https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar",
+    "sha256": "f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e"
+  },
+  "vulkanHeaders": {
+    "_comment": "FFmpeg を --enable-vulkan でビルドするときのヘッダー（FFmpeg 9.0.2 の configure は 1.3.277 以上、Vulkan 1.4 の機能には 1.4.317 以上が要る）。ソースを native/downloads/src-vulkan-headers に展開する",
+    "version": "1.4.363",
+    "license": "Apache-2.0 OR MIT",
+    "rids": [
+      "win-x64",
+      "linux-x64"
+    ],
+    "url": "https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/vulkan-sdk-1.4.363.0.tar.gz",
+    "sha256": "4a078be12bef21cfebc09d878b77a63cff9d68f899254a0b00d0e37ef73e7f7e"
+  },
+  "ocio": {
+    "_comment": "OpenColorIO と、それが依存するライブラリのソース。tools/fetch-native が native/downloads/src-ocio-<name> に展開し、tools/build-native が静的ライブラリにして native/nmm_ocio に組み込む（OCIO_INSTALL_EXT_PACKAGES=NONE で、ビルド中には何もダウンロードしない）。licenseFile は配布物の licenses/<name>-LICENSE.txt にするファイル",
+    "version": "2.5.2",
+    "license": "BSD-3-Clause",
+    "sources": [
+      {
+        "name": "opencolorio",
+        "version": "2.5.2",
+        "license": "BSD-3-Clause",
+        "url": "https://github.com/AcademySoftwareFoundation/OpenColorIO/releases/download/v2.5.2/OpenColorIO-2.5.2.tar.gz",
+        "sha256": "cb8b0ae38fa523be8f899a0b2d6b8ca8cbcda7bc4322c91d1ac2b6b2a0082474",
+        "licenseFile": "LICENSE"
+      },
+      {
+        "name": "expat",
+        "version": "2.10.0",
+        "license": "MIT",
+        "url": "https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.xz",
+        "sha256": "c624ba2998fc65df1163a49641ff3f9ab73138b11641d92c86bee0fb01b1bc7f",
+        "licenseFile": "COPYING"
+      },
+      {
+        "name": "yaml-cpp",
+        "version": "0.8.0",
+        "license": "MIT",
+        "url": "https://github.com/jbeder/yaml-cpp/archive/refs/tags/0.8.0.tar.gz",
+        "sha256": "fbe74bbdcee21d656715688706da3c8becfd946d92cd44705cc6098bb23b3a16",
+        "licenseFile": "LICENSE"
+      },
+      {
+        "name": "imath",
+        "version": "3.1.12",
+        "license": "BSD-3-Clause",
+        "url": "https://github.com/AcademySoftwareFoundation/Imath/releases/download/v3.1.12/Imath-3.1.12.tar.gz",
+        "sha256": "cb8ca9ca77ac4338ebbee911fc90c886011ac5b00088630bacf8ef6c6e522f0a",
+        "licenseFile": "LICENSE.md"
+      },
+      {
+        "name": "pystring",
+        "version": "1.1.4",
+        "license": "BSD-3-Clause",
+        "url": "https://github.com/imageworks/pystring/archive/refs/tags/v1.1.4.tar.gz",
+        "sha256": "49da0fe2a049340d3c45cce530df63a2278af936003642330287b68cefd788fb",
+        "licenseFile": "LICENSE"
+      },
+      {
+        "name": "minizip-ng",
+        "version": "4.0.10",
+        "license": "Zlib",
+        "url": "https://github.com/zlib-ng/minizip-ng/archive/refs/tags/4.0.10.tar.gz",
+        "sha256": "c362e35ee973fa7be58cc5e38a4a6c23cc8f7e652555daf4f115a9eb2d3a6be7",
+        "licenseFile": "LICENSE"
+      },
+      {
+        "name": "zlib",
+        "version": "1.3.2",
+        "license": "Zlib",
+        "url": "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz",
+        "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+        "licenseFile": "LICENSE"
+      }
+    ]
+  },
   "fonts": {
     "name": "BIZ UDPGothic",
     "license": "OFL-1.1",

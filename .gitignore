@@ -10,10 +10,11 @@ BenchmarkDotNet.Artifacts/
 # IDE（Rider・IntelliJ）の設定
 .idea/
 
-# ネイティブライブラリ（tools/fetch-native で取得し、tools/build-native でビルドする）
+# ネイティブライブラリとビルドに使う道具（tools/fetch-native で取得し、tools/build-native でビルドする）
 native/bin/
 native/build/
 native/downloads/
+native/tools/
 
 # プロジェクトのキャッシュと自動保存
 .nmm/
