@@ -1,5 +1,6 @@
 using NakkuntMovieMaker.Rendering;
 using NakkuntMovieMaker.Rendering.Skia;
+using NakkuntMovieMaker.Rendering.Vulkan;
 using NakkuntMovieMaker.Text;
 
 namespace NakkuntMovieMaker.Engine;
@@ -42,12 +43,29 @@ public static class RenderBackendFactory
     public static RenderBackendSelection Create(RendererOptions? options = null, TextLayoutCache? layouts = null)
     {
         options ??= RendererOptions.Default;
-        var cpu = new SkiaCpuBackend(layouts: layouts);
-        return options.Preference switch
+
+        // 自動のときに GPU を選ぶのは、GPU 版の自己テストを入れてから（M2 の手順 C-14）。それまでは、指定したときだけ使う
+        if (options.Preference == RendererPreference.Vulkan)
         {
-            // GPU 版（Vulkan）は M2 の手順 C で入れる。それまでは CPU を使う
-            RendererPreference.Vulkan => new RenderBackendSelection(cpu, "GPU（Vulkan）での描画は、まだ使えません。CPU で描きます"),
-            _ => new RenderBackendSelection(cpu, null),
-        };
+            try
+            {
+                var device = VulkanDevice.Create(new VulkanDeviceOptions(options.Device));
+                try
+                {
+                    return new RenderBackendSelection(new VulkanBackend(device, layouts, ownsDevice: true), null);
+                }
+                catch
+                {
+                    device.Dispose();
+                    throw;
+                }
+            }
+            catch (VulkanException ex)
+            {
+                return new RenderBackendSelection(new SkiaCpuBackend(layouts: layouts), $"GPU（Vulkan）で描けません（{ex.Message}）。CPU で描きます");
+            }
+        }
+
+        return new RenderBackendSelection(new SkiaCpuBackend(layouts: layouts), null);
     }
 }

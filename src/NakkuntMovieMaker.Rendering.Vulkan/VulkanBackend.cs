@@ -1,0 +1,347 @@
+using System.Numerics;
+using System.Runtime.InteropServices;
+using NakkuntMovieMaker.Core.Model;
+using NakkuntMovieMaker.Media;
+using NakkuntMovieMaker.Rendering.Skia;
+using NakkuntMovieMaker.Text;
+using Vortice.Vulkan;
+
+namespace NakkuntMovieMaker.Rendering.Vulkan;
+
+/// <summary>
+/// Vulkan での GPU 描画。作業用の画像（RGBA16F・premultiplied）に、ノードを下から順に重ねて、最後に BGRA（8 ビット）にして読み戻す。
+/// 素材の画像（静止画・動画のフレーム）は GPU で合成する。まだ GPU で描けないもの（文字・図形・立ち絵・エフェクト・トランジション）は、
+/// そのノードだけを CPU 版（Skia）で透明な画像に描いてから重ねる（M2 の手順 C-13・D で、GPU に移していく）。
+/// 複数のスレッドから同時に呼んでよい（GPU への送信は GpuScheduler の 1 本のスレッドが行う）
+/// </summary>
+public sealed unsafe class VulkanBackend : IRenderBackend
+{
+    private const VkImageUsageFlags WorkUsage = VkImageUsageFlags.Storage | VkImageUsageFlags.TransferDst | VkImageUsageFlags.TransferSrc;
+    private static readonly GpuBindingKind[] CompositeBindings = [GpuBindingKind.StorageImage, GpuBindingKind.StorageBuffer];
+    private static readonly GpuBindingKind[] ConvertBindings = [GpuBindingKind.StorageImage, GpuBindingKind.StorageBuffer];
+
+    private readonly VulkanDevice _device;
+    private readonly bool _ownsDevice;
+    private readonly GpuAllocator _allocator;
+    private readonly GpuScheduler _scheduler;
+    private readonly ShaderLibrary _shaders;
+    private readonly TexturePool _pool;
+    private readonly GpuCache<BgraImage> _sources;
+    private readonly SkiaCpuBackend _cpu;
+    private bool _disposed;
+
+    /// <param name="device">使う GPU（null なら選んで作る。そのときは破棄するときに一緒に破棄する）</param>
+    /// <param name="layouts">文字の配置のキャッシュ（大きさを測る処理と共有するとき）</param>
+    /// <exception cref="VulkanException">GPU を使えない</exception>
+    /// <param name="ownsDevice">渡した device も、破棄するときに一緒に破棄するか</param>
+    public VulkanBackend(VulkanDevice? device = null, TextLayoutCache? layouts = null, bool ownsDevice = false, string? pipelineCachePath = null)
+    {
+        _ownsDevice = device is null || ownsDevice;
+        _device = device ?? VulkanDevice.Create();
+        try
+        {
+            _allocator = new GpuAllocator(_device);
+            _scheduler = new GpuScheduler(_device);
+            _shaders = new ShaderLibrary(_device, pipelineCachePath);
+            _pool = new TexturePool(_allocator, _allocator.BudgetBytes / 4);
+            _sources = new GpuCache<BgraImage>(_allocator.BudgetBytes / 2);
+            _cpu = new SkiaCpuBackend(layouts: layouts);
+        }
+        catch
+        {
+            if (_ownsDevice)
+            {
+                _device.Dispose();
+            }
+
+            throw;
+        }
+
+        Info = new RenderBackendInfo(RenderBackendKind.Vulkan, $"Vulkan（{_device.Info.Name}）", _device.Info.Name, PreferredConcurrency: 3);
+    }
+
+    public RenderBackendInfo Info { get; }
+
+    public VulkanDevice Device => _device;
+
+    public RenderResult Render(FramePlan plan, IMediaSource media, RenderRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(media);
+        ArgumentNullException.ThrowIfNull(request);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var scale = request.Scale;
+        if (!(scale > 0))
+        {
+            throw new ArgumentOutOfRangeException(nameof(request), "倍率は 0 より大きくしてください");
+        }
+
+        // CPU 版と同じ大きさにする
+        var width = Math.Max(1, (int)Math.Round(plan.Width * scale));
+        var height = Math.Max(1, (int)Math.Round(plan.Height * scale));
+        var output = Matrix3x2.CreateScale((float)(width / (double)plan.Width), (float)(height / (double)plan.Height));
+
+        // 素材を取り出す・CPU で描くのは、呼び出したスレッドで行う（GPU のスレッドを待たせない）
+        var operations = new List<Operation>();
+        foreach (var node in plan.Nodes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Prepare(node, plan, media, output, width, height, scale) is { } operation)
+            {
+                operations.Add(operation);
+            }
+        }
+
+        var background = Premultiplied(plan.Background);
+        var task = _scheduler.RunAsync(context => Record(context, operations, background, width, height), cancellationToken);
+        return task.GetAwaiter().GetResult();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _scheduler.Dispose();
+        _sources.Dispose();
+        _pool.Dispose();
+        _shaders.Dispose();
+        _allocator.Dispose();
+        _cpu.Dispose();
+        if (_ownsDevice)
+        {
+            _device.Dispose();
+        }
+    }
+
+    // ノードを、GPU で重ねる処理にする。GPU で描けないものは CPU で描いた画像にする
+    private Operation? Prepare(RenderNode node, FramePlan plan, IMediaSource media, Matrix3x2 output, int width, int height, double scale)
+    {
+        if (node is DrawNode { Effects.IsEmpty: true, Content: ImageContent or VideoFrameContent } draw)
+        {
+            return PrepareImage(draw, media, output, width, height);
+        }
+
+        // まだ GPU で描けないもの：そのノードだけを透明な画像に描き、合成モードと不透明度は GPU で重ねるときに付ける
+        var (alone, blend, opacity) = node switch
+        {
+            DrawNode d => ((RenderNode)(d with { Blend = BlendMode.Normal, Opacity = 1 }), d.Blend, Round(d.Opacity)),
+            _ => (node, BlendMode.Normal, 1f),
+        };
+        var layer = _cpu.Render(new FramePlan(plan.Width, plan.Height, RgbaColor.Transparent, [alone]), media, scale);
+        var full = new Rect(0, 0, width, height);
+        return new Operation(layer, Owned: true, Matrix3x2.Identity, full, new SourceRect(0, 0, width, height), opacity, blend, Antialias: false, new Region(0, 0, width, height));
+    }
+
+    // 素材を切り抜き、残った部分の中心をローカル座標の原点に置いて描く（SkiaCpuBackend.ImageContent と同じ）
+    private static Operation? PrepareImage(DrawNode node, IMediaSource media, Matrix3x2 output, int width, int height)
+    {
+        var matrix = node.Transform * output;
+        var hint = Math.Max(Math.Sqrt(matrix.M11 * matrix.M11 + matrix.M12 * matrix.M12), Math.Sqrt(matrix.M21 * matrix.M21 + matrix.M22 * matrix.M22));
+        var source = node.Content switch
+        {
+            VideoFrameContent video => media.GetVideoFrame(video.Asset, video.SourceTime, hint),
+            ImageContent picture => media.GetImage(picture.Asset, hint),
+            _ => null,
+        };
+        if (source is null || !Matrix3x2.Invert(matrix, out var inverse))
+        {
+            return null;
+        }
+
+        var crop = node.Crop;
+        var visibleWidth = source.Width - crop.Left - crop.Right;
+        var visibleHeight = source.Height - crop.Top - crop.Bottom;
+        if (visibleWidth <= 0 || visibleHeight <= 0)
+        {
+            return null;
+        }
+
+        var image = source.Image;
+        var ratioX = image.Width / (double)source.Width;
+        var ratioY = image.Height / (double)source.Height;
+        var left = Math.Clamp((int)Math.Round(crop.Left * ratioX), 0, image.Width);
+        var top = Math.Clamp((int)Math.Round(crop.Top * ratioY), 0, image.Height);
+        var right = Math.Clamp((int)Math.Round((source.Width - crop.Right) * ratioX), 0, image.Width);
+        var bottom = Math.Clamp((int)Math.Round((source.Height - crop.Bottom) * ratioY), 0, image.Height);
+        if (right <= left || bottom <= top)
+        {
+            return null;
+        }
+
+        var destination = new Rect((float)(-visibleWidth / 2), (float)(-visibleHeight / 2), (float)visibleWidth, (float)visibleHeight);
+        if (Bounds(destination, matrix, width, height) is not { } region)
+        {
+            return null;
+        }
+
+        var opacity = node.Opacity < 1 || node.Blend != BlendMode.Normal ? Round(node.Opacity) : 1f;
+        var owned = node.Content is VideoFrameContent;
+        return new Operation(image, owned, inverse, destination, new SourceRect(left, top, right - left, bottom - top), opacity, node.Blend, Antialias: true, region);
+    }
+
+    // GPU のスレッドで：作業用の画像を背景で塗り、ノードを順に重ねて、BGRA にして読み戻す
+    private VulkanRenderResult Record(GpuCommandContext context, List<Operation> operations, Vector4 background, int width, int height)
+    {
+        var api = context.Device.DeviceApi;
+        _sources.Collect(_scheduler.CompletedValue);
+        var work = _pool.Rent(width, height, VkFormat.R16G16B16A16Sfloat, WorkUsage);
+        GpuBarriers.Transition(context, work, VkImageLayout.General);
+        var clear = new VkClearColorValue(background.X, background.Y, background.Z, background.W);
+        var range = new VkImageSubresourceRange(VkImageAspectFlags.Color, 0, 1, 0, 1);
+        api.vkCmdClearColorImage(context.CommandBuffer, work.Image, VkImageLayout.General, &clear, 1, &range);
+        GpuBarriers.Transition(context, work, VkImageLayout.General);
+
+        var composite = _shaders.Get("composite", CompositeBindings, sizeof(CompositeParams));
+        foreach (var operation in operations)
+        {
+            var source = SourceBuffer(context, operation);
+            var region = operation.Region;
+            var parameters = new CompositeParams
+            {
+                Ax = operation.Inverse.M11,
+                Ay = operation.Inverse.M12,
+                Bx = operation.Inverse.M21,
+                By = operation.Inverse.M22,
+                Cx = operation.Inverse.M31,
+                Cy = operation.Inverse.M32,
+                Left = operation.Destination.Left,
+                Top = operation.Destination.Top,
+                Width = operation.Destination.Width,
+                Height = operation.Destination.Height,
+                SourceX = operation.Source.X,
+                SourceY = operation.Source.Y,
+                SourceWidth = operation.Source.Width,
+                SourceHeight = operation.Source.Height,
+                Stride = operation.Image.Width,
+                OriginX = region.X,
+                OriginY = region.Y,
+                RegionWidth = region.Width,
+                RegionHeight = region.Height,
+                Opacity = operation.Opacity,
+                Blend = (int)operation.Blend,
+                Antialias = operation.Antialias ? 1 : 0,
+            };
+            composite.Dispatch(context, [work, source], parameters, ComputePipeline.Groups(region.Width, 8), ComputePipeline.Groups(region.Height, 8));
+            GpuBarriers.AfterCompute(context);
+        }
+
+        var readback = _allocator.CreateBuffer((ulong)(width * height * 4), VkBufferUsageFlags.StorageBuffer, GpuBufferKind.Readback);
+        var convert = _shaders.Get("to_bgra8", ConvertBindings, sizeof(ConvertParams));
+        convert.Dispatch(context, [work, readback], new ConvertParams { Width = width, Height = height }, ComputePipeline.Groups(width, 8), ComputePipeline.Groups(height, 8));
+        GpuBarriers.AfterCompute(context);
+        _pool.Return(context, work);
+        return new VulkanRenderResult(context.Fence, readback, width, height);
+    }
+
+    // 素材の画素を GPU のバッファーにする。静止画は覚えておき、動画のフレームと CPU で描いた画像は、この仕事が終わったら捨てる
+    private GpuBuffer SourceBuffer(GpuCommandContext context, Operation operation)
+    {
+        if (!operation.Owned && _sources.TryGet<GpuBuffer>(operation.Image, context.Value, out var cached))
+        {
+            return cached;
+        }
+
+        var pixels = operation.Image.Pixels;
+        var buffer = _allocator.CreateBuffer((ulong)pixels.Length, VkBufferUsageFlags.StorageBuffer, GpuBufferKind.Upload);
+        pixels.CopyTo(buffer.Span);
+        buffer.Flush();
+        if (operation.Owned)
+        {
+            context.OnCompleted(buffer.Dispose);
+        }
+        else
+        {
+            _sources.Add(operation.Image, buffer, buffer.Bytes, context.Value);
+        }
+
+        return buffer;
+    }
+
+    // 四角形を変換した先を囲む、出力の中の画素の範囲（縁のアンチエイリアスの分を足す）。出力の外なら null
+    private static Region? Bounds(Rect rect, Matrix3x2 matrix, int width, int height)
+    {
+        Span<Vector2> corners =
+        [
+            Vector2.Transform(new Vector2(rect.Left, rect.Top), matrix),
+            Vector2.Transform(new Vector2(rect.Left + rect.Width, rect.Top), matrix),
+            Vector2.Transform(new Vector2(rect.Left, rect.Top + rect.Height), matrix),
+            Vector2.Transform(new Vector2(rect.Left + rect.Width, rect.Top + rect.Height), matrix),
+        ];
+        var min = Vector2.Min(Vector2.Min(corners[0], corners[1]), Vector2.Min(corners[2], corners[3]));
+        var max = Vector2.Max(Vector2.Max(corners[0], corners[1]), Vector2.Max(corners[2], corners[3]));
+        var x0 = Math.Max(0, (int)Math.Floor(min.X) - 1);
+        var y0 = Math.Max(0, (int)Math.Floor(min.Y) - 1);
+        var x1 = Math.Min(width, (int)Math.Ceiling(max.X) + 1);
+        var y1 = Math.Min(height, (int)Math.Ceiling(max.Y) + 1);
+        return x1 > x0 && y1 > y0 ? new Region(x0, y0, x1 - x0, y1 - y0) : null;
+    }
+
+    // 不透明度は、CPU 版（Skia の 8 ビットの不透明度）と同じく 1/255 の単位にする
+    private static float Round(double opacity) => (float)(Math.Round(Math.Clamp(opacity, 0, 1) * 255) / 255);
+
+    // 背景（straight alpha の 8 ビット）を premultiplied にする（Skia の Clear と同じく、8 ビットで四捨五入）
+    private static Vector4 Premultiplied(RgbaColor color)
+    {
+        static float Channel(byte value, byte alpha) => (float)((value * alpha + 127) / 255) / 255f;
+        return new Vector4(Channel(color.R, color.A), Channel(color.G, color.A), Channel(color.B, color.A), color.A / 255f);
+    }
+
+    private readonly record struct Rect(float Left, float Top, float Width, float Height);
+
+    private readonly record struct SourceRect(int X, int Y, int Width, int Height);
+
+    private readonly record struct Region(int X, int Y, int Width, int Height);
+
+    // GPU で重ねる処理：素材の画像（の一部）を、Destination（ローカル座標）に描く。Inverse はデバイスの座標 → ローカル座標
+    private sealed record Operation(
+        BgraImage Image, bool Owned, Matrix3x2 Inverse, Rect Destination, SourceRect Source, float Opacity, BlendMode Blend, bool Antialias, Region Region);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CompositeParams
+    {
+        public float Ax, Ay, Bx, By, Cx, Cy;
+        public float Left, Top, Width, Height;
+        public int SourceX, SourceY, SourceWidth, SourceHeight, Stride;
+        public int OriginX, OriginY, RegionWidth, RegionHeight;
+        public float Opacity;
+        public int Blend, Antialias, Padding;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ConvertParams
+    {
+        public int Width, Height;
+    }
+}
+
+/// <summary>GPU で描いた結果。ReadBgra で GPU の完了を待って読み出す</summary>
+internal sealed class VulkanRenderResult(GpuFence fence, GpuBuffer buffer, int width, int height) : RenderResult
+{
+    private int _disposed;
+
+    public override int Width => width;
+
+    public override int Height => height;
+
+    public override BgraImage ReadBgra()
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        fence.Wait();
+        buffer.Invalidate();
+        return new BgraImage(width, height, buffer.Span.ToArray());
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            // GPU がまだ書いているかもしれないので、終わるのを待ってから捨てる
+            fence.Wait();
+            buffer.Dispose();
+        }
+    }
+}
