@@ -38,14 +38,14 @@ public sealed record ItemOutline(ItemId Item, Matrix3x2 Transform, float Width, 
 public static class PreviewGeometry
 {
     /// <summary>描いたフレームの、アイテムごとの枠（下から順。トランジション中のアイテムも含む）</summary>
-    public static IReadOnlyList<ItemOutline> Outlines(FramePlan plan, SkiaCpuBackend backend, IMediaSource media)
+    public static IReadOnlyList<ItemOutline> Outlines(FramePlan plan, ContentMeasurer measurer, IMediaSource media)
     {
         var outlines = new List<ItemOutline>();
         void Visit(RenderNode? node)
         {
             switch (node)
             {
-                case DrawNode { Item: { } item } draw when backend.MeasureContent(draw, media, plan.Width, plan.Height) is var (width, height):
+                case DrawNode { Item: { } item } draw when measurer.Measure(draw, media, plan.Width, plan.Height) is var (width, height):
                     outlines.Add(new ItemOutline(item, draw.Transform, width, height));
                     break;
                 case TransitionNode transition:

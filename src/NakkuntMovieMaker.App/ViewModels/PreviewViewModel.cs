@@ -160,7 +160,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
     /// <summary>表示しているフレームのアイテムの枠</summary>
     public IReadOnlyList<ItemOutline> Outlines() =>
-        Plan is { } plan ? PreviewGeometry.Outlines(plan, _session.Backend, _session.Media) : [];
+        Plan is { } plan ? PreviewGeometry.Outlines(plan, _session.Measurer, _session.Media) : [];
 
     [RelayCommand]
     private void TogglePlay()

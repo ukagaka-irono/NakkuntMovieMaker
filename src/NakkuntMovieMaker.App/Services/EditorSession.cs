@@ -9,6 +9,7 @@ using NakkuntMovieMaker.Engine.Playback;
 using NakkuntMovieMaker.Engine.Tachie;
 using NakkuntMovieMaker.Media;
 using NakkuntMovieMaker.Rendering.Skia;
+using NakkuntMovieMaker.Text;
 using NakkuntMovieMaker.Voice;
 
 namespace NakkuntMovieMaker.App.Services;
@@ -102,6 +103,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
 
     /// <summary>プレビューの描画（素材の大きさを測るのにも使う）</summary>
     public SkiaCpuBackend Backend => _workspace!.Backend;
+
+    /// <summary>プレビュー上でアイテムの大きさを測る（描画と文字の配置のキャッシュを共有する）</summary>
+    public ContentMeasurer Measurer => _workspace!.Measurer;
 
     public PlaybackController Playback => _workspace!.Playback;
 
@@ -403,6 +407,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
             var project = session.Project;
             var folder = session.ProjectFolder;
             Cache = new MediaCache(Path.Combine(folder, ".nmm", "cache"));
+            var layouts = new TextLayoutCache();
+            Backend = new SkiaCpuBackend(layouts: layouts);
+            Measurer = new ContentMeasurer(layouts);
             Media = new ProjectMediaSource(project, folder, Cache);
             var timeline = new TimelineContext(project.Characters, new TachieLoader(folder), new ProjectLipSync(Media));
             Frames = new FrameScheduler(session.Scene, Backend, Media, timeline: timeline) { Scale = session.Settings.PreviewScale };
@@ -418,7 +425,9 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
 
         public MediaCache Cache { get; }
 
-        public SkiaCpuBackend Backend { get; } = new();
+        public SkiaCpuBackend Backend { get; }
+
+        public ContentMeasurer Measurer { get; }
 
         public ProjectMediaSource Media { get; }
 
