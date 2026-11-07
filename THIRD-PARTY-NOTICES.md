@@ -26,7 +26,7 @@ NakkuntMovieMaker 自体は MIT ライセンスです（[LICENSE](LICENSE)）。
 | MoltenVK（macOS だけ） | 1.4.2 | Apache-2.0 | [KhronosGroup/MoltenVK](https://github.com/KhronosGroup/MoltenVK)（公式のビルド済みのもの） |
 | Vulkan-Headers（Windows・Linux の FFmpeg に組み込み） | 1.4.363 | Apache-2.0 または MIT | [KhronosGroup/Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers)（ヘッダーだけ。FFmpeg を Vulkan 対応でビルドするときに使う） |
 | Vortice.Vulkan | 3.3.0 | MIT | [amerkoleci/Vortice.Vulkan](https://github.com/amerkoleci/Vortice.Vulkan)（Vulkan を .NET から呼ぶ部分） |
-| Vortice.VulkanMemoryAllocator | 1.8.0 | MIT | [amerkoleci/Vortice.Vulkan](https://github.com/amerkoleci/Vortice.Vulkan)（中のネイティブライブラリ `vma.dll`・`libvma` は、AMD の [VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)。MIT） |
+| Vortice.VulkanMemoryAllocator | 1.8.0 | MIT | [amerkoleci/Vortice.Vulkan](https://github.com/amerkoleci/Vortice.Vulkan)（中のネイティブライブラリ `vma.dll`・`libvma` は、AMD の [VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator) 3.4.0。MIT） |
 | BIZ UDPゴシック | Google Fonts の版 | SIL Open Font License 1.1 | [google/fonts](https://github.com/google/fonts/tree/main/ofl/bizudpgothic) |
 | SkiaSharp・HarfBuzzSharp | 3.119.4・8.3.1.3 | MIT（中の Skia は BSD-3-Clause、HarfBuzz は Old MIT） | [mono/SkiaSharp](https://github.com/mono/SkiaSharp) |
 | Avalonia | 12.1.5 | MIT | [AvaloniaUI/Avalonia](https://github.com/AvaloniaUI/Avalonia) |
@@ -34,7 +34,7 @@ NakkuntMovieMaker 自体は MIT ライセンスです（[LICENSE](LICENSE)）。
 | FFmpeg.AutoGen | 9.0.1.1 | LGPL-3.0 | [Ruslan-B/FFmpeg.AutoGen](https://github.com/Ruslan-B/FFmpeg.AutoGen) |
 | System.CommandLine | 2.0.14 | MIT | [dotnet/command-line-api](https://github.com/dotnet/command-line-api) |
 
-- FFmpeg と、FFmpeg に組み込んだ部品（上の表の「FFmpeg に組み込み」）・miniaudio・OpenColorIO と `nmm_ocio` に組み込んだ部品・MoltenVK・ColorfulTalk・BIZ UDPゴシックのライセンスの全文は、`tools/fetch-native`・`tools/build-native` が `native/bin/<rid>/licenses/` に置き、配布物にも同梱します。
+- FFmpeg と、FFmpeg に組み込んだ部品（上の表の「FFmpeg に組み込み」）・miniaudio・OpenColorIO と `nmm_ocio` に組み込んだ部品・MoltenVK・VulkanMemoryAllocator・ColorfulTalk・BIZ UDPゴシックのライセンスの全文は、`tools/fetch-native`・`tools/build-native` が `native/bin/<rid>/licenses/` に置き、配布物にも同梱します。
   ライセンスのファイルがない部品（nv-codec-headers・AMF のヘッダー）は、ヘッダーの先頭に書かれたライセンスを集めて置きます。
 - Windows の FFmpeg は MSYS2 の gcc でビルドし、libgcc・libstdc++ を静的にリンクしています。これらは GCC Runtime Library Exception により、表記や同梱の義務はありません。
 - FFmpeg は `--disable-autodetect` で、上の表の部品だけを組み込みます（GPL の部品と、GPL のライブラリを使う部品は含めません）。

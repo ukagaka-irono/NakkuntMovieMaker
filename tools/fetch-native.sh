@@ -146,6 +146,13 @@ if applies_to_rid '.vulkanHeaders'; then
   fi
 fi
 
+# VulkanMemoryAllocator のライセンス（ネイティブライブラリは NuGet の Vortice.VulkanMemoryAllocator に入っている）
+if fetch_archive vma "$(jq -r '.vma.version' "$deps")" "$(jq -r '.vma.licenseUrl' "$deps")" "$(jq -r '.vma.licenseSha256' "$deps")"; then
+  mkdir -p "$out_dir/licenses"
+  cp "$archive" "$out_dir/licenses/vma-LICENSE.txt"
+  echo "VulkanMemoryAllocator $(jq -r '.vma.version' "$deps") のライセンスを $out_dir/licenses に配置しました"
+fi
+
 # OpenColorIO と依存するライブラリのソース（どの RID でも同じソースを、別のフォルダーでビルドする）
 ocio_count="$(count_of '.ocio.sources')"
 for i in $(seq 0 $((ocio_count - 1))); do

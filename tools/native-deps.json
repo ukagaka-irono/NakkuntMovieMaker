@@ -113,6 +113,13 @@
     "url": "https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/vulkan-sdk-1.4.363.0.tar.gz",
     "sha256": "4a078be12bef21cfebc09d878b77a63cff9d68f899254a0b00d0e37ef73e7f7e"
   },
+  "vma": {
+    "_comment": "Vortice.VulkanMemoryAllocator 1.8.0（NuGet）に入っている VulkanMemoryAllocator のネイティブライブラリ（vma.dll・libvma）のライセンス。パッケージを作った Vortice.Vulkan のコミット b5f06ab の vk_mem_alloc.h（3.4.0）に合わせる。配布物の licenses/vma-LICENSE.txt にする",
+    "version": "3.4.0",
+    "license": "MIT",
+    "licenseUrl": "https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/v3.4.0/LICENSE.txt",
+    "licenseSha256": "52df2c03d6cfc9ffec13c9d3626c530fc9ce0cbe41d5ea3d10cd46edeb1aeb38"
+  },
   "ocio": {
     "_comment": "OpenColorIO と、それが依存するライブラリのソース。tools/fetch-native が native/downloads/src-ocio-<name> に展開し、tools/build-native が静的ライブラリにして native/nmm_ocio に組み込む（OCIO_INSTALL_EXT_PACKAGES=NONE で、ビルド中には何もダウンロードしない）。licenseFile は配布物の licenses/<name>-LICENSE.txt にするファイル",
     "version": "2.5.2",
