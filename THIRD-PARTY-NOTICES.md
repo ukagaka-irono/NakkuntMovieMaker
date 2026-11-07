@@ -16,6 +16,14 @@ NakkuntMovieMaker 自体は MIT ライセンスです（[LICENSE](LICENSE)）。
 | winpthreads（Windows の FFmpeg に組み込み） | 14.0.0（MSYS2 の版） | MIT・BSD-3-Clause | [MSYS2](https://packages.msys2.org/base/mingw-w64-winpthreads) の静的ライブラリ |
 | ColorfulTalk（旧版） | 1.0.0（コミット 5835079） | MIT | [ukagaka-irono/colorful-talk](https://github.com/ukagaka-irono/colorful-talk)（`tools/fetch-native` でソースを取得してビルド） |
 | miniaudio（`nmm_audio` に組み込み） | 0.11.25 | Unlicense または MIT No Attribution | [mackron/miniaudio](https://github.com/mackron/miniaudio) |
+| OpenColorIO（`nmm_ocio` に組み込み） | 2.5.2 | BSD-3-Clause（中に取り込まれた xxHash・SampleICC・argparse などは、同梱する `opencolorio-THIRD-PARTY.txt` のとおり） | [AcademySoftwareFoundation/OpenColorIO](https://github.com/AcademySoftwareFoundation/OpenColorIO)（ソースからビルド） |
+| Expat（`nmm_ocio` に組み込み） | 2.10.0 | MIT | [libexpat/libexpat](https://github.com/libexpat/libexpat)（ソースからビルド） |
+| yaml-cpp（`nmm_ocio` に組み込み） | 0.8.0 | MIT | [jbeder/yaml-cpp](https://github.com/jbeder/yaml-cpp)（ソースからビルド） |
+| Imath（`nmm_ocio` に組み込み） | 3.1.12 | BSD-3-Clause | [AcademySoftwareFoundation/Imath](https://github.com/AcademySoftwareFoundation/Imath)（ソースからビルド） |
+| pystring（`nmm_ocio` に組み込み） | 1.1.4 | zlib と同じ条件 | [imageworks/pystring](https://github.com/imageworks/pystring)（ソースからビルド） |
+| minizip-ng（`nmm_ocio` に組み込み） | 4.0.10 | zlib | [zlib-ng/minizip-ng](https://github.com/zlib-ng/minizip-ng)（ソースからビルド） |
+| zlib（`nmm_ocio` に組み込み） | 1.3.2 | zlib | [madler/zlib](https://github.com/madler/zlib)（ソースからビルド。FFmpeg の zlib とは別） |
+| MoltenVK（macOS だけ） | 1.4.2 | Apache-2.0 | [KhronosGroup/MoltenVK](https://github.com/KhronosGroup/MoltenVK)（公式のビルド済みのもの） |
 | BIZ UDPゴシック | Google Fonts の版 | SIL Open Font License 1.1 | [google/fonts](https://github.com/google/fonts/tree/main/ofl/bizudpgothic) |
 | SkiaSharp・HarfBuzzSharp | 3.119.4・8.3.1.3 | MIT（中の Skia は BSD-3-Clause、HarfBuzz は Old MIT） | [mono/SkiaSharp](https://github.com/mono/SkiaSharp) |
 | Avalonia | 12.1.5 | MIT | [AvaloniaUI/Avalonia](https://github.com/AvaloniaUI/Avalonia) |
@@ -23,13 +31,22 @@ NakkuntMovieMaker 自体は MIT ライセンスです（[LICENSE](LICENSE)）。
 | FFmpeg.AutoGen | 9.0.1.1 | LGPL-3.0 | [Ruslan-B/FFmpeg.AutoGen](https://github.com/Ruslan-B/FFmpeg.AutoGen) |
 | System.CommandLine | 2.0.14 | MIT | [dotnet/command-line-api](https://github.com/dotnet/command-line-api) |
 
-- FFmpeg と、FFmpeg に組み込んだ部品（上の表の「FFmpeg に組み込み」）・miniaudio・ColorfulTalk・BIZ UDPゴシックのライセンスの全文は、`tools/fetch-native`・`tools/build-native` が `native/bin/<rid>/licenses/` に置き、配布物にも同梱します。
+- FFmpeg と、FFmpeg に組み込んだ部品（上の表の「FFmpeg に組み込み」）・miniaudio・OpenColorIO と `nmm_ocio` に組み込んだ部品・MoltenVK・ColorfulTalk・BIZ UDPゴシックのライセンスの全文は、`tools/fetch-native`・`tools/build-native` が `native/bin/<rid>/licenses/` に置き、配布物にも同梱します。
   ライセンスのファイルがない部品（nv-codec-headers・AMF のヘッダー）は、ヘッダーの先頭に書かれたライセンスを集めて置きます。
 - Windows の FFmpeg は MSYS2 の gcc でビルドし、libgcc・libstdc++ を静的にリンクしています。これらは GCC Runtime Library Exception により、表記や同梱の義務はありません。
 - FFmpeg は `--disable-autodetect` で、上の表の部品だけを組み込みます（GPL の部品と、GPL のライブラリを使う部品は含めません）。
 - FFmpeg は共有ライブラリ（DLL・.so）のまま同梱し、利用者が差し替えられるようにしています（LGPL の条件）。
   GPL の部品を含む FFmpeg（x264 など）は同梱しません。
 - 版とハッシュは `tools/native-deps.json` と `Directory.Packages.props` で固定しています。
+
+- OpenColorIO と、それが依存するライブラリは静的ライブラリにして `nmm_ocio`（共有ライブラリ）に組み込みます。OCIO の構成ファイルは同梱せず、OCIO に組み込まれた ACES の構成を使います。
+
+## ビルドにだけ使うもの（配布物には含めない）
+
+| 名称 | 版 | ライセンス | 説明 |
+| --- | --- | --- | --- |
+| Slang（slangc） | 2026.21 | Apache-2.0 WITH LLVM-exception | シェーダーを SPIR-V にコンパイルする。[shader-slang/slang](https://github.com/shader-slang/slang) の公式のビルド済みのものを `tools/fetch-native` で取得する |
+| Vulkan-Headers | 1.4.363 | Apache-2.0 または MIT | FFmpeg を Vulkan 対応でビルドするときのヘッダー。[KhronosGroup/Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers) |
 
 ## 同梱しないもの
 

@@ -27,6 +27,16 @@ jobs:
         with:
           path: native/build/*-ffmpeg
           key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/native-deps.json', 'tools/build-ffmpeg.sh') }}
+          # native-deps.json のほかの部分だけが変わったときも、前のビルドを使えるようにする（版が違えば build-ffmpeg.sh がビルドし直す）
+          restore-keys: ffmpeg-${{ runner.os }}-${{ runner.arch }}-
+
+      # OpenColorIO と依存するライブラリも同じ（版とビルドの手順は tools/build-native の .stamp で確かめる）
+      - name: OpenColorIO のビルドのキャッシュ
+        uses: actions/cache@v5
+        with:
+          path: native/build/*-ocio
+          key: ocio-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/native-deps.json', 'native/nmm_ocio/deps/CMakeLists.txt') }}
+          restore-keys: ocio-${{ runner.os }}-${{ runner.arch }}-
 
       # Windows の FFmpeg は、ランナーに入っている MSYS2 の UCRT64 の gcc でビルドする
       - name: FFmpeg のビルドに使うものを入れる（Windows）

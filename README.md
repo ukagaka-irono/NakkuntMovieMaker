@@ -68,14 +68,15 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/)（`global.json` の版）
 - PowerShell 7（Windows）または bash（Linux・macOS）
-- CMake と C コンパイラ（`nmm_audio` のビルドに使います。Windows は Visual Studio の C++ ビルドツール）
+- CMake（3.20 以上）と C・C++ のコンパイラ（`nmm_audio`・`nmm_ocio` と、OpenColorIO とそれが依存するライブラリのビルドに使います。Windows は Visual Studio の C++ ビルドツール）
 - FFmpeg のビルドに使うもの（FFmpeg は GPL の部品を含まない構成で、ソースからビルドします）
   - Windows：[MSYS2](https://www.msys2.org/)（`C:\msys64`。ほかの場所なら環境変数 `MSYS2_ROOT` で指定）。MSYS2 のシェルで `pacman -S --needed make diffutils mingw-w64-ucrt-x86_64-{gcc,nasm,pkgconf,cmake,ninja,jq}` を実行して、必要なものを入れます
   - Linux：make・pkg-config・nasm・jq・zlib の開発用ファイル（Ubuntu なら `sudo apt install build-essential pkg-config nasm jq zlib1g-dev`）
   - macOS：Xcode のコマンドラインツールと pkgconf・jq（Homebrew）
 
 ```bash
-# フォントと、FFmpeg（LGPL 版）とその部品・ColorfulTalk のソースの取得（版とハッシュは tools/native-deps.json で固定）と、nmm_audio・ColorfulTalk・FFmpeg のビルド
+# フォントと、FFmpeg（LGPL 版）とその部品・ColorfulTalk・OpenColorIO とその依存のソース、シェーダーのコンパイラ（Slang）の取得（版とハッシュは tools/native-deps.json で固定）と、
+# nmm_audio・nmm_ocio（OpenColorIO）・ColorfulTalk・FFmpeg のビルド。OpenColorIO は初回だけ数分かかります
 pwsh tools/fetch-native.ps1      # Linux・macOS は ./tools/fetch-native.sh
 pwsh tools/build-native.ps1      # Linux・macOS は ./tools/build-native.sh
 
