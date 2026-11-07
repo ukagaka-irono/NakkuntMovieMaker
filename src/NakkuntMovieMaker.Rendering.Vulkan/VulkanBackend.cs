@@ -37,6 +37,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     private readonly ConcurrentDictionary<EffectKey, byte> _effectKnown = new();
     private long _gpuEffectNodes;
     private long _cpuLayers;
+    private long _gpuTransitionNodes;
     private readonly SkiaCpuBackend _cpu;
     private readonly ConcurrentDictionary<LayerKey, Layer?> _layers = new();
     private long _layerBytes;
@@ -77,6 +78,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
     /// <summary>エフェクトを GPU でかけたノードの数（これまでの合計。テストと計測用）</summary>
     public long GpuEffectNodes => Interlocked.Read(ref _gpuEffectNodes);
+
+    /// <summary>トランジションを GPU で描いたノードの数（これまでの合計。テストと計測用）</summary>
+    public long GpuTransitionNodes => Interlocked.Read(ref _gpuTransitionNodes);
 
     /// <summary>CPU で描いてから GPU で重ねたノードの数（これまでの合計。テストと計測用）</summary>
     public long CpuLayers => Interlocked.Read(ref _cpuLayers);
@@ -143,6 +147,15 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         if (node is DrawNode { Effects.IsEmpty: true, Content: ImageContent or VideoFrameContent } draw)
         {
             return PrepareImage(draw, media, output, width, height);
+        }
+
+        // トランジション：前後のアイテムを、それぞれ出力と同じ大きさの画像に GPU で描いてから、GPU で混ぜる
+        if (node is TransitionNode transition && GpuTransitions.Find(transition.Type) is { } processor)
+        {
+            Interlocked.Increment(ref _gpuTransitionNodes);
+            var from = transition.From is null ? null : Prepare(transition.From, plan, media, output, width, height, scale);
+            var to = transition.To is null ? null : Prepare(transition.To, plan, media, output, width, height, scale);
+            return new TransitionStep(processor, (float)Math.Clamp(transition.Progress, 0, 1), transition.Parameters, from, to, media);
         }
 
         if (node is DrawNode { Effects.IsEmpty: false } withEffects && GpuEffects.Supports(withEffects.Effects))
@@ -326,43 +339,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         var composite = _shaders.Get("composite", CompositeBindings, sizeof(CompositeParams));
         foreach (var step in steps)
         {
-            if (step is EffectStep effectStep)
-            {
-                CompositeEffect(context, composite, work, effectStep, width, height);
-                continue;
-            }
-
-            var operation = (Operation)step;
-            var source = SourceBuffer(context, operation);
-            var region = operation.Region;
-            var parameters = new CompositeParams
-            {
-                Ax = operation.Inverse.M11,
-                Ay = operation.Inverse.M12,
-                Bx = operation.Inverse.M21,
-                By = operation.Inverse.M22,
-                Cx = operation.Inverse.M31,
-                Cy = operation.Inverse.M32,
-                Left = operation.Destination.Left,
-                Top = operation.Destination.Top,
-                Width = operation.Destination.Width,
-                Height = operation.Destination.Height,
-                SourceX = operation.Source.X,
-                SourceY = operation.Source.Y,
-                SourceWidth = operation.Source.Width,
-                SourceHeight = operation.Source.Height,
-                Stride = operation.Image.Width,
-                OriginX = region.X,
-                OriginY = region.Y,
-                RegionWidth = region.Width,
-                RegionHeight = region.Height,
-                Opacity = operation.Opacity,
-                Blend = (int)operation.Blend,
-                Antialias = operation.Antialias ? 1 : 0,
-                TargetWidth = width,
-            };
-            composite.Dispatch(context, [work, source], parameters, ComputePipeline.Groups(region.Width, 8), ComputePipeline.Groups(region.Height, 8));
-            GpuBarriers.AfterCompute(context);
+            RecordStep(context, composite, work, step, width, height);
         }
 
         var readback = _allocator.CreateBuffer((ulong)(width * height * 4), VkBufferUsageFlags.StorageBuffer, GpuBufferKind.Readback);
@@ -370,6 +347,81 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         convert.Dispatch(context, [work, readback], new ConvertParams { Width = width, Height = height }, ComputePipeline.Groups(width, 8), ComputePipeline.Groups(height, 8));
         GpuBarriers.AfterCompute(context);
         return new VulkanRenderResult(context.Fence, readback, width, height);
+    }
+
+    // ノード 1 つを、作業用の画像 work（出力と同じ大きさ）に重ねる
+    private void RecordStep(GpuCommandContext context, ComputePipeline composite, GpuBuffer work, object step, int width, int height)
+    {
+        switch (step)
+        {
+            case EffectStep effectStep:
+                CompositeEffect(context, composite, work, effectStep, width, height);
+                break;
+            case TransitionStep transitionStep:
+                RecordTransition(context, composite, work, transitionStep, width, height);
+                break;
+            case Operation operation:
+                CompositeOperation(context, composite, work, operation, width);
+                break;
+        }
+    }
+
+    // トランジション：前後のアイテムを、それぞれ透明な画像に描いてから混ぜる（CPU 版の DrawTransition と同じ）
+    private void RecordTransition(GpuCommandContext context, ComputePipeline composite, GpuBuffer work, TransitionStep step, int width, int height)
+    {
+        var effects = new GpuEffectContext(context, _allocator, _shaders, step.Media);
+        var from = effects.CreateClearImage(0, 0, width, height, 1);
+        var to = effects.CreateClearImage(0, 0, width, height, 1);
+        effects.Release(from);
+        effects.Release(to);
+        if (step.From is not null)
+        {
+            RecordStep(context, composite, from.Buffer, step.From, width, height);
+        }
+
+        if (step.To is not null)
+        {
+            RecordStep(context, composite, to.Buffer, step.To, width, height);
+        }
+
+        // 出力の作業用の画像は、この仕事の終わりに捨てるので、ここでは包むだけ
+        var target = new GpuEffectImage(work, width, height, 0, 0, 1);
+        step.Processor.Draw(effects, target, from, to, step.Progress, step.Parameters);
+    }
+
+    // 素材の画像（の一部）を、変形・不透明度・合成モードを付けて重ねる
+    private void CompositeOperation(GpuCommandContext context, ComputePipeline composite, GpuBuffer work, Operation operation, int width)
+    {
+        var source = SourceBuffer(context, operation);
+        var region = operation.Region;
+        var parameters = new CompositeParams
+        {
+            Ax = operation.Inverse.M11,
+            Ay = operation.Inverse.M12,
+            Bx = operation.Inverse.M21,
+            By = operation.Inverse.M22,
+            Cx = operation.Inverse.M31,
+            Cy = operation.Inverse.M32,
+            Left = operation.Destination.Left,
+            Top = operation.Destination.Top,
+            Width = operation.Destination.Width,
+            Height = operation.Destination.Height,
+            SourceX = operation.Source.X,
+            SourceY = operation.Source.Y,
+            SourceWidth = operation.Source.Width,
+            SourceHeight = operation.Source.Height,
+            Stride = operation.Image.Width,
+            OriginX = region.X,
+            OriginY = region.Y,
+            RegionWidth = region.Width,
+            RegionHeight = region.Height,
+            Opacity = operation.Opacity,
+            Blend = (int)operation.Blend,
+            Antialias = operation.Antialias ? 1 : 0,
+            TargetWidth = width,
+        };
+        composite.Dispatch(context, [work, source], parameters, ComputePipeline.Groups(region.Width, 8), ComputePipeline.Groups(region.Height, 8));
+        GpuBarriers.AfterCompute(context);
     }
 
     // エフェクトをかけた結果を、変形・不透明度・合成モードを付けて重ねる（CPU 版と同じく、ローカル座標の範囲に、縁のアンチエイリアス付きで描く）
@@ -503,6 +555,8 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
     private sealed record EffectStep(
         DrawNode Node, Matrix3x2 Matrix, Matrix3x2 Inverse, EffectKey? Key, EffectSource? Raster, Func<EffectSource?> LateRaster, IMediaSource Media, float Opacity);
+
+    private sealed record TransitionStep(IGpuTransition Processor, float Progress, EffectParameters Parameters, object? From, object? To, IMediaSource Media);
 
     private sealed record LayerKey(RenderNode Node, double Scale, int SceneWidth, int SceneHeight);
 

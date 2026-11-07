@@ -47,12 +47,18 @@ public sealed class ParityTests : IDisposable
 
         var expected = _cpu.Render(scene.Plan, scene.Media, scene.Scale, TestContext.Current.CancellationToken);
         var effectNodes = gpu.GpuEffectNodes;
+        var transitionNodes = gpu.GpuTransitionNodes;
         var actual = gpu.Render(scene.Plan, scene.Media, scene.Scale, TestContext.Current.CancellationToken);
 
         // GPU 版があるエフェクトは、本当に GPU でかけたことも確かめる
         if (name.StartsWith("effect-", StringComparison.Ordinal) && GpuEffects.Find("nmm." + name["effect-".Length..]) is not null)
         {
             Assert.True(gpu.GpuEffectNodes > effectNodes, $"{name}: エフェクトを GPU でかけていません");
+        }
+
+        if (name.StartsWith("transition-", StringComparison.Ordinal))
+        {
+            Assert.True(gpu.GpuTransitionNodes > transitionNodes, $"{name}: トランジションを GPU で描いていません");
         }
 
         // 調べるとき：NMM_PARITY_DUMP にフォルダーを指定すると、両方の画像を PNG で書き出す
