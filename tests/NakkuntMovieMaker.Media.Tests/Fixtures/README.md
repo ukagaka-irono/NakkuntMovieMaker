@@ -1,7 +1,7 @@
 # テスト用の素材
 
 FFmpeg の `lavfi`（色・テストパターン・正弦波を生成する機能）で作った素材です。著作物を含まないので、自由に使えます。
-作り直すときは、次のコマンドを実行します（x264・libvpx・libmp3lame を含む FFmpeg が必要）。
+作り直すときは、次のコマンドを実行します（x264・x265・libvpx・libmp3lame を含む FFmpeg が必要。テストの素材を作るためだけに使い、アプリには同梱しない）。
 
 ```bash
 G="-hide_banner -loglevel error -y"
@@ -54,6 +54,29 @@ RGB (200, 60, 40) の単色を、BT.709・リミテッドレンジとしてタ�
 ffmpeg $G -f lavfi -i "color=c=0xC83C28:s=128x96:r=30:d=0.2" -vf "scale=out_color_matrix=bt709:out_range=tv" \
   -c:v libx264 -preset veryfast -crf 10 -pix_fmt yuv420p \
   -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv $O color-c83c28-bt709.mp4
+```
+
+次の 4 つも、同じ R'G'B' (200, 60, 40) を、それぞれの行列・範囲で YUV にした動画です（`VideoColorTests`）。
+タグは `setparams`（H.264）と x265 の設定（HEVC）で付けます。BT.601 は 720p にして、大きさからの推測（BT.709）ではなくタグが使われることを、
+BT.709 フルレンジは 128×96 にして、推測（BT.601）ではなくタグが使われることを確かめます。
+PQ の動画には HDR のメタデータ（マスタリングのディスプレイと、コンテンツの明るさ）を付けます。x265 で 2 回書き出すのは、
+1 回目では SEI にしか入らず、2 回目でコンテナ（MP4 の mdcv・clli）にも入るためです。
+
+```bash
+C="color=c=0xC83C28:r=30:d=0.2"
+
+# BT.601（SMPTE 170M）・リミテッド・1280×720
+ffmpeg $G -f lavfi -i "$C:s=1280x720"   -vf "scale=out_color_matrix=bt601:out_range=tv,setparams=range=tv:color_primaries=smpte170m:color_trc=smpte170m:colorspace=smpte170m"   -c:v libx264 -preset veryfast -crf 10 -pix_fmt yuv420p $O color-c83c28-bt601-720p.mp4
+
+# BT.709・フルレンジ・128×96
+ffmpeg $G -f lavfi -i "$C:s=128x96"   -vf "scale=out_color_matrix=bt709:out_range=pc,setparams=range=pc:color_primaries=bt709:color_trc=bt709:colorspace=bt709"   -c:v libx264 -preset veryfast -crf 10 -pix_fmt yuv420p $O color-c83c28-bt709-full.mp4
+
+# BT.2020・PQ・10 ビット（HEVC Main 10）。マスタリングのディスプレイは P3-D65・0.005〜1000cd/m²、MaxCLL 1000・MaxFALL 400
+ffmpeg $G -f lavfi -i "$C:s=128x96" -vf "scale=out_color_matrix=bt2020:out_range=tv,format=yuv420p10le"   -c:v libx265 -preset veryfast -crf 10   -x265-params "log-level=error:hdr10=1:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50):max-cll=1000,400:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc"   -tag:v hvc1 $O pq-sei.mp4
+ffmpeg $G -i pq-sei.mp4 -c:v libx265 -preset veryfast -crf 10 -x265-params log-level=error -tag:v hvc1 $O color-c83c28-bt2020-pq.mp4
+
+# BT.2020・HLG・10 ビット（HEVC Main 10）
+ffmpeg $G -f lavfi -i "$C:s=128x96" -vf "scale=out_color_matrix=bt2020:out_range=tv,format=yuv420p10le"   -c:v libx265 -preset veryfast -crf 10 -x265-params "log-level=error:colorprim=bt2020:transfer=arib-std-b67:colormatrix=bt2020nc"   -colorspace bt2020nc -color_primaries bt2020 -color_trc arib-std-b67 -color_range tv -tag:v hvc1 $O color-c83c28-bt2020-hlg.mp4
 ```
 
 ## 映像より遅れて始まる音声
