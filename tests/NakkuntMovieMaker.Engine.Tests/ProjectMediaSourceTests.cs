@@ -73,6 +73,26 @@ public sealed class ProjectMediaSourceTests : IDisposable
         Assert.All(Enumerable.Range(0, before.Pixels.Length / 4), i => Assert.InRange(after.Pixels[i * 4 + 1] - before.Pixels[i * 4 + 1], -12, 12));
     }
 
+    [Theory]
+    [InlineData("color-c83c28-bt709.mp4", false)]
+    [InlineData("color-c83c28-bt2020-pq.mp4", true)]
+    public void ConvertsHdrVideosAutomatically(string file, bool converted)
+    {
+        // 入力の色空間を指定しなければ、色のタグから決める。PQ の HDR はトーンマップし、BT.709 はそのまま描く
+        RequireFfmpeg();
+        RequireOcio();
+        var (media, asset) = Open(Fixture(file), AssetKind.Video);
+        var (plain, plainAsset) = Open(Fixture(file), AssetKind.Video, colorSpace: "sRGB Encoded Rec.709 (sRGB)");
+        using var a = media;
+        using var b = plain;
+
+        var automatic = media.GetVideoFrame(asset, Rational.Zero, 1)!.Image;
+        var untouched = plain.GetVideoFrame(plainAsset, Rational.Zero, 1)!.Image;
+
+        Assert.Null(media.InputColorError(asset));
+        Assert.Equal(converted, !automatic.Pixels.AsSpan().SequenceEqual(untouched.Pixels));
+    }
+
     [Fact]
     public void ReportsUnknownInputColorSpaces()
     {

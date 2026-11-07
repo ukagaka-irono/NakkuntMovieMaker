@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using NakkuntMovieMaker.Media;
 using NakkuntMovieMaker.Rendering.Color;
 
 namespace NakkuntMovieMaker.ColorManagement;
@@ -275,6 +276,17 @@ public sealed class ColorTransforms : IDisposable
         var canonical = config.CanonicalColorSpace(destination) ?? throw new OcioException($"色空間「{destination}」が構成「{config.Name}」にありません");
         return Transform(configName, config.Displays.Contains(canonical) ? SrgbDisplay : WorkingColorSpaces.Srgb, canonical);
     }
+
+    /// <summary>
+    /// 動画の色のタグから決めた入力の色空間の候補を、組み込みの構成の色空間の名前にする。変換しなくてよい（sRGB・BT.709）か、
+    /// 組み込みの構成に合う色空間がない（BT.2020 の SDR・HLG）ときは null（そのまま描く）
+    /// </summary>
+    public static string? AutomaticInput(InputColorSpace space) => space switch
+    {
+        InputColorSpace.DisplayP3 => "Display P3 - Display",
+        InputColorSpace.Rec2100Pq => "Rec.2100-PQ - Display",
+        _ => null,
+    };
 
     private const string SrgbDisplay = "sRGB - Display";
 

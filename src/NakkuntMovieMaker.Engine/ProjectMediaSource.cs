@@ -287,11 +287,12 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         return InputLut(asset) is { } lut ? image with { Image = ColorLutImage.Apply(lut, image.Image) } : image;
     }
 
-    // 素材の入力の色空間（Asset.ColorSpace）から作業用の sRGB への変換。指定がない・変換できないときは null（そのまま描く）
+    // 素材の入力の色空間（Asset.ColorSpace）から作業用の sRGB への変換。指定がなければ、動画の色のタグから決める
+    // （PQ の HDR・P3 の動画）。変換しなくてよい・変換できないときは null（そのまま描く）
     private ColorLut? InputLut(AssetId asset)
     {
         var project = _project;
-        if (!project.Assets.TryGetValue(asset, out var info) || info.ColorSpace is not { } space)
+        if (!project.Assets.TryGetValue(asset, out var info) || (info.ColorSpace ?? AutomaticInput(info)) is not { } space)
         {
             return null;
         }
@@ -316,6 +317,12 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
             }
         });
     }
+
+    // 動画の色のタグから決めた入力の色空間（OCIO の名前）。画像と、変換しなくてよい動画は null
+    private string? AutomaticInput(Asset asset) =>
+        asset.Kind == AssetKind.Video && PathOf(asset.Id) is { } path && Info(path)?.Video is { } video
+            ? ColorTransforms.AutomaticInput(video.Color.SuggestedInputColorSpace)
+            : null;
 
     // 色の変換が変わった素材の、変換した画像（覚えている画像と、変換の表）を捨てる
     private void ForgetConvertedImages(AssetId id)
