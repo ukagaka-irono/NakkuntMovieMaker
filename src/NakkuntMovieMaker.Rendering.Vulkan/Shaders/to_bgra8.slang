@@ -1,4 +1,6 @@
-// 作業用の画像（RGBA16F・premultiplied）を、読み戻すための premultiplied の BGRA（8 ビット）にする（0〜1 に収めて、四捨五入）
+// 作業用の画像（premultiplied・16 ビット浮動小数点）を、読み戻すための premultiplied の BGRA（8 ビット）にする（0〜1 に収めて、四捨五入）
+import work;
+
 struct Params
 {
     int width;
@@ -6,7 +8,7 @@ struct Params
 };
 
 [[vk::push_constant]] ConstantBuffer<Params> p;
-[[vk::binding(0, 0)]] [format("rgba16f")] RWTexture2D<float4> source;
+[[vk::binding(0, 0)]] RWStructuredBuffer<uint2> source;
 [[vk::binding(1, 0)]] RWStructuredBuffer<uint> output;
 
 uint unorm8(float value)
@@ -23,6 +25,7 @@ void main(uint3 id : SV_DispatchThreadID)
         return;
     }
 
-    float4 c = source[int2(id.xy)];
-    output[id.y * p.width + id.x] = unorm8(c.b) | (unorm8(c.g) << 8) | (unorm8(c.r) << 16) | (unorm8(c.a) << 24);
+    uint index = id.y * p.width + id.x;
+    float4 c = nmmUnpackWork(source[index]);
+    output[index] = unorm8(c.b) | (unorm8(c.g) << 8) | (unorm8(c.r) << 16) | (unorm8(c.a) << 24);
 }

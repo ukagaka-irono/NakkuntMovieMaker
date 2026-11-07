@@ -1,6 +1,7 @@
 // 素材の画像を、変形・切り抜き・不透明度・合成モードを付けて、作業用の画像（RGBA16F・premultiplied）に重ねる。
 // CPU 版（SkiaCpuBackend の DrawImage：線形の補間・縁のアンチエイリアス・Skia の合成の式）と同じ結果になるように計算する
 import common;
+import work;
 
 struct Params
 {
@@ -34,11 +35,11 @@ struct Params
     float opacity;
     int blend;
     int antialias;
-    int padding;
+    int targetWidth;
 };
 
 [[vk::push_constant]] ConstantBuffer<Params> p;
-[[vk::binding(0, 0)]] [format("rgba16f")] RWTexture2D<float4> target;
+[[vk::binding(0, 0)]] RWStructuredBuffer<uint2> target;
 [[vk::binding(1, 0)]] StructuredBuffer<uint> source;
 
 // premultiplied の BGRA（8 ビット）を 1 画素読む（範囲の外は端の画素）
@@ -101,7 +102,8 @@ void main(uint3 id : SV_DispatchThreadID)
     float u = (lx - p.left) / p.width * float(p.sourceWidth);
     float v = (ly - p.top) / p.height * float(p.sourceHeight);
     float4 s = sampleBilinear(u, v) * p.opacity;
-    float4 d = target[pixel];
+    uint index = uint(pixel.y * p.targetWidth + pixel.x);
+    float4 d = nmmUnpackWork(target[index]);
     float4 blended = nmmBlend(p.blend, s, d);
-    target[pixel] = lerp(d, blended, coverage);
+    target[index] = nmmPackWork(lerp(d, blended, coverage));
 }

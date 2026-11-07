@@ -10,7 +10,7 @@ using Vortice.Vulkan;
 namespace NakkuntMovieMaker.Rendering.Vulkan;
 
 /// <summary>
-/// Vulkan での GPU 描画。作業用の画像（RGBA16F・premultiplied）に、ノードを下から順に重ねて、最後に BGRA（8 ビット）にして読み戻す。
+/// Vulkan での GPU 描画。作業用の画像（premultiplied の RGBA を 16 ビット浮動小数点で持つバッファー）に、ノードを下から順に重ねて、最後に BGRA（8 ビット）にして読み戻す。
 /// 素材の画像（静止画・動画のフレーム）は GPU で合成する。まだ GPU で描けないもの（文字・図形・立ち絵・エフェクト・トランジション）は、
 /// そのノードだけを CPU 版（Skia）で透明な画像に描いてから重ねる（M2 の手順 C-13・D で、GPU に移していく）。
 /// 複数のスレッドから同時に呼んでよい（GPU への送信は GpuScheduler の 1 本のスレッドが行う）
@@ -20,9 +20,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     // CPU で描いたノードの画像を覚えておく量
     private const long LayerCacheBytes = 256L << 20;
 
-    private const VkImageUsageFlags WorkUsage = VkImageUsageFlags.Storage | VkImageUsageFlags.TransferDst | VkImageUsageFlags.TransferSrc;
-    private static readonly GpuBindingKind[] CompositeBindings = [GpuBindingKind.StorageImage, GpuBindingKind.StorageBuffer];
-    private static readonly GpuBindingKind[] ConvertBindings = [GpuBindingKind.StorageImage, GpuBindingKind.StorageBuffer];
+    private static readonly GpuBindingKind[] ClearBindings = [GpuBindingKind.StorageBuffer];
+    private static readonly GpuBindingKind[] CompositeBindings = [GpuBindingKind.StorageBuffer, GpuBindingKind.StorageBuffer];
+    private static readonly GpuBindingKind[] ConvertBindings = [GpuBindingKind.StorageBuffer, GpuBindingKind.StorageBuffer];
 
     private readonly VulkanDevice _device;
     private readonly bool _ownsDevice;
@@ -213,14 +213,15 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     // GPU のスレッドで：作業用の画像を背景で塗り、ノードを順に重ねて、BGRA にして読み戻す
     private VulkanRenderResult Record(GpuCommandContext context, List<Operation> operations, Vector4 background, int width, int height)
     {
-        var api = context.Device.DeviceApi;
         _sources.Collect(_scheduler.CompletedValue);
-        var work = _pool.Rent(width, height, VkFormat.R16G16B16A16Sfloat, WorkUsage);
-        GpuBarriers.Transition(context, work, VkImageLayout.General);
-        var clear = new VkClearColorValue(background.X, background.Y, background.Z, background.W);
-        var range = new VkImageSubresourceRange(VkImageAspectFlags.Color, 0, 1, 0, 1);
-        api.vkCmdClearColorImage(context.CommandBuffer, work.Image, VkImageLayout.General, &clear, 1, &range);
-        GpuBarriers.Transition(context, work, VkImageLayout.General);
+
+        // 作業用の画像は、どの GPU でも使えるようにバッファーにする（1 画素 8 バイト）。この仕事が終わったら捨てる
+        var work = _allocator.CreateBuffer((ulong)width * (ulong)height * 8, VkBufferUsageFlags.StorageBuffer, GpuBufferKind.DeviceLocal);
+        context.OnCompleted(work.Dispose);
+        var clear = _shaders.Get("clear", ClearBindings, sizeof(ClearParams));
+        var pixels = width * height;
+        clear.Dispatch(context, [work], new ClearParams { R = background.X, G = background.Y, B = background.Z, A = background.W, Count = pixels }, ComputePipeline.Groups(pixels, 256), 1);
+        GpuBarriers.AfterCompute(context);
 
         var composite = _shaders.Get("composite", CompositeBindings, sizeof(CompositeParams));
         foreach (var operation in operations)
@@ -251,6 +252,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
                 Opacity = operation.Opacity,
                 Blend = (int)operation.Blend,
                 Antialias = operation.Antialias ? 1 : 0,
+                TargetWidth = width,
             };
             composite.Dispatch(context, [work, source], parameters, ComputePipeline.Groups(region.Width, 8), ComputePipeline.Groups(region.Height, 8));
             GpuBarriers.AfterCompute(context);
@@ -260,7 +262,6 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         var convert = _shaders.Get("to_bgra8", ConvertBindings, sizeof(ConvertParams));
         convert.Dispatch(context, [work, readback], new ConvertParams { Width = width, Height = height }, ComputePipeline.Groups(width, 8), ComputePipeline.Groups(height, 8));
         GpuBarriers.AfterCompute(context);
-        _pool.Return(context, work);
         return new VulkanRenderResult(context.Fence, readback, width, height);
     }
 
@@ -362,7 +363,14 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         public int SourceX, SourceY, SourceWidth, SourceHeight, Stride;
         public int OriginX, OriginY, RegionWidth, RegionHeight;
         public float Opacity;
-        public int Blend, Antialias, Padding;
+        public int Blend, Antialias, TargetWidth;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ClearParams
+    {
+        public float R, G, B, A;
+        public int Count;
     }
 
     [StructLayout(LayoutKind.Sequential)]

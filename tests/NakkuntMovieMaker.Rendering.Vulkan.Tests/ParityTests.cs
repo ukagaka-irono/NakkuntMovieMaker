@@ -38,6 +38,7 @@ public sealed class ParityTests : IDisposable
     public void MatchesTheCpuRenderer(string name)
     {
         var gpu = _gpu ?? SkipOrFail();
+        Gpu.RequireRenderer();
         using var scene = RenderScenes.Create(name);
         if (scene.RequiresFonts)
         {

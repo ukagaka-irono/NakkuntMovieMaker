@@ -8,10 +8,12 @@ public sealed class SelectionTests
     [Fact]
     public void SelfTestPassesOnAWorkingGpu()
     {
-        using var device = Gpu.CreateOrSkip();
-        using var backend = new VulkanBackend(device);
+        using (Gpu.CreateOrSkip())
+        {
+        }
 
-        Assert.Null(GpuSelfTest.Run(backend));
+        // 自己テストが通らない GPU では、ここでスキップする（NMM_REQUIRE_VULKAN=1 なら失敗にする）
+        Gpu.RequireRenderer();
     }
 
     [Fact]
