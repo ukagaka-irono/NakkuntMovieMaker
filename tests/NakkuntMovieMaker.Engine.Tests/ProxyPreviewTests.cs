@@ -130,4 +130,51 @@ public sealed class ProxyPreviewTests : IDisposable
         Assert.Null(cache.FindProxy(source));
         Assert.False(media.IsUsingProxy(asset));
     }
+
+    [Fact]
+    public void UsesAnExistingProxyUnlessTurnedOff()
+    {
+        // 作ってあるプロキシは、小さい動画でも使う（自動で作らないだけ）。プレビューで切った・プロジェクトで使わないにしたら、元の素材を読む
+        RequireFfmpeg();
+        var (project, asset, source) = CreateProject(ProxyMode.LargeVideos);
+        var cache = new MediaCache(Path.Combine(_folder, ".nmm", "cache"));
+        ReplaceProxyWithRed(cache, source);
+        using var proxies = new ProxyQueue(cache);
+        using var media = new ProjectMediaSource(project, _folder, cache, proxies: proxies);
+
+        Assert.True(IsRed(media.GetVideoFrame(asset, Rational.Zero, 1)!.Image));
+        Assert.True(media.IsUsingProxy(asset));
+
+        media.UseProxies = false;
+        Assert.False(IsRed(media.GetVideoFrame(asset, Rational.Zero, 1)!.Image));
+        Assert.False(media.IsUsingProxy(asset));
+
+        media.UseProxies = true;
+        Assert.True(IsRed(media.GetVideoFrame(asset, Rational.Zero, 1)!.Image));
+        media.Update(project with { Proxies = new ProjectProxySettings(ProxyMode.Off) });
+        Assert.False(IsRed(media.GetVideoFrame(asset, Rational.Zero, 1)!.Image));
+        Assert.False(media.IsUsingProxy(asset));
+        Assert.True(media.HasProxy(asset));
+    }
+
+    [Fact]
+    public void DeletesTheProxyItIsReading()
+    {
+        // 読んでいるプロキシも、閉じてから消す。消したあとは、自動では作り直さない
+        RequireFfmpeg();
+        var (project, asset, source) = CreateProject();
+        var cache = new MediaCache(Path.Combine(_folder, ".nmm", "cache"));
+        var proxy = ReplaceProxyWithRed(cache, source);
+        using var proxies = new ProxyQueue(cache);
+        using var media = new ProjectMediaSource(project, _folder, cache, proxies: proxies);
+        Assert.True(IsRed(media.GetVideoFrame(asset, Rational.Zero, 1)!.Image));
+
+        Assert.True(media.DeleteProxy(asset));
+
+        Assert.False(File.Exists(proxy));
+        Assert.False(media.HasProxy(asset));
+        Assert.False(IsRed(media.GetVideoFrame(asset, Rational.Zero, 1)!.Image));
+        Assert.Empty(proxies.ActiveJobs);
+        Assert.False(media.DeleteProxy(asset)); // もうない
+    }
 }

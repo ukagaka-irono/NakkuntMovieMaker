@@ -29,6 +29,8 @@
                 </ControlTheme>
               </MenuItem.ItemContainerTheme>
             </MenuItem>
+            <MenuItem Header="プロキシを作る" Command="{Binding CreateProxyCommand}" />
+            <MenuItem Header="プロキシを消す" Command="{Binding DeleteProxyCommand}" />
             <Separator />
             <MenuItem Header="一覧から外す" Command="{Binding RemoveCommand}" />
           </ContextMenu>
@@ -49,8 +51,10 @@
                   <TextBlock Classes="secondary" Text="{Binding Details}" />
                 </StackPanel>
                 <TextBlock Classes="secondary" Text="{Binding ColorSpaceLabel}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasColorSpace}" />
+                <TextBlock Classes="secondary" Text="{Binding ProxyStatus}" IsVisible="{Binding HasProxyStatus}" />
                 <TextBlock Classes="warning" Text="ファイルが見つかりません" FontSize="{StaticResource SmallFontSize}" IsVisible="{Binding IsMissing}" />
                 <TextBlock Classes="warning" Text="{Binding ColorError}" FontSize="{StaticResource SmallFontSize}" IsVisible="{Binding HasColorError}" />
+                <TextBlock Classes="warning" Text="{Binding ProxyError}" FontSize="{StaticResource SmallFontSize}" IsVisible="{Binding HasProxyError}" />
               </StackPanel>
             </Grid>
           </DataTemplate>

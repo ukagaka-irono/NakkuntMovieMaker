@@ -197,6 +197,14 @@ public sealed class ProxyQueue : IDisposable
         return job;
     }
 
+    /// <summary>素材のプロキシを消す（作っている途中ならキャンセルする）。消したら true</summary>
+    /// <exception cref="IOException">プロキシを開いている</exception>
+    public bool Delete(string sourcePath)
+    {
+        Cancel(sourcePath);
+        return _cache.DeleteProxy(sourcePath, Settings);
+    }
+
     /// <summary>素材の仕事が待っている・作っているならキャンセルする</summary>
     public void Cancel(string sourcePath)
     {

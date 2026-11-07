@@ -44,8 +44,9 @@ public sealed partial class PreviewViewModel : ObservableObject
         ScaleChoice = ScaleChoices.FirstOrDefault(choice => choice.Scale == session.Settings.PreviewScale) ?? ScaleChoices[1];
         ShowGrid = session.Settings.ShowGrid;
         ShowSafeArea = session.Settings.ShowSafeArea;
+        UseProxies = session.Settings.UseProxiesInPreview;
         session.Changed += (_, _) => _dirty = true;
-        session.PreviewColorChanged += (_, _) => _dirty = true;
+        session.PreviewChanged += (_, _) => _dirty = true;
         session.ProjectOpened += (_, _) =>
         {
             Speed = 0;
@@ -113,6 +114,10 @@ public sealed partial class PreviewViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool ShowSafeArea { get; set; }
+
+    /// <summary>プレビューでプロキシを使う（プロジェクトのプロキシの設定に合う動画に）</summary>
+    [ObservableProperty]
+    public partial bool UseProxies { get; set; }
 
     /// <summary>再生位置（時:分:秒.フレーム）</summary>
     public string Timecode => FormatTimecode(_session.CurrentFrame, _session.Scene.Fps);
@@ -281,6 +286,8 @@ public sealed partial class PreviewViewModel : ObservableObject
         _session.Settings.ShowGrid = value;
         FrameShown?.Invoke(this, EventArgs.Empty);
     }
+
+    partial void OnUseProxiesChanged(bool value) => _session.SetUseProxies(value);
 
     partial void OnShowSafeAreaChanged(bool value)
     {

@@ -32,6 +32,22 @@ public sealed partial class AssetEntry(Asset asset, string fullPath) : Observabl
 
     public bool IsAudio => Asset.Kind == AssetKind.Audio;
 
+    public bool IsVideo => Asset.Kind == AssetKind.Video;
+
+    /// <summary>プロキシの状態（作成中・あり。なければ空）</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasProxyStatus))]
+    public partial string ProxyStatus { get; set; } = "";
+
+    public bool HasProxyStatus => ProxyStatus.Length > 0;
+
+    /// <summary>プロキシを作れなかった理由</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasProxyError))]
+    public partial string? ProxyError { get; set; }
+
+    public bool HasProxyError => ProxyError is not null;
+
     /// <summary>入力の色空間を指定していれば、その表示（自動なら空）</summary>
     public string ColorSpaceLabel => Asset.ColorSpace is { } space ? $"入力の色空間：{space}" : "";
 
@@ -64,7 +80,7 @@ public sealed partial class AssetEntry(Asset asset, string fullPath) : Observabl
 
 /// <summary>
 /// 素材の一覧（メディアプール）。ファイルの追加（ドラッグ＆ドロップを含む）、サムネイル、リンク切れの表示と場所の指定し直し、
-/// タイムラインへの配置、使っていない素材の削除、動画と画像の入力の色空間の指定
+/// タイムラインへの配置、使っていない素材の削除、動画と画像の入力の色空間の指定、動画のプロキシの状態と作る・消す
 /// </summary>
 public sealed partial class MediaPoolViewModel : ObservableObject
 {
@@ -75,6 +91,9 @@ public sealed partial class MediaPoolViewModel : ObservableObject
     private readonly IDialogService _dialogs;
     private readonly Dictionary<(AssetId, string), (Bitmap? Thumbnail, string Details)> _previews = [];
 
+    // プロキシを作れなかった素材（フルパス）と、その理由
+    private readonly Dictionary<string, string> _proxyFailures = new(PathComparer);
+
     public MediaPoolViewModel(EditorSession session, IDialogService dialogs)
     {
         _session = session;
@@ -83,15 +102,19 @@ public sealed partial class MediaPoolViewModel : ObservableObject
         session.ProjectOpened += (_, _) =>
         {
             _previews.Clear();
+            _proxyFailures.Clear();
             Refresh();
         };
+        session.ProxyJobChanged += (_, job) => Dispatcher.UIThread.Post(() => OnProxyJobChanged(job));
         Refresh();
     }
 
     public ObservableCollection<AssetEntry> Assets { get; } = [];
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(AddToTimelineCommand), nameof(RelinkCommand), nameof(RemoveCommand), nameof(SetInputColorSpaceCommand))]
+    [NotifyCanExecuteChangedFor(
+        nameof(AddToTimelineCommand), nameof(RelinkCommand), nameof(RemoveCommand), nameof(SetInputColorSpaceCommand), nameof(CreateProxyCommand),
+        nameof(DeleteProxyCommand))]
     public partial AssetEntry? Selected { get; set; }
 
     /// <summary>入力の色空間の候補（プロジェクトの OpenColorIO の構成の色空間。Name が null なら自動）</summary>
@@ -228,6 +251,81 @@ public sealed partial class MediaPoolViewModel : ObservableObject
 
     private bool HasPicture() => Selected is { IsAudio: false };
 
+    /// <summary>選んだ動画のプロキシを作る（プロジェクトのプロキシの設定に関わらず作る）</summary>
+    [RelayCommand(CanExecute = nameof(HasVideo))]
+    private void CreateProxy()
+    {
+        if (Selected is { } entry && _session.Media.CreateProxy(entry.Id) is { } job)
+        {
+            _proxyFailures.Remove(job.SourcePath);
+            entry.ProxyError = null;
+            entry.ProxyStatus = ProxyStatusOf(entry, job);
+        }
+    }
+
+    /// <summary>選んだ動画のプロキシを消す（作っている途中ならやめる）</summary>
+    [RelayCommand(CanExecute = nameof(HasVideo))]
+    private async Task DeleteProxyAsync()
+    {
+        if (Selected is not { } entry)
+        {
+            return;
+        }
+
+        try
+        {
+            _session.Media.DeleteProxy(entry.Id);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await _dialogs.ShowErrorAsync("プロキシを消せません", ex.Message);
+        }
+
+        _proxyFailures.Remove(Path.GetFullPath(entry.FullPath));
+        entry.ProxyError = null;
+        entry.ProxyStatus = ProxyStatusOf(entry, null);
+    }
+
+    private bool HasVideo() => Selected is { IsVideo: true, IsMissing: false };
+
+    private static StringComparer PathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    // プロキシの状態の表示。job は、その素材の今の仕事（なければ待っている・作っている仕事から探す）
+    private string ProxyStatusOf(AssetEntry entry, ProxyJob? job)
+    {
+        var path = Path.GetFullPath(entry.FullPath);
+        job ??= _session.Proxies.ActiveJobs.FirstOrDefault(active => PathComparer.Equals(active.SourcePath, path));
+        return job?.State switch
+        {
+            ProxyJobState.Queued => "プロキシ：順番を待っています",
+            ProxyJobState.Running => $"プロキシ：作っています（{job.Progress:0%}）",
+            _ => _session.Media.HasProxy(entry.Id) ? "プロキシ：あり" : "",
+        };
+    }
+
+    // プロキシの仕事の状態が変わった（UI のスレッドで呼ぶ）
+    private void OnProxyJobChanged(ProxyJob job)
+    {
+        if (_session.IsClosed)
+        {
+            return;
+        }
+
+        if (job.State == ProxyJobState.Failed)
+        {
+            _proxyFailures[job.SourcePath] = job.Error?.Message ?? "理由はわかりません";
+        }
+
+        foreach (var entry in Assets.Where(entry => entry.IsVideo && !entry.IsMissing && PathComparer.Equals(Path.GetFullPath(entry.FullPath), job.SourcePath)))
+        {
+            entry.ProxyStatus = ProxyStatusOf(entry, job.IsFinished ? null : job);
+            entry.ProxyError = ProxyErrorOf(entry);
+        }
+    }
+
+    private string? ProxyErrorOf(AssetEntry entry) =>
+        _proxyFailures.TryGetValue(Path.GetFullPath(entry.FullPath), out var reason) ? $"プロキシを作れません（{reason}）" : null;
+
     // 候補を、プロジェクトの構成の色空間にする（構成が変わったときだけ作り直す）
     private void RefreshInputColorSpaces()
     {
@@ -294,6 +392,11 @@ public sealed partial class MediaPoolViewModel : ObservableObject
             if (entry.IsMissing)
             {
                 entry.Details = "見つかりません";
+            }
+            else if (entry.IsVideo)
+            {
+                entry.ProxyStatus = ProxyStatusOf(entry, null);
+                entry.ProxyError = ProxyErrorOf(entry);
             }
             else if (_previews.TryGetValue((asset.Id, fullPath), out var preview))
             {

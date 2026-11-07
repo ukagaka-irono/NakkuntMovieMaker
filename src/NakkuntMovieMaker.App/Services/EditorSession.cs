@@ -116,8 +116,30 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
     /// <summary>描画の方式が変わった（GPU が使えなくなって CPU に切り替えたなど。描画のスレッドから呼ばれることがある）</summary>
     public event EventHandler? RendererChanged;
 
-    /// <summary>プレビューの色（プロジェクトの色の設定や、プレビューの表示の色空間）が変わった。プレビューは描き直す</summary>
-    public event EventHandler? PreviewColorChanged;
+    /// <summary>
+    /// プレビューの見た目に関わる設定（プレビューの表示の色空間・プロキシを使うか）が変わった。プレビューは描き直す
+    /// </summary>
+    public event EventHandler? PreviewChanged;
+
+    /// <summary>プレビューで使うプロキシを作る仕事</summary>
+    public ProxyQueue Proxies => _workspace!.Proxies;
+
+    /// <summary>プロキシを作る仕事が加わったか、状態か進み具合が変わった（作業しているスレッドで呼ばれる）</summary>
+    public event EventHandler<ProxyJob>? ProxyJobChanged;
+
+    /// <summary>プレビューでプロキシを使うかを変える（設定にも書く）</summary>
+    public void SetUseProxies(bool use)
+    {
+        _settings.UseProxiesInPreview = use;
+        if (_workspace is null || Media.UseProxies == use)
+        {
+            return;
+        }
+
+        Media.UseProxies = use;
+        Frames.Invalidate([DirtyRange.Everything]);
+        PreviewChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>設定のプレビューの表示の色空間を変えたあとに呼ぶ（プレビューを新しい変換で描き直す）</summary>
     public void RefreshPreviewColor()
@@ -128,7 +150,7 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
         }
 
         Frames.SetColor(PreviewColor(Project, _settings));
-        PreviewColorChanged?.Invoke(this, EventArgs.Empty);
+        PreviewChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>プレビュー上でアイテムの大きさを測る（描画と文字の配置のキャッシュを共有する）</summary>
@@ -163,9 +185,13 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
     public IReadOnlyList<Item> SelectedItems => [.. Selection.Where(Scene.Items.ContainsKey).Select(Scene.GetItem)];
 
     /// <summary>新しいプロジェクトにする（保存はしない）</summary>
-    public void NewProject(string name, SceneFormat format, ProjectColorSettings? color = null)
+    public void NewProject(string name, SceneFormat format, ProjectColorSettings? color = null, ProjectProxySettings? proxies = null)
     {
-        var project = Project.CreateNew(name, format) with { Color = color ?? ProjectColorSettings.Default };
+        var project = Project.CreateNew(name, format) with
+        {
+            Color = color ?? ProjectColorSettings.Default,
+            Proxies = proxies ?? ProjectProxySettings.Default,
+        };
         Replace(new ProjectDocument(project), CreateUntitledFolder(), null);
     }
 
@@ -489,7 +515,8 @@ public sealed partial class EditorSession : ObservableObject, IDisposable
             Measurer = new ContentMeasurer(layouts);
             // プレビューでは、プロジェクトの設定に合う動画にプロキシを使う（書き出しは別の素材の読み出しで、元の素材を読む）
             Proxies = new ProxyQueue(Cache);
-            Media = new ProjectMediaSource(project, folder, Cache, proxies: Proxies);
+            Proxies.JobChanged += (_, job) => session.ProxyJobChanged?.Invoke(session, job);
+            Media = new ProjectMediaSource(project, folder, Cache, proxies: Proxies) { UseProxies = settings.UseProxiesInPreview };
             var timeline = new TimelineContext(project.Characters, new TachieLoader(folder), new ProjectLipSync(Media))
             {
                 Color = PreviewColor(project, session.Settings),

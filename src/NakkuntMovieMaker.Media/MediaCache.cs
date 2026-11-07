@@ -96,6 +96,19 @@ public sealed class MediaCache
         return Use(path, temp => ProxyGenerator.Generate(sourcePath, temp, settings, progress, cancellationToken), file => file);
     }
 
+    /// <summary>素材のプロキシを消す。消したら true（なければ false）</summary>
+    /// <exception cref="IOException">プロキシを開いている</exception>
+    public bool DeleteProxy(string sourcePath, ProxySettings? settings = null)
+    {
+        if (FindProxy(sourcePath, settings) is not { } path)
+        {
+            return false;
+        }
+
+        File.Delete(path);
+        return true;
+    }
+
     /// <summary>素材のプロキシがもう作ってあれば、その場所を返す。なければ（素材が見つからなければ）null。作りはしない</summary>
     public string? FindProxy(string sourcePath, ProxySettings? settings = null)
     {

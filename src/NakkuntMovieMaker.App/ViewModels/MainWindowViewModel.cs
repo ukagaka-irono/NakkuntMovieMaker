@@ -170,7 +170,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         var settings = new ProjectSettingsViewModel("新規作成", "新しいプロジェクト", Session.Scene.Format, isNew: true);
         if (await _dialogs.ShowProjectSettingsAsync(settings))
         {
-            Session.NewProject(settings.Name, settings.Format, settings.Color);
+            Session.NewProject(settings.Name, settings.Format, settings.Color, settings.Proxies);
             Status = "新しいプロジェクトを作りました";
         }
     }
@@ -247,7 +247,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private async Task ProjectSettingsAsync()
     {
         var scene = Session.Scene;
-        var settings = new ProjectSettingsViewModel("プロジェクトの設定", Session.Project.Name, scene.Format, isNew: false, Session.Project.Color);
+        var settings = new ProjectSettingsViewModel(
+            "プロジェクトの設定", Session.Project.Name, scene.Format, isNew: false, Session.Project.Color, Session.Project.Proxies);
         if (!await _dialogs.ShowProjectSettingsAsync(settings))
         {
             return;
@@ -267,6 +268,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         if (settings.Color != Session.Project.Color)
         {
             operations.Add(new SetProjectColor(settings.Color));
+        }
+
+        if (settings.Proxies != Session.Project.Proxies)
+        {
+            operations.Add(new SetProxySettings(settings.Proxies));
         }
 
         if (operations.Count > 0 && Session.Execute(Operations.Combine("プロジェクトの設定", operations)) is { } error)

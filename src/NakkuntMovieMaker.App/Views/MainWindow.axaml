@@ -92,6 +92,7 @@
         <MenuItem Header="全画面プレビュー" Command="{Binding Preview.ToggleFullScreenCommand}" Tag="view.fullScreenPreview" />
         <MenuItem Header="グリッド" ToggleType="CheckBox" IsChecked="{Binding Preview.ShowGrid}" />
         <MenuItem Header="セーフエリア" ToggleType="CheckBox" IsChecked="{Binding Preview.ShowSafeArea}" />
+        <MenuItem Header="プレビューでプロキシを使う" ToggleType="CheckBox" IsChecked="{Binding Preview.UseProxies}" />
       </MenuItem>
       <MenuItem x:Name="PlayMenu" Header="再生(_P)">
         <MenuItem Header="再生・停止" Command="{Binding Preview.TogglePlayCommand}" Tag="play.toggle" />

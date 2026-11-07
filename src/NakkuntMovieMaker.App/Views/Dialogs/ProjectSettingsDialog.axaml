@@ -8,7 +8,7 @@
         CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="{StaticResource DialogPadding}" Spacing="{StaticResource Space2}" MinWidth="420">
-    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
       <TextBlock Classes="field-label" Text="名前" />
       <TextBox Grid.Column="1" Text="{Binding Name}" />
 
@@ -42,10 +42,15 @@
       <TextBlock Grid.Row="7" Classes="field-label" Text="書き出しの色空間" />
       <ComboBox Grid.Row="7" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding ExportColorSpaces}" SelectedItem="{Binding ExportColorSpace}"
                 IsEnabled="{Binding !IsOcioUnavailable}" />
+
+      <TextBlock Grid.Row="8" Classes="field-label" Text="プロキシ" />
+      <ComboBox Grid.Row="8" Grid.Column="1" HorizontalAlignment="Stretch"
+                ItemsSource="{x:Static vm:ProjectSettingsViewModel.ProxyModes}" SelectedItem="{Binding ProxyMode}" />
     </Grid>
 
     <TextBlock Classes="secondary" Text="フレームレートを変えると、アイテムの位置と長さは同じ時刻になるように合わせます" IsVisible="{Binding !IsNew}" TextWrapping="Wrap" MaxWidth="420" />
     <TextBlock Classes="secondary" Text="リニアで合成すると、半透明の重なりやぼかしの縁が明るめになります" TextWrapping="Wrap" MaxWidth="420" />
+    <TextBlock Classes="secondary" Text="プロキシ（編集用の軽い動画）はプレビューだけで使い、書き出しでは元の動画を使います" TextWrapping="Wrap" MaxWidth="420" />
     <TextBlock Classes="warning" Text="OpenColorIO を読み込めないため、色空間は選べません" IsVisible="{Binding IsOcioUnavailable}" TextWrapping="Wrap" MaxWidth="420" />
     <TextBlock Classes="warning" Text="{Binding Error}" IsVisible="{Binding !IsValid}" />
 

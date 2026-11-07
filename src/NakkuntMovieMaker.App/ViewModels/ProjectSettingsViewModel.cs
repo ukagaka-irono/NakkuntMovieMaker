@@ -23,10 +23,20 @@ public sealed record CompositingChoice(CompositingSpace Space, string Name)
     public override string ToString() => Name;
 }
 
-/// <summary>プロジェクトの設定（新規作成と、あとからの変更の両方に使う）。形式と、色（合成の色空間・OpenColorIO の構成・書き出しの色空間）</summary>
+/// <summary>プロキシを使う範囲の候補</summary>
+public sealed record ProxyModeChoice(ProxyMode Mode, string Name)
+{
+    public override string ToString() => Name;
+}
+
+/// <summary>
+/// プロジェクトの設定（新規作成と、あとからの変更の両方に使う）。形式と、色（合成の色空間・OpenColorIO の構成・書き出しの色空間）と、
+/// プロキシを使う範囲
+/// </summary>
 public sealed partial class ProjectSettingsViewModel : ObservableObject
 {
-    public ProjectSettingsViewModel(string title, string name, SceneFormat format, bool isNew, ProjectColorSettings? color = null)
+    public ProjectSettingsViewModel(
+        string title, string name, SceneFormat format, bool isNew, ProjectColorSettings? color = null, ProjectProxySettings? proxies = null)
     {
         Title = title;
         IsNew = isNew;
@@ -46,6 +56,7 @@ public sealed partial class ProjectSettingsViewModel : ObservableObject
         OcioConfigs = [.. ColorChoices.Configs()];
         OcioConfig = ColorChoices.Select(OcioConfigs, color.OcioConfig);
         ExportColorSpace = ColorChoices.Select(ExportColorSpaces, color.ExportColorSpace);
+        ProxyMode = ProxyModes.First(choice => choice.Mode == (proxies ?? ProjectProxySettings.Default).Mode);
     }
 
     public string Title { get; }
@@ -101,6 +112,18 @@ public sealed partial class ProjectSettingsViewModel : ObservableObject
     public partial ColorSpaceChoice ExportColorSpace { get; set; }
 
     public ProjectColorSettings Color => new(Compositing.Space, OcioConfig.Name, ExportColorSpace.Name);
+
+    public static IReadOnlyList<ProxyModeChoice> ProxyModes { get; } =
+    [
+        new(Core.Model.ProxyMode.Off, "使わない"),
+        new(Core.Model.ProxyMode.LargeVideos, "1080p より大きい動画だけ"),
+        new(Core.Model.ProxyMode.AllVideos, "すべての動画"),
+    ];
+
+    [ObservableProperty]
+    public partial ProxyModeChoice ProxyMode { get; set; }
+
+    public ProjectProxySettings Proxies => new(ProxyMode.Mode);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Error), nameof(IsValid))]

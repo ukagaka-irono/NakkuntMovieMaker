@@ -41,6 +41,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
     // プレビューで使うプロキシ（書き出しでは渡さないので、使わない）
     private readonly ProxyQueue? _proxies;
     private readonly ConcurrentDictionary<string, byte> _proxyRequested = new(StringComparer.OrdinalIgnoreCase);
+    private volatile bool _useProxies = true;
 
     // 平面のまま渡すデコーダーの段階の番号（縮小しない）
     private const int PlanesStep = -1;
@@ -281,6 +282,12 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
     public void Update(Project project)
     {
         var previous = Interlocked.Exchange(ref _project, project);
+
+        // プロキシを使う範囲が変わったら、動画を読み直す（プロキシと元の素材のどちらを読むかが変わる）
+        if (previous.Proxies.Mode != project.Proxies.Mode)
+        {
+            CloseVideoDecoders(_ => true);
+        }
 
         // 色の構成が変わったら、色を変換した画像をすべて作り直す
         if (previous.Color.OcioConfig != project.Color.OcioConfig)
@@ -568,8 +575,45 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
     private static int MaxSize(int size, int step) => Math.Max(1, (int)Math.Ceiling(size * Steps[step]));
 
+    /// <summary>
+    /// プレビューでプロキシを使うか（プレビューでの一時的な切り替え。プロジェクトのプロキシの設定とは別）。変えると、動画を読み直す
+    /// </summary>
+    public bool UseProxies
+    {
+        get => _useProxies;
+        set
+        {
+            if (_useProxies != value)
+            {
+                _useProxies = value;
+                CloseVideoDecoders(_ => true);
+            }
+        }
+    }
+
+    /// <summary>素材の動画のプロキシがあるか</summary>
+    public bool HasProxy(AssetId asset) => _proxies is not null && PathOf(asset) is { } path && _proxies.FindProxy(path) is not null;
+
+    /// <summary>素材の動画のプロキシを作る仕事を加える（プロジェクトの設定に関わらず作る）。素材が見つからなければ null</summary>
+    public ProxyJob? CreateProxy(AssetId asset) =>
+        _proxies is not null && PathOf(asset) is { } path && File.Exists(path) ? _proxies.Enqueue(path) : null;
+
+    /// <summary>素材の動画のプロキシを消す（読んでいれば閉じてから。作っている途中ならキャンセルする）。このあとは、自動では作り直さない</summary>
+    /// <exception cref="IOException">プロキシを消せない</exception>
+    public bool DeleteProxy(AssetId asset)
+    {
+        if (_proxies is null || PathOf(asset) is not { } path)
+        {
+            return false;
+        }
+
+        _proxyRequested.TryAdd(Path.GetFullPath(path), 0);
+        CloseVideoDecoders(id => id == asset);
+        return _proxies.Delete(path);
+    }
+
     // 動画を読む場所と、素材の元の大きさ（プロキシを読むときも、大きさは元の素材のまま扱う）。
-    // プレビューでプロキシを使う設定に合う動画は、プロキシがあればプロキシ、なければ作り始めて元の素材
+    // プロキシを使う設定（使わない以外）なら、プロキシがあればプロキシを読む。設定に合う大きさの動画は、なければ作り始めて、できるまでは元の素材
     private (string Path, int Width, int Height)? VideoPath(AssetId asset)
     {
         if (PathOf(asset) is not { } path || Info(path)?.Video is not { } video)
@@ -577,20 +621,35 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
             return null;
         }
 
-        if (_proxies is not null && UsesProxy(_project.Proxies.Mode, video.Width, video.Height))
+        var mode = _project.Proxies.Mode;
+        if (_proxies is not null && _useProxies && mode != ProxyMode.Off)
         {
             if (_proxies.FindProxy(path) is { } proxy)
             {
                 return (proxy, video.Width, video.Height);
             }
 
-            if (_proxyRequested.TryAdd(Path.GetFullPath(path), 0))
+            if (UsesProxy(mode, video.Width, video.Height) && _proxyRequested.TryAdd(Path.GetFullPath(path), 0))
             {
                 _proxies.Enqueue(path);
             }
         }
 
         return (path, video.Width, video.Height);
+    }
+
+    // 条件に合う素材の動画のデコーダーを閉じる（次に読むときに、読む場所を決め直す）
+    private void CloseVideoDecoders(Func<AssetId, bool> match)
+    {
+        foreach (var key in _decoders.Keys.Where(key => match(key.Asset)))
+        {
+            CloseSlot(_decoders, key);
+        }
+
+        foreach (var key in _gpuDecoders.Keys.Where(key => match(key.Asset)))
+        {
+            CloseSlot(_gpuDecoders, key);
+        }
     }
 
     // プロキシを使う大きさか（1080p より大きい動画だけ、またはすべての動画）
@@ -603,8 +662,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
     /// <summary>素材の動画を、今プロキシで読んでいるか</summary>
     public bool IsUsingProxy(AssetId asset) =>
-        _proxies is not null && PathOf(asset) is { } path && _proxies.FindProxy(path) is not null
-        && Info(path)?.Video is { } video && UsesProxy(_project.Proxies.Mode, video.Width, video.Height);
+        _useProxies && _project.Proxies.Mode != ProxyMode.Off && HasProxy(asset) && PathOf(asset) is { } path && Info(path)?.Video is not null;
 
     // プロキシができたら、その素材のデコーダーを閉じて、次から読み直させる（プロキシを読むように）
     private void OnProxyChanged(object? sender, ProxyJob job)
@@ -619,15 +677,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
             if (asset.Kind == AssetKind.Video && PathOf(id) is { } path
                 && string.Equals(Path.GetFullPath(path), job.SourcePath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
             {
-                foreach (var key in _decoders.Keys.Where(key => key.Asset == id))
-                {
-                    CloseSlot(_decoders, key);
-                }
-
-                foreach (var key in _gpuDecoders.Keys.Where(key => key.Asset == id))
-                {
-                    CloseSlot(_gpuDecoders, key);
-                }
+                CloseVideoDecoders(other => other == id);
             }
         }
     }
