@@ -71,7 +71,54 @@ public sealed class ParityTests : IDisposable
 
         var difference = ImageCompare.Compare(expected, actual);
         TestContext.Current.TestOutputHelper?.WriteLine($"{name}: {difference}");
-        Assert.True(difference.Psnr >= Tolerance(name), $"{name}: CPU 版と違います（{difference}、基準は PSNR {Tolerance(name)}dB 以上）");
+        var tolerance = Tolerance(name, gpu.UsesSkiaGpu);
+        Assert.True(difference.Psnr >= tolerance, $"{name}: CPU 版と違います（{difference}、基準は PSNR {tolerance}dB 以上）");
+    }
+
+    [Theory]
+    [InlineData("text-horizontal")]
+    [InlineData("shapes")]
+    [InlineData("linear/shapes")]
+    public void DrawsTextAndShapesWithSkiaOnTheGpu(string name)
+    {
+        // 文字と図形は Skia の GPU 版で描き（CPU で描いて送らない）、動かないものは 2 回目に描き直さない。検証レイヤーのエラーもない
+        var gpu = _gpu ?? SkipOrFail();
+        Gpu.RequireRenderer();
+        Assert.SkipUnless(gpu.UsesSkiaGpu, $"Skia の GPU 版を使わないためスキップします（{gpu.SkiaGpuProblem}）");
+        using var scene = RenderScenes.Create(name);
+        if (scene.RequiresFonts)
+        {
+            Fonts.RequireOrSkip();
+        }
+
+        VulkanDevice.ClearValidationMessages();
+        var (nodes, cpuLayers) = (gpu.GpuSkiaNodes, gpu.CpuLayers);
+        var first = gpu.Render(scene.Plan, scene.Media, scene.Scale, TestContext.Current.CancellationToken);
+        Assert.True(gpu.GpuSkiaNodes > nodes, $"{name}: Skia の GPU 版で描いていません");
+        Assert.Equal(cpuLayers, gpu.CpuLayers);
+
+        var draws = gpu.SkiaDraws;
+        var second = gpu.Render(scene.Plan, scene.Media, scene.Scale, TestContext.Current.CancellationToken);
+        Assert.Equal(draws, gpu.SkiaDraws);
+        Assert.Equal(first.Pixels, second.Pixels);
+        Assert.DoesNotContain(VulkanDevice.ValidationMessages, message => message.StartsWith("Error", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DrawsTextAndShapesOnTheCpuWhenSkiaGpuIsOff()
+    {
+        // 切ったときは、これまでどおり CPU で描いて送る
+        using var device = Gpu.CreateOrSkip();
+        Gpu.RequireRenderer();
+        using var gpu = new VulkanBackend(device, gpuVectors: false);
+        using var scene = RenderScenes.Create("shapes");
+        var cpuLayers = gpu.CpuLayers;
+
+        gpu.Render(scene.Plan, scene.Media, scene.Scale, TestContext.Current.CancellationToken);
+
+        Assert.False(gpu.UsesSkiaGpu);
+        Assert.Equal(0, gpu.GpuSkiaNodes);
+        Assert.True(gpu.CpuLayers > cpuLayers);
     }
 
     [Fact]
@@ -89,10 +136,12 @@ public sealed class ParityTests : IDisposable
     }
 
     // 場面ごとの基準（PSNR、dB）。CPU 版と計算の順番や精度が違う（16 ビット浮動小数点で計算し、途中で 8 ビットに丸めない）ので、
-    // ぼかしを使うもの・境界を距離から求めるものは緩くする。docs/rendering.md の表と合わせる
-    private static double Tolerance(string name) => name switch
+    // ぼかしを使うもの・境界を距離から求めるものは緩くする。文字と図形は、Skia の GPU 版で描くと縁のアンチエイリアスが CPU 版と少し違うので緩くする。
+    // docs/rendering.md の表と合わせる
+    private static double Tolerance(string name, bool skiaGpu) => name switch
     {
         "effect-blur" or "effect-dropShadow" or "effect-glow" or "effect-mask" or "effect-shake" => 38,
+        _ when skiaGpu && (name.Contains("text-", StringComparison.Ordinal) || name.Contains("shapes", StringComparison.Ordinal)) => 38,
         "effect-border" => 42,
         _ when name.StartsWith("transition-", StringComparison.Ordinal) => 42,
         _ => 45,

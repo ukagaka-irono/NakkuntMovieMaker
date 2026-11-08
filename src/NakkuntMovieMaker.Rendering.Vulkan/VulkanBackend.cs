@@ -41,6 +41,11 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     private readonly ConcurrentDictionary<EffectKey, byte> _effectKnown = new();
     private long _gpuEffectNodes;
     private long _cpuLayers;
+    private long _gpuSkiaNodes;
+    private long _skiaDraws;
+    private readonly SkiaGpu? _skia;
+    private readonly GpuCache<LayerKey> _vectorLayers;
+    private volatile bool _skiaDisabled;
     private long _gpuTransitionNodes;
 
     // 今記録している仕事の作業用の画像がリニアか（GPU のスレッドだけで使う）
@@ -59,7 +64,10 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     /// <param name="layouts">文字の配置のキャッシュ（大きさを測る処理と共有するとき）</param>
     /// <exception cref="VulkanException">GPU を使えない</exception>
     /// <param name="ownsDevice">渡した device も、破棄するときに一緒に破棄するか</param>
-    public VulkanBackend(VulkanDevice? device = null, TextLayoutCache? layouts = null, bool ownsDevice = false, string? pipelineCachePath = null, long? memoryBudgetBytes = null)
+    /// <param name="gpuVectors">文字・図形を Skia の GPU 版で描くか（null なら、macOS 以外で使う。環境変数 NMM_SKIA_GPU=0 で使わない）</param>
+    public VulkanBackend(
+        VulkanDevice? device = null, TextLayoutCache? layouts = null, bool ownsDevice = false, string? pipelineCachePath = null, long? memoryBudgetBytes = null,
+        bool? gpuVectors = null)
     {
         _ownsDevice = device is null || ownsDevice;
         _device = device ?? VulkanDevice.Create();
@@ -73,6 +81,16 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             _effectResults = new GpuCache<EffectKey>(_allocator.BudgetBytes / 4);
             _outputLuts = new GpuCache<ColorLut>(64L << 20);
             _cpu = new SkiaCpuBackend(layouts: layouts);
+            _vectorLayers = new GpuCache<LayerKey>(_allocator.BudgetBytes / 4);
+            if (gpuVectors ?? SkiaGpu.Wanted)
+            {
+                _skia = SkiaGpu.TryCreate(_device, _allocator, out var problem);
+                SkiaGpuProblem = problem;
+            }
+            else
+            {
+                SkiaGpuProblem = "文字と図形を Skia の GPU 版で描かない設定です";
+            }
         }
         catch
         {
@@ -111,6 +129,25 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     /// <summary>CPU で描いてから GPU で重ねたノードの数（これまでの合計。テストと計測用）</summary>
     public long CpuLayers => Interlocked.Read(ref _cpuLayers);
 
+    /// <summary>文字・図形を Skia の GPU 版で描いたノードの数（これまでの合計。テストと計測用）</summary>
+    public long GpuSkiaNodes => Interlocked.Read(ref _gpuSkiaNodes);
+
+    /// <summary>Skia の GPU 版で実際に描いた回数（覚えておいた結果を使ったときは数えない。テスト用）</summary>
+    public long SkiaDraws => Interlocked.Read(ref _skiaDraws);
+
+    /// <summary>文字・図形を Skia の GPU 版で描くか</summary>
+    public bool UsesSkiaGpu => _skia is not null && !_skiaDisabled;
+
+    /// <summary>文字・図形を Skia の GPU 版で描かない理由（描くなら null）</summary>
+    public string? SkiaGpuProblem { get; private set; }
+
+    /// <summary>文字・図形を Skia の GPU 版で描くのをやめ、CPU で描いて送る（自己テストで結果が違ったとき）</summary>
+    internal void DisableSkiaGpu(string reason)
+    {
+        _skiaDisabled = true;
+        SkiaGpuProblem = reason;
+    }
+
     public VulkanDevice Device => _device;
 
     public RenderResult Render(FramePlan plan, IMediaSource media, RenderRequest request, CancellationToken cancellationToken = default)
@@ -146,7 +183,20 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         var outputLut = plan.Color.Output;
         // NV12 は 2 × 2 の画素ごとに色差を持つので、縦横が偶数のときだけ作る
         var yuv = request.Yuv is { } wanted && width % 2 == 0 && height % 2 == 0 ? wanted : null;
-        var task = _scheduler.RunAsync(context => Record(context, operations, background, width, height, linear, outputLut, yuv), cancellationToken);
+        var task = _scheduler.RunAsync(
+            context =>
+            {
+                try
+                {
+                    return Record(context, operations, background, width, height, linear, outputLut, yuv);
+                }
+                finally
+                {
+                    // Skia に記録させた描画を、この仕事より先にキューに送る
+                    _skia?.EndFrame();
+                }
+            },
+            cancellationToken);
         try
         {
             return task.GetAwaiter().GetResult();
@@ -184,6 +234,8 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
         _disposed = true;
         _scheduler.Dispose();
+        _skia?.Dispose();
+        _vectorLayers.Dispose();
         _sources.Dispose();
         _effectResults.Dispose();
         _outputLuts.Dispose();
@@ -222,6 +274,19 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             return PrepareEffects(withEffects, plan, media, output, scale);
         }
 
+        // エフェクトのない文字・図形：Skia の GPU 版で、描かれる範囲だけ透明な画像に描き（GPU のスレッドで）、合成モードと不透明度は GPU で重ねるときに付ける
+        if (_skia is not null && !_skiaDisabled && node is DrawNode { Effects.IsEmpty: true, Content: TextContent or ShapeContent } vector)
+        {
+            var plain = vector with { Blend = BlendMode.Normal, Opacity = 1 };
+            if (_cpu.NodeRegion(plain, plan, media, scale) is not { } area)
+            {
+                return null;
+            }
+
+            Interlocked.Increment(ref _gpuSkiaNodes);
+            return new SkiaStep(plain, plan, media, scale, area, vector.Blend, Round(vector.Opacity), new LayerKey(plain, scale, plan.Width, plan.Height, plan.Color.IsLinear));
+        }
+
         // まだ GPU で描けないもの：そのノードだけを、描かれる範囲だけ CPU で透明な画像に描き、合成モードと不透明度は GPU で重ねるときに付ける。
         // 動画を含まないものは、描いた画像を覚えておく（同じ画像なら、GPU に送り直さずに済む）
         var (alone, blend, opacity) = node switch
@@ -229,7 +294,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             DrawNode d => ((RenderNode)(d with { Blend = BlendMode.Normal, Opacity = 1 }), d.Blend, Round(d.Opacity)),
             _ => (node, BlendMode.Normal, 1f),
         };
-        var key = new LayerKey(alone, scale, plan.Width, plan.Height);
+        var key = new LayerKey(alone, scale, plan.Width, plan.Height, plan.Color.IsLinear);
         Interlocked.Increment(ref _cpuLayers);
         var reusable = IsStill(alone);
         if (!reusable || !_layers.TryGetValue(key, out var layer))
@@ -476,6 +541,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     {
         _linear = linear;
         _sources.Collect(_scheduler.CompletedValue);
+        _vectorLayers.Collect(_scheduler.CompletedValue);
         _effectResults.Collect(_scheduler.CompletedValue);
         _outputLuts.Collect(_scheduler.CompletedValue);
 
@@ -583,6 +649,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
                 break;
             case GpuFrameStep gpuFrameStep:
                 CompositeGpuFrame(context, composite, work, gpuFrameStep, width);
+                break;
+            case SkiaStep skiaStep:
+                CompositeSkia(context, composite, work, skiaStep, width);
                 break;
         }
     }
@@ -757,6 +826,88 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
         var rgb = ConvertPlanes(context, buffer, layout, hardware.Color, step.Frame.Input);
         CompositeRgb(context, composite, work, rgb, layout.Width, step.Geometry, width);
+    }
+
+    // Skia の GPU 版で描いた文字・図形を、作業用の形式（16 ビット浮動小数点）のバッファーに写して重ねる。描いた結果は覚えておく。
+    // Skia は描き終えた画像を COLOR_ATTACHMENT_OPTIMAL にしておく（SkiaGpu を参照）ので、写したらそこに戻す
+    private void CompositeSkia(GpuCommandContext context, ComputePipeline composite, GpuBuffer work, SkiaStep step, int width)
+    {
+        var region = step.Region;
+        if (!_vectorLayers.TryGet<GpuBuffer>(step.Key, context.Value, out var buffer))
+        {
+            Interlocked.Increment(ref _skiaDraws);
+            var image = _skia!.Draw(region.Width, region.Height, _linear, canvas => _cpu.DrawRegion(canvas, step.Node, step.Plan, step.Media, step.Scale, region));
+            buffer = _allocator.CreateBuffer((ulong)region.Width * (ulong)region.Height * 8, VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.TransferDst, GpuBufferKind.DeviceLocal);
+            _vectorLayers.Add(step.Key, buffer, buffer.Bytes, context.Value);
+
+            var api = _device.DeviceApi;
+            var color = new VkImageSubresourceRange(VkImageAspectFlags.Color, 0, 1, 0, 1);
+            var toTransfer = new VkImageMemoryBarrier
+            {
+                srcAccessMask = VkAccessFlags.ColorAttachmentWrite,
+                dstAccessMask = VkAccessFlags.TransferRead,
+                oldLayout = VkImageLayout.ColorAttachmentOptimal,
+                newLayout = VkImageLayout.TransferSrcOptimal,
+                srcQueueFamilyIndex = Vortice.Vulkan.Vulkan.VK_QUEUE_FAMILY_IGNORED,
+                dstQueueFamilyIndex = Vortice.Vulkan.Vulkan.VK_QUEUE_FAMILY_IGNORED,
+                image = image.Image,
+                subresourceRange = color,
+            };
+            api.vkCmdPipelineBarrier(context.CommandBuffer, VkPipelineStageFlags.ColorAttachmentOutput, VkPipelineStageFlags.Transfer, 0, 0, null, 0, null, 1, &toTransfer);
+
+            var copy = new VkBufferImageCopy
+            {
+                bufferOffset = 0,
+                bufferRowLength = (uint)region.Width,
+                bufferImageHeight = (uint)region.Height,
+                imageSubresource = new VkImageSubresourceLayers(VkImageAspectFlags.Color, 0, 0, 1),
+                imageExtent = new VkExtent3D(region.Width, region.Height, 1),
+            };
+            api.vkCmdCopyImageToBuffer(context.CommandBuffer, image.Image, VkImageLayout.TransferSrcOptimal, buffer.Buffer, 1, &copy);
+
+            var back = new VkImageMemoryBarrier
+            {
+                srcAccessMask = VkAccessFlags.TransferRead,
+                dstAccessMask = VkAccessFlags.ColorAttachmentRead | VkAccessFlags.ColorAttachmentWrite,
+                oldLayout = VkImageLayout.TransferSrcOptimal,
+                newLayout = VkImageLayout.ColorAttachmentOptimal,
+                srcQueueFamilyIndex = Vortice.Vulkan.Vulkan.VK_QUEUE_FAMILY_IGNORED,
+                dstQueueFamilyIndex = Vortice.Vulkan.Vulkan.VK_QUEUE_FAMILY_IGNORED,
+                image = image.Image,
+                subresourceRange = color,
+            };
+            api.vkCmdPipelineBarrier(context.CommandBuffer, VkPipelineStageFlags.Transfer, VkPipelineStageFlags.ColorAttachmentOutput, 0, 0, null, 0, null, 1, &back);
+
+            var copied = new VkMemoryBarrier { srcAccessMask = VkAccessFlags.TransferWrite, dstAccessMask = VkAccessFlags.ShaderRead };
+            api.vkCmdPipelineBarrier(context.CommandBuffer, VkPipelineStageFlags.Transfer, VkPipelineStageFlags.ComputeShader, 0, 1, &copied, 0, null, 0, null);
+        }
+
+        var parameters = new CompositeParams
+        {
+            Ax = 1,
+            By = 1,
+            Cx = 0,
+            Cy = 0,
+            Left = region.X,
+            Top = region.Y,
+            Width = region.Width,
+            Height = region.Height,
+            SourceWidth = region.Width,
+            SourceHeight = region.Height,
+            Stride = region.Width,
+            OriginX = region.X,
+            OriginY = region.Y,
+            RegionWidth = region.Width,
+            RegionHeight = region.Height,
+            Opacity = step.Opacity,
+            Blend = (int)step.Blend,
+            Antialias = 0,
+            TargetWidth = width,
+            SourceFormat = 1,
+            Linearize = 0, // リニアのモードでは、Skia がリニアで描いている
+        };
+        composite.Dispatch(context, [work, buffer], parameters, ComputePipeline.Groups(region.Width, 8), ComputePipeline.Groups(region.Height, 8));
+        GpuBarriers.AfterCompute(context);
     }
 
     // 作業用の画像（RGB、幅 stride）を、変形・不透明度・合成モードを付けて重ねる
@@ -1098,7 +1249,11 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         }
     }
 
-    private sealed record LayerKey(RenderNode Node, double Scale, int SceneWidth, int SceneHeight);
+    // ノード 1 つを描いた画像のキー。色のモードでも結果が違う（リニアのモードは、リニアで描いてから sRGB にする）ので、キーに入れる
+    private sealed record LayerKey(RenderNode Node, double Scale, int SceneWidth, int SceneHeight, bool Linear);
+
+    // Skia の GPU 版で描く文字・図形（合成モードと不透明度を外したノード）。Key で、描いた結果を覚えておく
+    private sealed record SkiaStep(DrawNode Node, FramePlan Plan, IMediaSource Media, double Scale, PixelRegion Region, BlendMode Blend, float Opacity, LayerKey Key);
 
     // CPU で描いた、ノード 1 つの画像と、出力の中の位置
     private sealed record Layer(BgraImage Image, PixelRegion Region);

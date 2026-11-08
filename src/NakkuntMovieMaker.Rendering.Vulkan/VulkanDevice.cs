@@ -124,6 +124,14 @@ public sealed unsafe class VulkanDevice : IDisposable
     /// <summary>有効にしたデバイスの拡張（UTF-8 の文字列の配列。FFmpeg に渡す）</summary>
     internal (nint Names, int Count) DeviceExtensionNames => (_setup.DeviceExtensions.Pointer, _setup.DeviceExtensions.Count);
 
+    /// <summary>有効にした拡張の名前（Skia に渡す）</summary>
+    internal IReadOnlyList<string> InstanceExtensionList => _setup.InstanceExtensions.Values;
+
+    internal IReadOnlyList<string> DeviceExtensionList => _setup.DeviceExtensions.Values;
+
+    /// <summary>有効にした機能（VkPhysicalDeviceFeatures2*。Skia に渡す）</summary>
+    internal nint EnabledFeaturesPointer => (nint)_setup.Features;
+
     /// <summary>有効にした機能（VkPhysicalDeviceFeatures2 と、つないだ 1.1・1.2・1.3 の機能。デバイスがある間は有効。FFmpeg に渡す）</summary>
     internal VkPhysicalDeviceFeatures2* EnabledFeatures => _setup.Features;
 
@@ -184,11 +192,25 @@ public sealed unsafe class VulkanDevice : IDisposable
         }
     }
 
-    /// <summary>関数のアドレス（Skia に渡す）。device が 0 ならインスタンスの関数</summary>
-    public nint GetProcAddress(string name, nint instance, nint device) =>
-        device != 0
-            ? (nint)InstanceApi.vkGetDeviceProcAddr(new VkDevice(device), name).Value
-            : (nint)vkGetInstanceProcAddr(new VkInstance(instance == 0 ? Instance.Handle : instance), name).Value;
+    /// <summary>
+    /// 関数のアドレス（Skia に渡す）。device が 0 ならインスタンスの関数。instance も 0 なら、インスタンスを作る前から使える関数
+    /// （vkEnumerateInstanceExtensionProperties など。インスタンスを渡すと見つからないので、ないときだけ、このデバイスのインスタンスで探す）
+    /// </summary>
+    public nint GetProcAddress(string name, nint instance, nint device)
+    {
+        if (device != 0)
+        {
+            return (nint)InstanceApi.vkGetDeviceProcAddr(new VkDevice(device), name).Value;
+        }
+
+        if (instance != 0)
+        {
+            return (nint)vkGetInstanceProcAddr(new VkInstance(instance), name).Value;
+        }
+
+        var global = (nint)vkGetInstanceProcAddr(VkInstance.Null, name).Value;
+        return global != 0 ? global : (nint)vkGetInstanceProcAddr(Instance, name).Value;
+    }
 
     public void Dispose()
     {

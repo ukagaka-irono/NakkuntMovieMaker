@@ -8,12 +8,16 @@ namespace NakkuntMovieMaker.Rendering.Vulkan;
 
 /// <summary>
 /// GPU 版を使う前の確かめ。小さな場面（変形・不透明度・合成モード・切り抜きを付けた画像）を GPU 版と CPU 版で描いて比べる。
-/// ドライバーの不具合などで結果が大きく違えば、GPU 版を使わない
+/// ドライバーの不具合などで結果が大きく違えば、GPU 版を使わない。
+/// 図形（Skia の GPU 版で描く）も比べ、違いが大きければ、図形と文字は CPU で描いて送るようにする（GPU 版は使う）
 /// </summary>
 public static class GpuSelfTest
 {
     // GPU 版と CPU 版の違いの許容（PSNR、dB）。縁のアンチエイリアスの違いを見込む
     private const double MinPsnr = 40;
+
+    // Skia の GPU 版で描いた図形の許容（縁のアンチエイリアスが CPU 版と少し違う。ParityTests の文字と図形の基準と同じ）
+    private const double MinVectorPsnr = 38;
 
     /// <summary>確かめる。問題がなければ null、あれば理由（利用者に表示できる文）</summary>
     public static string? Run(VulkanBackend gpu)
@@ -33,7 +37,26 @@ public static class GpuSelfTest
             var expected = cpu.Render(plan, media);
             var actual = gpu.Render(plan, media);
             var psnr = Psnr(expected, actual);
-            return psnr >= MinPsnr ? null : $"GPU（{gpu.Device.Info.Name}）で描いた結果が正しくありません（PSNR {psnr:F1}dB）";
+            if (psnr < MinPsnr)
+            {
+                return $"GPU（{gpu.Device.Info.Name}）で描いた結果が正しくありません（PSNR {psnr:F1}dB）";
+            }
+
+            if (gpu.UsesSkiaGpu)
+            {
+                var shapes = new FramePlan(96, 64, new RgbaColor(30, 40, 50),
+                [
+                    new DrawNode(null, new ShapeContent(new ShapeStyle(ShapeKind.Ellipse, 50, 30, new SolidPaint(new RgbaColor(240, 180, 40)), RgbaColor.White, 3)),
+                        Crop.None, Matrix3x2.CreateRotation(0.4f) * Matrix3x2.CreateTranslation(48, 32), 0.8, BlendMode.Normal),
+                ]);
+                var vector = Psnr(cpu.Render(shapes, media), gpu.Render(shapes, media));
+                if (vector < MinVectorPsnr)
+                {
+                    gpu.DisableSkiaGpu($"Skia の GPU 版で描いた図形が CPU 版と違うので、文字と図形は CPU で描きます（PSNR {vector:F1}dB）");
+                }
+            }
+
+            return null;
         }
         catch (VulkanException ex)
         {

@@ -122,6 +122,23 @@ public sealed unsafe class SkiaCpuBackend : IRenderBackend
         return RenderInto([node], plan, media, scale, region, RgbaColor.Transparent, cancellationToken);
     }
 
+    /// <summary>
+    /// ノード 1 つを、出力の region の範囲だけ、渡されたキャンバスに描く（GPU 版が、Skia の GPU 版の面に文字や図形を描くのに使う）。
+    /// キャンバスは region の大きさで、左上が region の左上。消すのは呼ぶ側が行う
+    /// </summary>
+    public void DrawRegion(SKCanvas canvas, RenderNode node, FramePlan plan, IMediaSource media, double scale, PixelRegion region)
+    {
+        ArgumentNullException.ThrowIfNull(canvas);
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(plan);
+        var (width, height) = OutputSize(plan, scale);
+        var outputScale = SKMatrix.Concat(SKMatrix.CreateTranslation(-region.X, -region.Y), OutputScale(plan, width, height));
+        canvas.Save();
+        canvas.Translate(-region.X, -region.Y);
+        DrawNode(canvas, node, media, outputScale, plan, WorkingInfo(plan, width, height));
+        canvas.Restore();
+    }
+
     // nodes を、出力の region の範囲だけ描く
     private BgraImage RenderInto(
         IReadOnlyList<RenderNode> nodes, FramePlan plan, IMediaSource media, double scale, PixelRegion region, RgbaColor background, CancellationToken cancellationToken)
