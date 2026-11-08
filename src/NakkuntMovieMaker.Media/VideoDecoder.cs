@@ -37,7 +37,8 @@ public enum VideoFrameOutput
     Planes,
 
     /// <summary>
-    /// GPU（Vulkan）の上のフレームのまま（VideoDecoderOptions.VulkanDevice のデバイスで Vulkan Video でデコードする）。
+    /// GPU の上のフレームのまま。Windows で VideoDecoderOptions.D3D11 があれば、d3d11va でデコードして共有のテクスチャに写す。
+    /// VideoDecoderOptions.VulkanDevice があれば、そのデバイスで Vulkan Video でデコードする（試験的）。
     /// GPU でデコードできない動画・形式は、平面か BGRA の画像にする
     /// </summary>
     Gpu,
@@ -54,7 +55,8 @@ public sealed record VideoDecoderOptions(
     int CacheCapacity = 32,
     ConversionQuality Quality = ConversionQuality.Accurate,
     VideoFrameOutput Output = VideoFrameOutput.Bgra,
-    nint VulkanDevice = 0);
+    nint VulkanDevice = 0,
+    D3D11VideoDevice? D3D11 = null);
 
 /// <summary>
 /// デコードしたフレーム。Time は素材の先頭からの表示時刻（秒）、Duration は次のフレームまでの長さ。
@@ -513,6 +515,24 @@ public sealed unsafe class VideoDecoder : IDisposable
             }
         }
 
+        // d3d11va でデコードしたフレームは、共有のテクスチャに写して渡す（空きがなければ、メインメモリに写す）
+        if (_options.Output == VideoFrameOutput.Gpu && OperatingSystem.IsWindows() && _options.D3D11 is { } d3d11
+            && frame->format == (int)AVPixelFormat.AV_PIX_FMT_D3D11 && frame->hw_frames_ctx is not null)
+        {
+            var frames = (AVHWFramesContext*)frame->hw_frames_ctx->data;
+            VideoPlaneFormat? sharedFormat = frames->sw_format switch
+            {
+                AVPixelFormat.AV_PIX_FMT_NV12 => VideoPlaneFormat.Nv12,
+                AVPixelFormat.AV_PIX_FMT_P010LE => VideoPlaneFormat.P010,
+                _ => null,
+            };
+            if (sharedFormat is { } planeFormat && d3d11.CopyFrame(frame, planeFormat) is { } shared)
+            {
+                var sharedColor = FfmpegColor.FromFrame(frame, frames->sw_format, _format->streams[_streamIndex]->codecpar);
+                return (null, null, new HardwareVideoFrame(shared, planeFormat, sharedColor, frame->width, frame->height), sharedColor);
+            }
+        }
+
         var source = frame;
         if (frame->hw_frames_ctx is not null)
         {
@@ -692,7 +712,23 @@ public sealed unsafe class VideoDecoder : IDisposable
 
     private void OpenCodec(AVCodec* decoder, bool tryHardware)
     {
-        // GPU のまま渡すときは、描画と同じ Vulkan のデバイスでデコードする（デバイスは借りるだけで、捨てない）
+        // GPU のまま渡すときは、Windows では d3d11va（描画と同じ GPU のデバイス）でデコードし、共有のテクスチャに写して渡す（デバイスは借りるだけで、捨てない）
+        if (_options.Output == VideoFrameOutput.Gpu && OperatingSystem.IsWindows() && _options.D3D11 is { } d3d11
+            && SupportsDevice(decoder, AVHWDeviceType.AV_HWDEVICE_TYPE_D3D11VA))
+        {
+            try
+            {
+                OpenCodecContext(decoder, (AVBufferRef*)d3d11.Reference);
+                HardwareDevice = "d3d11va";
+                return;
+            }
+            catch (MediaException)
+            {
+                FreeCodec();
+            }
+        }
+
+        // または、描画と同じ Vulkan のデバイスでデコードする（Vulkan Video）
         if (_options.Output == VideoFrameOutput.Gpu && _options.VulkanDevice != 0 && SupportsDevice(decoder, AVHWDeviceType.AV_HWDEVICE_TYPE_VULKAN))
         {
             try

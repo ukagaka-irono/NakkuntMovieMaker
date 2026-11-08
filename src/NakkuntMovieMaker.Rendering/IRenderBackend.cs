@@ -131,12 +131,18 @@ public interface IMediaSource
 }
 
 /// <summary>
-/// 描画の GPU を、動画のデコードに使うためのもの（FFmpeg の Vulkan のデバイス）。Reference は FFmpeg の AVBufferRef*。
-/// 描画をやめる前に Closing で知らせるので、このデバイスでデコードしているもの（デコーダー）は、それまでに捨てる
+/// 描画の GPU を、動画のデコードに使うためのもの（FFmpeg の Vulkan のデバイス、または Windows の d3d11va のデバイス）。
+/// Reference は FFmpeg の AVBufferRef*。描画をやめる前に Closing で知らせるので、このデバイスでデコードしているもの（デコーダー）は、それまでに捨てる
 /// </summary>
 public abstract class HardwareVideoDevice
 {
     public abstract nint Reference { get; }
+
+    /// <summary>このデバイスでデコードするためのデコーダーの設定（既定は Vulkan Video のデバイスとして渡す）</summary>
+    public virtual VideoDecoderOptions DecoderOptions(VideoDecoderOptions options) => options with { VulkanDevice = Reference };
+
+    /// <summary>この形式（FFmpeg のコーデックの名前。"h264" など）の動画を、このデバイスでデコードするか</summary>
+    public virtual bool Accepts(string? codec) => true;
 
     public event Action? Closing;
 

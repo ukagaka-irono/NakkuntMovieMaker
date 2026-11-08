@@ -191,7 +191,8 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
 
     private DecoderSlot? OpenGpuDecoder(AssetId asset, HardwareVideoDevice device)
     {
-        if (VideoPath(asset) is not { } source)
+        // デバイスが使わない形式（d3d11va では、ソフトウェアのほうが速い H.264 など）は、YUV の平面で受け取る
+        if (VideoPath(asset) is not { } source || !device.Accepts(Info(source.Path)?.Video?.Codec))
         {
             return null;
         }
@@ -199,7 +200,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         try
         {
             return new DecoderSlot(
-                VideoDecoder.Open(source.Path, new VideoDecoderOptions(CacheCapacity: 4, Output: VideoFrameOutput.Gpu, VulkanDevice: device.Reference)),
+                VideoDecoder.Open(source.Path, device.DecoderOptions(new VideoDecoderOptions(CacheCapacity: 4, Output: VideoFrameOutput.Gpu))),
                 source.Width,
                 source.Height);
         }

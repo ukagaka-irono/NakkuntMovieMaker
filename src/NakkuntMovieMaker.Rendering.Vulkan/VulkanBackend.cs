@@ -48,7 +48,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
 
     // 動画を、描画と同じ GPU でデコードするための FFmpeg のデバイス（使えなければ null。初めて動画を描くときに作る）
     private readonly Lock _videoGate = new();
-    private FfmpegVulkanDevice? _video;
+    private HardwareVideoDevice? _video;
     private bool _videoTried;
     private readonly SkiaCpuBackend _cpu;
     private readonly ConcurrentDictionary<LayerKey, Layer?> _layers = new();
@@ -187,7 +187,7 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         _sources.Dispose();
         _effectResults.Dispose();
         _outputLuts.Dispose();
-        _video?.Dispose();
+        (_video as IDisposable)?.Dispose();
         _emptyLut?.Dispose();
         _pool.Dispose();
         _shaders.Dispose();
@@ -437,8 +437,9 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         return new PlaneGeometry(inverse, destination, new SourceRect(left, top, right - left, bottom - top), opacity, node.Blend, region);
     }
 
-    // 動画を描画と同じ GPU でデコードするための、FFmpeg のデバイス（初めて使うときに作る。作れなければ、理由を覚えて null）
-    private FfmpegVulkanDevice? VideoDevice()
+    // 動画を描画と同じ GPU でデコードするための、FFmpeg のデバイス（初めて使うときに作る。作れなければ、理由を覚えて null）。
+    // Vulkan Video（試験的。使うように設定したときだけ）、Windows の d3d11va（共有のテクスチャを取り込む）の順に試す
+    private HardwareVideoDevice? VideoDevice()
     {
         if (_videoTried)
         {
@@ -449,8 +450,19 @@ public sealed unsafe class VulkanBackend : IRenderBackend
         {
             if (!_videoTried)
             {
-                _video = FfmpegVulkanDevice.TryCreate(_device, out var problem);
-                VideoDecodeProblem = problem;
+                string? problem = null;
+                if (_device.VideoDecode is not null)
+                {
+                    _video = FfmpegVulkanDevice.TryCreate(_device, out problem);
+                }
+
+                if (_video is null && OperatingSystem.IsWindows())
+                {
+                    _video = FfmpegD3D11Device.TryCreate(_device, out var d3d11Problem);
+                    problem = d3d11Problem ?? problem;
+                }
+
+                VideoDecodeProblem = _video is null ? problem ?? "GPU が Vulkan Video のデコードに対応していません" : null;
                 _videoTried = true;
             }
 
@@ -610,6 +622,12 @@ public sealed unsafe class VulkanBackend : IRenderBackend
     // FFmpeg のセマフォを待ってから読み、読み終わったら合図する
     private void CompositeGpuFrame(GpuCommandContext context, ComputePipeline composite, GpuBuffer work, GpuFrameStep step, int width)
     {
+        if (OperatingSystem.IsWindows() && step.Frame.Frame.SharedTexture is { } shared && _video is FfmpegD3D11Device d3d11)
+        {
+            CompositeSharedFrame(context, composite, work, step, width, d3d11.Import(shared));
+            return;
+        }
+
         context.OnCompleted(step.Frame.Dispose);
         Interlocked.Increment(ref _gpuVideoFrames);
         var hardware = step.Frame.Frame;
@@ -667,6 +685,72 @@ public sealed unsafe class VulkanBackend : IRenderBackend
             api.vkCmdCopyImageToBuffer(context.CommandBuffer, images[0].Image, VkImageLayout.TransferSrcOptimal, buffer.Buffer, 1, &regions[0]);
             api.vkCmdCopyImageToBuffer(context.CommandBuffer, images[1].Image, VkImageLayout.TransferSrcOptimal, buffer.Buffer, 1, &regions[1]);
         }
+
+        var copied = new VkMemoryBarrier { srcAccessMask = VkAccessFlags.TransferWrite, dstAccessMask = VkAccessFlags.ShaderRead };
+        api.vkCmdPipelineBarrier(context.CommandBuffer, VkPipelineStageFlags.Transfer, VkPipelineStageFlags.ComputeShader, 0, 1, &copied, 0, null, 0, null);
+
+        var rgb = ConvertPlanes(context, buffer, layout, hardware.Color, step.Frame.Input);
+        CompositeRgb(context, composite, work, rgb, layout.Width, step.Geometry, width);
+    }
+
+    // d3d11va でデコードして共有のテクスチャに写したフレーム（取り込んだ Vulkan の画像）を、平面ごとにバッファーに写してから RGB にして重ねる。
+    // 画像は D3D11 と共有しているので、外部のキューファミリーから受け取り、写したら返す（D3D11 は、写し終わるまでに次のフレームを書かない。
+    // テクスチャは、このフレームを捨てるまで、ほかのフレームに使わない）
+    private void CompositeSharedFrame(GpuCommandContext context, ComputePipeline composite, GpuBuffer work, GpuFrameStep step, int width, VkImage image)
+    {
+        context.OnCompleted(step.Frame.Dispose);
+        Interlocked.Increment(ref _gpuVideoFrames);
+        var hardware = step.Frame.Frame;
+        var layout = PlaneLayout.Packed(hardware.Format, hardware.Width, hardware.Height);
+        var buffer = _allocator.CreateBuffer((ulong)layout.Bytes, VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.TransferDst, GpuBufferKind.DeviceLocal);
+        context.OnCompleted(buffer.Dispose);
+
+        var api = _device.DeviceApi;
+        var planes = new VkImageSubresourceRange(VkImageAspectFlags.Plane0 | VkImageAspectFlags.Plane1, 0, 1, 0, 1);
+        var acquire = new VkImageMemoryBarrier
+        {
+            srcAccessMask = VkAccessFlags.None,
+            dstAccessMask = VkAccessFlags.TransferRead,
+            oldLayout = VkImageLayout.General,
+            newLayout = VkImageLayout.TransferSrcOptimal,
+            srcQueueFamilyIndex = Vortice.Vulkan.Vulkan.VK_QUEUE_FAMILY_EXTERNAL,
+            dstQueueFamilyIndex = _device.QueueFamily,
+            image = image,
+            subresourceRange = planes,
+        };
+        api.vkCmdPipelineBarrier(context.CommandBuffer, VkPipelineStageFlags.TopOfPipe, VkPipelineStageFlags.Transfer, 0, 0, null, 0, null, 1, &acquire);
+
+        var regions = stackalloc VkBufferImageCopy[2];
+        regions[0] = new VkBufferImageCopy
+        {
+            bufferOffset = 0,
+            bufferRowLength = (uint)layout.Width,
+            bufferImageHeight = (uint)layout.Height,
+            imageSubresource = new VkImageSubresourceLayers(VkImageAspectFlags.Plane0, 0, 0, 1),
+            imageExtent = new VkExtent3D(layout.Width, layout.Height, 1),
+        };
+        regions[1] = new VkBufferImageCopy
+        {
+            bufferOffset = (ulong)layout.ChromaOffset,
+            bufferRowLength = (uint)layout.ChromaWidth,
+            bufferImageHeight = (uint)layout.ChromaHeight,
+            imageSubresource = new VkImageSubresourceLayers(VkImageAspectFlags.Plane1, 0, 0, 1),
+            imageExtent = new VkExtent3D(layout.ChromaWidth, layout.ChromaHeight, 1),
+        };
+        api.vkCmdCopyImageToBuffer(context.CommandBuffer, image, VkImageLayout.TransferSrcOptimal, buffer.Buffer, 2, regions);
+
+        var release = new VkImageMemoryBarrier
+        {
+            srcAccessMask = VkAccessFlags.TransferRead,
+            dstAccessMask = VkAccessFlags.None,
+            oldLayout = VkImageLayout.TransferSrcOptimal,
+            newLayout = VkImageLayout.General,
+            srcQueueFamilyIndex = _device.QueueFamily,
+            dstQueueFamilyIndex = Vortice.Vulkan.Vulkan.VK_QUEUE_FAMILY_EXTERNAL,
+            image = image,
+            subresourceRange = planes,
+        };
+        api.vkCmdPipelineBarrier(context.CommandBuffer, VkPipelineStageFlags.Transfer, VkPipelineStageFlags.BottomOfPipe, 0, 0, null, 0, null, 1, &release);
 
         var copied = new VkMemoryBarrier { srcAccessMask = VkAccessFlags.TransferWrite, dstAccessMask = VkAccessFlags.ShaderRead };
         api.vkCmdPipelineBarrier(context.CommandBuffer, VkPipelineStageFlags.Transfer, VkPipelineStageFlags.ComputeShader, 0, 1, &copied, 0, null, 0, null);

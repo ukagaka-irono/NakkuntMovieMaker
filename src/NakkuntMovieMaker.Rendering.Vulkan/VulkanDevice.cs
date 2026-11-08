@@ -54,6 +54,8 @@ public sealed class VulkanException(string message, Exception? innerException = 
 /// </summary>
 public sealed unsafe class VulkanDevice : IDisposable
 {
+    internal const string ExternalMemoryWin32Extension = "VK_KHR_external_memory_win32";
+
     // Vulkan 1.2 以上と、タイムラインセマフォ・RGBA16F の読み書きが必要
     private static readonly VkVersion MinimumApi = VkVersion.Version_1_2;
     private static readonly ConcurrentQueue<string> Messages = new();
@@ -112,6 +114,9 @@ public sealed unsafe class VulkanDevice : IDisposable
 
     /// <summary>Vulkan Video のデコードに使えるキューと、有効にした拡張（使えなければ null）</summary>
     public VulkanVideoDecode? VideoDecode { get; }
+
+    /// <summary>D3D11 の共有のテクスチャを取り込める（VK_KHR_external_memory_win32 を有効にした）</summary>
+    public bool ExternalMemoryWin32 => _setup.DeviceExtensions.Values.Contains(ExternalMemoryWin32Extension);
 
     /// <summary>有効にしたインスタンスの拡張（UTF-8 の文字列の配列。FFmpeg に渡す）</summary>
     internal (nint Names, int Count) InstanceExtensionNames => (_setup.InstanceExtensions.Pointer, _setup.InstanceExtensions.Count);
@@ -405,6 +410,12 @@ public sealed unsafe class VulkanDevice : IDisposable
             extensions.Add("VK_KHR_portability_subset");
         }
 
+        // Windows では、d3d11va でデコードした画像（共有のテクスチャ）を取り込めるようにする
+        if (OperatingSystem.IsWindows() && available.Contains(ExternalMemoryWin32Extension))
+        {
+            extensions.Add(ExternalMemoryWin32Extension);
+        }
+
         var families = QueueFamilies(api, physical);
         var video = wantVideo ? FindVideoDecode(api, physical, available, families, family, info.ApiVersion) : null;
         if (video is not null)
@@ -578,7 +589,7 @@ public sealed unsafe class VulkanDevice : IDisposable
 
         private VkPhysicalDeviceVulkan13Features* Vulkan13 { get; }
 
-        // タイムラインセマフォ（必須）と、デコードに使う機能（対応していれば）だけを有効にする
+        // タイムラインセマフォ（必須）と、YUV の画像（取り込んだ動画のフレーム）・デコードに使う機能（対応していれば）だけを有効にする
         public void EnableSupported(VkInstanceApi api, VkPhysicalDevice physical, bool wantVideo)
         {
             var supported11 = new VkPhysicalDeviceVulkan11Features();
@@ -590,9 +601,9 @@ public sealed unsafe class VulkanDevice : IDisposable
             api.vkGetPhysicalDeviceFeatures2(physical, &supported);
 
             Vulkan12->timelineSemaphore = true;
+            Vulkan11->samplerYcbcrConversion = supported11.samplerYcbcrConversion;
             if (wantVideo)
             {
-                Vulkan11->samplerYcbcrConversion = supported11.samplerYcbcrConversion;
                 Vulkan12->hostQueryReset = supported12.hostQueryReset;
                 if (Vulkan12->pNext is not null)
                 {
@@ -616,6 +627,7 @@ public sealed unsafe class VulkanDevice : IDisposable
 
         public Utf8Strings(IReadOnlyList<string> values)
         {
+            Values = [.. values];
             _strings = [.. values.Select(Marshal.StringToCoTaskMemUTF8)];
             Count = values.Count;
             Pointer = Marshal.AllocCoTaskMem(Math.Max(1, Count) * sizeof(nint));
@@ -628,6 +640,8 @@ public sealed unsafe class VulkanDevice : IDisposable
         public nint Pointer { get; }
 
         public int Count { get; }
+
+        public IReadOnlyList<string> Values { get; }
 
         public void Dispose()
         {
