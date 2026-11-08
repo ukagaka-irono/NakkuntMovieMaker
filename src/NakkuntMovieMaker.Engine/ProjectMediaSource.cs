@@ -189,6 +189,11 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         }
     }
 
+    // GPU のまま渡すデコーダーが覚えておくフレームの数。描画は複数のスレッドで近くのフレームを前後して求めるので、
+    // 少ないと（以前は 4）、覚えていないフレームのためにキーフレームから読み直し、3 スレッドの描画がかえって遅くなった。
+    // フレームは GPU の上の画像（d3d11va では共有のテクスチャ。大きさごとに 32 枚まで）を持つので、多すぎないようにする
+    private const int GpuCacheCapacity = 12;
+
     private DecoderSlot? OpenGpuDecoder(AssetId asset, HardwareVideoDevice device)
     {
         // デバイスが使わない形式（d3d11va では、ソフトウェアのほうが速い H.264 など）は、YUV の平面で受け取る
@@ -200,7 +205,7 @@ public sealed class ProjectMediaSource : IMediaSource, IAudioSource, IDisposable
         try
         {
             return new DecoderSlot(
-                VideoDecoder.Open(source.Path, device.DecoderOptions(new VideoDecoderOptions(CacheCapacity: 4, Output: VideoFrameOutput.Gpu))),
+                VideoDecoder.Open(source.Path, device.DecoderOptions(new VideoDecoderOptions(CacheCapacity: GpuCacheCapacity, Output: VideoFrameOutput.Gpu))),
                 source.Width,
                 source.Height);
         }
