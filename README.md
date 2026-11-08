@@ -61,7 +61,7 @@ Windows / Linux / macOS で動作する動画編集ソフトです。
 
 - 本物のマイクでの録音は確かめていません（仮の入力デバイスでテストしています）。
 - 立ち絵は、YMM4 の「動く立ち絵」と同じフォルダ構成を想定していますが、実際の素材では確かめていません。
-- GPU 版は、Windows の Intel Iris Xe と、Linux の lavapipe（CI。CPU で動く Vulkan）で確かめています。NVIDIA・AMD の GPU と、macOS（MoltenVK）では、まだ確かめていません。
+- GPU 版は、Windows の Intel Iris Xe と、CI の Linux の lavapipe（CPU で動く Vulkan）・macOS の MoltenVK（仮想の GPU）で確かめています。NVIDIA・AMD の GPU と、macOS の実機では、まだ確かめていません。
 - 動画を GPU のメモリのままデコードする Vulkan Video は、FFmpeg とドライバーの不具合で落ちることがあるため、試験的な機能として既定では使いません（設定の「描画」で使えます）。
 - Linux の FFmpeg には VA-API を入れていません（libva がない環境でも FFmpeg を読み込めるようにするため）。Linux のハードウェアエンコードは NVENC だけで、GPU のある実機では確かめていません（使えないときは OpenH264・kvazaar で書き出します）。
 

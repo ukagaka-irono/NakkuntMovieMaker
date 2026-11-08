@@ -141,3 +141,11 @@ GPU 版は、動画のフレームを次の順に試して受け取ります（�
 - 自己テスト（`GpuSelfTest`）で、図形を CPU 版と比べて 38dB に届かなければ、文字と図形は CPU で描いて送ります。macOS と、環境変数 `NMM_SKIA_GPU=0` のときも使いません。
 - 立ち絵は、これまでどおり CPU で描いて送ります。動かない立ち絵は描いた結果を覚えていて、送るのも 1 回なので、GPU で描くには、パーツの画像を GPU の画像として覚えておく仕組みが別に要ります。
 
+## macOS（MoltenVK）で動かすときの注意（M2 の手順 K-1）
+
+- MoltenVK は SPIR-V を Metal のシェーダーの言語（MSL）に変換してからコンパイルします。変数などの名前が MSL の予約語（`device`・`constant`・`thread` など）だと、
+  変換したシェーダーをコンパイルできず、パイプラインを作れません（`composite` の変数 `device` で、CI の macOS のすべての GPU のテストがスキップになっていました）。
+  `SpirvTests.AvoidsNamesReservedInMetal` で、シェーダーの名前に予約語がないことを確かめます。
+- 調べるときは、環境変数 `MVK_CONFIG_LOG_LEVEL=2` を付けて `nmm probe --gpu` を実行すると、MoltenVK のエラー（Metal のコンパイルの失敗の理由）と、自己テストの結果が出ます（CI の macOS でも実行しています）。
+- CI の macOS（仮想の GPU）でも、GPU のテストを必ず回します（`NMM_REQUIRE_VULKAN=1`）。文字と図形は、macOS では CPU で描いて送ります（SkiaSharp の macOS 版は Vulkan に対応していない）。
+

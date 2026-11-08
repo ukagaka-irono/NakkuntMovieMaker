@@ -106,8 +106,8 @@ jobs:
           NMM_REQUIRE_FONTS: '1'
           NMM_REQUIRE_COLORFULTALK: '1'
           NMM_REQUIRE_OCIO: '1'
-          # Linux では GPU（lavapipe）のテストを必ず回す。Windows・macOS の CI では、使える GPU がなければスキップする
-          NMM_REQUIRE_VULKAN: ${{ runner.os == 'Linux' && '1' || '0' }}
+          # Linux（lavapipe）と macOS（MoltenVK・仮想の GPU）では GPU のテストを必ず回す。Windows の CI では、使える GPU がなければスキップする
+          NMM_REQUIRE_VULKAN: ${{ runner.os != 'Windows' && '1' || '0' }}
 
       # ゴールデン画像と違ったときに、描いた結果を確かめられるように残す
       - name: ゴールデン画像のテストで描いた結果
