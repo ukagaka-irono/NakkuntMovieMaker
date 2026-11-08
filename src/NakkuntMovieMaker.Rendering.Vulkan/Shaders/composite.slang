@@ -89,9 +89,10 @@ void main(uint3 id : SV_DispatchThreadID)
     }
 
     int2 pixel = int2(p.originX + int(id.x), p.originY + int(id.y));
-    float2 device = float2(pixel) + 0.5;
-    float lx = p.ax * device.x + p.bx * device.y + p.cx;
-    float ly = p.ay * device.x + p.by * device.y + p.cy;
+    // 画素の中心（device という名前は、MoltenVK が変換する Metal のシェーダーで予約語なので使わない）
+    float2 center = float2(pixel) + 0.5;
+    float lx = p.ax * center.x + p.bx * center.y + p.cx;
+    float ly = p.ay * center.x + p.by * center.y + p.cy;
 
     // 四角形の縁までの距離（出力の画素の単位）から、覆っている割合を求める
     float coverage = 1.0;
