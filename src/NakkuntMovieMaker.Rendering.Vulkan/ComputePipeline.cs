@@ -38,7 +38,8 @@ public sealed unsafe class ComputePipeline : IDisposable
     private readonly VkPipeline _pipeline;
     private readonly VkSampler _sampler;
 
-    internal ComputePipeline(VulkanDevice device, ReadOnlySpan<byte> spirv, GpuBindingKind[] bindings, int pushConstantBytes, VkPipelineCache cache, VkSampler sampler)
+    internal ComputePipeline(
+        VulkanDevice device, string name, ReadOnlySpan<byte> spirv, GpuBindingKind[] bindings, int pushConstantBytes, VkPipelineCache cache, VkSampler sampler)
     {
         _device = device;
         _bindings = bindings;
@@ -79,7 +80,7 @@ public sealed unsafe class ComputePipeline : IDisposable
         fixed (byte* code = spirv)
         {
             var moduleInfo = new VkShaderModuleCreateInfo { codeSize = (nuint)spirv.Length, pCode = (uint*)code };
-            Check(api.vkCreateShaderModule(&moduleInfo, null, &module), "シェーダーの読み込み");
+            Check(api.vkCreateShaderModule(&moduleInfo, null, &module), $"シェーダー {name} の読み込み");
         }
 
         try
@@ -91,7 +92,7 @@ public sealed unsafe class ComputePipeline : IDisposable
                 layout = layout,
             };
             VkPipeline pipeline;
-            Check(api.vkCreateComputePipelines(cache, 1, &pipelineInfo, null, &pipeline), "パイプラインの作成");
+            Check(api.vkCreateComputePipelines(cache, 1, &pipelineInfo, null, &pipeline), $"シェーダー {name} のパイプラインの作成");
             _pipeline = pipeline;
         }
         finally
@@ -242,7 +243,7 @@ public sealed unsafe class ShaderLibrary : IDisposable
                 ?? throw new VulkanException($"シェーダーが見つかりません: {key.Name}");
             using var memory = new MemoryStream();
             stream.CopyTo(memory);
-            return new ComputePipeline(_device, memory.ToArray(), bindings, pushConstantBytes, _cache, LinearSampler);
+            return new ComputePipeline(_device, key.Name, memory.ToArray(), bindings, pushConstantBytes, _cache, LinearSampler);
         });
 
     /// <summary>このライブラリ（描画の方式）のシェーダー</summary>

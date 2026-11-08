@@ -81,6 +81,16 @@ jobs:
       - name: ビルド
         run: dotnet build NakkuntMovieMaker.slnx -c Release --no-restore
 
+      # macOS の GPU（MoltenVK）で、描画が自己テストに通るか（通らなければ、どのシェーダーで何が起きたか）を出す。
+      # MoltenVK のエラーと警告（シェーダーを Metal に変換・コンパイルしたときの失敗の理由）も出す
+      - name: GPU の診断（macOS）
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: dotnet src/NakkuntMovieMaker.Cli/bin/Release/net10.0/nmm.dll probe --gpu
+        env:
+          NMM_VULKAN_ALLOW_SOFTWARE: '1'
+          MVK_CONFIG_LOG_LEVEL: '2'
+
       # GPU のテストだけを先に、1 件ずつ結果を出しながら回す（lavapipe が落ちたときに、どのテストかわかるように）
       - name: GPU のテスト（Linux）
         if: runner.os == 'Linux'

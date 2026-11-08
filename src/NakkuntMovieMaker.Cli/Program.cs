@@ -88,6 +88,12 @@ internal static class Program
         {
             using var chosen = Rendering.Vulkan.VulkanDevice.Create();
             Console.WriteLine($"描画に使う GPU：{chosen.Info.Name}");
+
+            // GPU 版で、小さな場面を CPU 版と同じに描けるか（描けなければ、アプリは CPU で描く）
+            using var backend = new Rendering.Vulkan.VulkanBackend(chosen);
+            Console.WriteLine(Rendering.Vulkan.GpuSelfTest.Run(backend) is { } problem
+                ? $"自己テスト：通りません（{problem}）。CPU で描きます"
+                : $"自己テスト：通りました（文字と図形：{(backend.UsesSkiaGpu ? "Skia の GPU 版" : $"CPU で描いて送る。{backend.SkiaGpuProblem}")}）");
         }
         catch (Rendering.Vulkan.VulkanException ex)
         {
